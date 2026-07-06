@@ -1,6 +1,8 @@
 package com.barrier.riskengine.assessment.domain;
 
+import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -16,6 +18,7 @@ public class Assessment {
   private AssessmentStatus status;
   private RiskLevel riskLevel;
   private String decision;
+  private List<String> factors = List.of();
   private final Instant createdAt;
   private Instant completedAt;
 
@@ -60,18 +63,21 @@ public class Assessment {
       AssessmentStatus status,
       RiskLevel riskLevel,
       String decision,
+      List<String> factors,
       Instant createdAt,
       Instant completedAt) {
     Assessment a = new Assessment(id, documentType, documentDigits, name, createdAt);
     a.status = status;
     a.riskLevel = riskLevel;
     a.decision = decision;
+    a.factors = List.copyOf(factors);
     a.completedAt = completedAt;
     return a;
   }
 
-  /** Conclui a avaliação a partir do estado EM_ANALISE. */
-  public void complete(RiskLevel riskLevel, AssessmentStatus finalStatus, String decision) {
+  /** Conclui a avaliação a partir do estado EM_ANALISE, com os fatores explicáveis da decisão. */
+  public void complete(
+      RiskLevel riskLevel, AssessmentStatus finalStatus, String decision, List<String> factors) {
     if (this.status != AssessmentStatus.EM_ANALISE) {
       throw new IllegalStateException("Avaliação já concluída: " + id.asString());
     }
@@ -81,6 +87,7 @@ public class Assessment {
     this.riskLevel = Objects.requireNonNull(riskLevel, "riskLevel");
     this.status = finalStatus;
     this.decision = decision;
+    this.factors = List.copyOf(factors);
     this.completedAt = Instant.now();
   }
 
@@ -122,6 +129,10 @@ public class Assessment {
 
   public String decision() {
     return decision;
+  }
+
+  public List<String> factors() {
+    return factors;
   }
 
   public Instant createdAt() {

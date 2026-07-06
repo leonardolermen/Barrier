@@ -2,7 +2,7 @@ package com.barrier.riskengine.assessment.repository;
 
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.DocumentType;
-import com.barrier.riskengine.assessment.domain.RiskLevel;
+import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -41,6 +41,9 @@ class AssessmentEntity {
 
   @Column(name = "decision", length = 200)
   private String decision;
+
+  @Column(name = "factors", length = 2000)
+  private String factors;
 
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
@@ -106,6 +109,14 @@ class AssessmentEntity {
 
   void setDecision(String decision) {
     this.decision = decision;
+  }
+
+  String getFactors() {
+    return factors;
+  }
+
+  void setFactors(String factors) {
+    this.factors = factors;
   }
 
   Instant getCreatedAt() {

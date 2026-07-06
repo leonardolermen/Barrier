@@ -3,11 +3,14 @@ package com.barrier.riskengine.assessment.service;
 import com.barrier.commons.outbox.OutboxRecorder;
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
-import com.barrier.riskengine.assessment.domain.RiskLevel;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
+import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
+import com.barrier.riskengine.risk.domain.model.RiskDecision;
+import com.barrier.riskengine.risk.rule.RiskContext;
+import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.service.ScreeningCommand;
 import com.barrier.riskengine.screening.service.ScreeningService;
@@ -19,12 +22,12 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Processa avaliações pendentes.
+ * Processa avaliações pendentes: reúne os sinais (identidade + screening) e delega a decisão
+ * ao motor de risco, que consolida tudo num score/nível com fatores explicáveis.
  *
- * <p>Fase 3: identidade → screening. Identidade reprovada (NOT_FOUND/MISMATCH) → REPROVADO;
- * apontamento de screening (PEP/sanção) → EM_REVISAO; caso contrário → APROVADO (o risco
- * consolidado entra na Fase 4). Ao concluir, grava {@code barrier.assessment.completed} na
- * outbox, na mesma transação da mudança de estado.
+ * <p>A recomendação do motor vira o status: APPROVE → APROVADO, REVIEW → EM_REVISAO,
+ * REJECT → REPROVADO. Ao concluir, grava {@code barrier.assessment.completed} na outbox, na
+ * mesma transação da mudança de estado.
  */
 @Component
 public class AssessmentProcessor {
@@ -37,6 +40,7 @@ public class AssessmentProcessor {
   private final AssessmentRepository repository;
   private final IdentityService identityService;
   private final ScreeningService screeningService;
+  private final RiskScoringService riskScoringService;
   private final OutboxRecorder outbox;
   private final ObjectMapper objectMapper;
 
@@ -44,11 +48,13 @@ public class AssessmentProcessor {
       AssessmentRepository repository,
       IdentityService identityService,
       ScreeningService screeningService,
+      RiskScoringService riskScoringService,
       OutboxRecorder outbox,
       ObjectMapper objectMapper) {
     this.repository = repository;
     this.identityService = identityService;
     this.screeningService = screeningService;
+    this.riskScoringService = riskScoringService;
     this.outbox = outbox;
     this.objectMapper = objectMapper;
   }
@@ -74,30 +80,22 @@ public class AssessmentProcessor {
                 assessment.documentDigits(),
                 assessment.name()));
 
-    if (identity.isRejected()) {
-      assessment.complete(
-          RiskLevel.ALTO,
-          AssessmentStatus.REPROVADO,
-          "Identidade não confirmada (" + identity.status() + ")");
-    } else {
-      ScreeningResult screening =
-          screeningService.screen(
-              new ScreeningCommand(
-                  assessment.id().asString(),
-                  assessment.documentType().name(),
-                  assessment.documentDigits(),
-                  assessment.name()));
+    ScreeningResult screening =
+        screeningService.screen(
+            new ScreeningCommand(
+                assessment.id().asString(),
+                assessment.documentType().name(),
+                assessment.documentDigits(),
+                assessment.name()));
 
-      if (screening.hasHits()) {
-        assessment.complete(
-            RiskLevel.ALTO,
-            AssessmentStatus.EM_REVISAO,
-            "Screening com " + screening.hits().size() + " apontamento(s)");
-      } else {
-        assessment.complete(
-            RiskLevel.BAIXO, AssessmentStatus.APROVADO, "Identidade verificada, sem apontamentos");
-      }
-    }
+    RiskDecision decision =
+        riskScoringService.score(new RiskContext(assessment.id().asString(), identity, screening));
+
+    assessment.complete(
+        decision.level(),
+        toStatus(decision.recommendation()),
+        decision.summary(),
+        decision.explanations());
 
     repository.save(assessment);
     outbox.record(
@@ -106,10 +104,19 @@ public class AssessmentProcessor {
         EVENT_VERSION,
         serialize(AssessmentCompletedPayload.from(assessment)));
     log.info(
-        "Avaliação {} concluída: {} (identidade {})",
+        "Avaliação {} concluída: {} (score {}, motor {})",
         assessment.id().asString(),
         assessment.status(),
-        identity.status());
+        decision.totalScore(),
+        decision.engineVersion());
+  }
+
+  private static AssessmentStatus toStatus(RiskRecommendation recommendation) {
+    return switch (recommendation) {
+      case APPROVE -> AssessmentStatus.APROVADO;
+      case REVIEW -> AssessmentStatus.EM_REVISAO;
+      case REJECT -> AssessmentStatus.REPROVADO;
+    };
   }
 
   private String serialize(AssessmentCompletedPayload payload) {

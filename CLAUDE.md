@@ -31,12 +31,21 @@ JUnit 5 / Testcontainers / ArchUnit. Pacote raiz `com.barrier.<contexto>`.
 
 ## Estado atual
 
-Fases 1-3 concluídas (build verde, 31 testes). Fase 1: intake + outbox. Fase 2: módulo
-Identity (`BureauProvider`, `identity_checks`). Fase 3: módulo Screening (`WatchlistProvider`
-+ regras Strategy `PepMatchRule`/`SanctionMatchRule`, `screening_results` com hits em JSON).
-O `AssessmentProcessor` orquestra identidade → screening (reprovado/EM_REVISAO/APROVADO).
-Próximo: Fase 4 (Risk scoring — consolidar em RiskLevel com fatores explicáveis), seguindo
-o plano faseado (Fase 4 → 5).
+Fases 1-4 concluídas (build verde, 35 testes). Fase 1: intake + outbox. Fase 2: Identity.
+Fase 3: Screening. Fase 4: motor de risco — `RiskRule` (Strategy) devolve `RiskResult`
+padronizado (score/severidade/motivo/evidências/recomendação); `RiskScoringService` soma
+0–1000 em bandas BAIXO/MEDIO/ALTO/CRITICO + override, grava `risk_scores` com a versão do
+motor (`ENGINE_VERSION`). O `AssessmentProcessor` reúne identidade+screening e delega a
+decisão ao motor; fatores explicáveis ficam no assessment (coluna `factors`) e voltam no GET.
+
+Convenções novas: domain do módulo `risk` dividido em subpastas (`domain/enums`,
+`domain/model`) — os módulos assessment/identity/screening ainda usam domain plano (retrofit
+pendente). Regras de risco: adicionar fonte = adicionar uma `RiskRule`, sem tocar no motor.
+`ENGINE_VERSION` deve subir a cada mudança de regra/peso (auditoria).
+
+Fase B (mapeada, não implementada): monitoramento contínuo, reavaliação periódica, recálculo
+por transação, e a regra de estrutura societária (precisa de provedor KYB). Próximo: Fase 5
+(hardening) + Webhook API.
 
 Build validado: `./mvnw test` verde (18 testes, inclui integração com Testcontainers).
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

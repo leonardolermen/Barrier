@@ -57,10 +57,11 @@ docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 
 ## Status
 
-🏗️ **Fase 3 concluída** — sobre as Fases 1-2, agora com o módulo **Screening**:
-`WatchlistProvider` (Gateway atrás de interface, stub em memória), regras de match como
-Strategy (`PepMatchRule`, `SanctionMatchRule`) aplicadas em cadeia, `ScreeningService`
-agrega os apontamentos em `screening_results` (hits em JSON). O `AssessmentProcessor`
-orquestra identidade → screening: identidade reprovada → REPROVADO; apontamento de
-screening → EM_REVISAO; caso contrário → APROVADO. Próximo: Fase 4 (Risk scoring). Ver o
-[plano de implementação](docs/implementation/risk-engine-plan.md).
+🏗️ **Fase 4 concluída** — motor de **Risk scoring**. Cada `RiskRule` (Strategy) devolve um
+`RiskResult` padronizado (score, severidade, motivo, evidências, recomendação); o
+`RiskScoringService` soma numa escala **0–1000** com bandas **BAIXO/MEDIO/ALTO/CRITICO** e
+toma a recomendação mais severa (aprovar/revisar/bloquear), gravando os fatores e a **versão
+do motor** (`risk_scores`). Regras iniciais: **sanção = bloqueio**, **PEP = revisão (EDD)**,
+**identidade não confirmada**, e o esqueleto de **estrutura societária (PJ)**. A recomendação
+do motor vira o status da avaliação; os fatores explicáveis voltam no `GET`. Próximo: Fase 5
+(hardening) e a Webhook API. Ver o [plano de implementação](docs/implementation/risk-engine-plan.md).
