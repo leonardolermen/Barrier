@@ -13,7 +13,7 @@ serviços compartilham contratos de evento e utilidades, e o time é enxuto na f
 Adotar um **monorepo Gradle multi-módulo**:
 
 ```
-kyc-platform/
+barrier/
 ├── commons/                módulo compartilhado: contratos de evento, correlação, utils
 ├── services/
 │   ├── assessment-api/

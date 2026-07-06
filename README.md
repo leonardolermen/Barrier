@@ -1,6 +1,9 @@
-# KYC Platform
+# Barrier
 
 Plataforma de KYC / PLD-FT para atender às normas regulatórias do Banco Central do Brasil.
+
+> A barreira entre o cliente legítimo e o risco: verificação de identidade, screening e
+> classificação de risco como serviço.
 
 ## Visão em uma frase
 
