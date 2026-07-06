@@ -9,7 +9,7 @@ e o `CLAUDE.md` apontam para cá.
 | Item        | Padrão                                             |
 |-------------|-----------------------------------------------------|
 | Linguagem   | Java 25 (LTS) — records, pattern matching, virtual threads |
-| Framework   | Spring Boot 3.x                                     |
+| Framework   | Spring Boot 4.0 (Spring Framework 7)                |
 | Build       | Maven (Reactor), monorepo multi-módulo              |
 | Banco       | PostgreSQL + Flyway (migrations versionadas)        |
 | Mensageria  | Apache Kafka (Spring for Apache Kafka)              |

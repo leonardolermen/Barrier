@@ -26,11 +26,26 @@ A arquitetura da fase 1 é subconjunto da fase 2 — nada é descartado na evolu
 | Camada        | Tecnologia                          |
 |---------------|-------------------------------------|
 | Linguagem     | Java 25 (LTS)                       |
-| Framework     | Spring Boot 3.x                     |
+| Framework     | Spring Boot 4.0                     |
+| Build         | Maven (monorepo Reactor)            |
 | Mensageria    | Apache Kafka (coreografia + outbox) |
-| Persistência  | PostgreSQL                          |
+| Persistência  | PostgreSQL + Flyway                 |
 | Estilo        | Camadas clássicas por serviço       |
-| Topologia     | Microserviços                       |
+| Topologia     | Monólito modular → microserviços    |
+
+## Como rodar (dev)
+
+Pré-requisitos: JDK 25 e Docker.
+
+```bash
+docker compose up -d          # sobe Postgres, Kafka e Kafka UI
+./mvnw verify                 # build + testes (unidade + arquitetura)
+./mvnw -pl services/risk-engine spring-boot:run   # sobe a Risk Engine
+```
+
+- Health: <http://localhost:8080/actuator/health>
+- Swagger UI: <http://localhost:8080/swagger-ui.html>
+- Kafka UI: <http://localhost:8081>
 
 ## Documentação
 
@@ -42,4 +57,7 @@ A arquitetura da fase 1 é subconjunto da fase 2 — nada é descartado na evolu
 
 ## Status
 
-📐 Fase de arquitetura e documentação. Código ainda não iniciado.
+🏗️ **Fase 0 (scaffolding) concluída** — monorepo Maven, módulos `commons` e
+`services/risk-engine`, Spring Boot 4 + Java 25, Flyway, Kafka e ArchUnit configurados;
+app sobe e responde health. Próximo: Fase 1 (intake `202` + outbox). Ver o
+[plano de implementação](docs/implementation/risk-engine-plan.md).

@@ -26,10 +26,11 @@ escrever ou revisar código de implementação.
 
 ## Stack
 
-Java 25 · Spring Boot 3 · Maven (monorepo) · PostgreSQL + Flyway · Kafka · MapStruct ·
+Java 25 · Spring Boot 4.0 · Maven (monorepo) · PostgreSQL + Flyway · Kafka · MapStruct ·
 JUnit 5 / Testcontainers / ArchUnit. Pacote raiz `com.barrier.<contexto>`.
 
 ## Estado atual
 
-Fase de arquitetura concluída. Próximo passo: implementar a Risk Engine seguindo o plano
-faseado (Fase 0 → 5). Código ainda não iniciado.
+Fase 0 (scaffolding) concluída: monorepo Maven, `commons` + `services/risk-engine`, Spring
+Boot 4 + Java 25, Flyway/Kafka/ArchUnit configurados. Próximo: Fase 1 (intake `202` +
+outbox), seguindo o plano faseado (Fase 1 → 5).

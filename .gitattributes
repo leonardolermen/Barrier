@@ -1,0 +1,13 @@
+# Normalização de fim de linha
+* text=auto
+
+# Scripts que exigem LF mesmo no Windows
+mvnw text eol=lf
+*.sh text eol=lf
+
+# Scripts do Windows exigem CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binários
+*.jar binary
