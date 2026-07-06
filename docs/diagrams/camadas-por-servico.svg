@@ -1,0 +1,152 @@
+<svg width="100%" viewBox="0 0 680 900" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <title>Arquitetura em camadas clássicas de cada serviço do MVP</title>
+  <desc>Cada serviço segue controller, service, repository e client. O diagrama mostra o que preenche cada camada nos sete serviços, mais o módulo commons e a infraestrutura compartilhada.</desc>
+  <style>
+    .tp { fill:#1a1a1a; } .tm { fill:#8a8f98; }
+    .card { fill:#ffffff; stroke:#cbd5e1; }
+    .hdr  { fill:#e2e8f0; }
+    .l-ctrl rect{fill:#dbeafe;} .l-ctrl text{fill:#1e3a8a;}
+    .l-svc  rect{fill:#ccfbf1;} .l-svc  text{fill:#0f766e;}
+    .l-repo rect{fill:#fef3c7;} .l-repo text{fill:#92400e;}
+    .l-cli  rect{fill:#ede9fe;} .l-cli  text{fill:#5b21b6;}
+    .l-inf  rect{fill:#f1f5f9;} .l-inf  text{fill:#334155;}
+    .desc{fill:#334155;font-size:10px;} .svc{font-size:12px;font-weight:500;fill:#1a1a1a;}
+    .tag{font-size:9px;text-anchor:middle;}
+  </style>
+
+  <text x="20" y="26" font-size="16" font-weight="500" class="tp">Arquitetura em camadas — serviços do MVP</text>
+  <text x="20" y="45" font-size="11" class="tm">cada serviço: controller → service → repository → client · camada config é comum (ver célula infra)</text>
+
+  <!-- Legend -->
+  <g class="l-ctrl"><rect x="20" y="58" width="66" height="18" rx="4"/><text x="53" y="71" class="tag">controller</text></g>
+  <text x="92" y="71" class="desc">borda: REST + Kafka listener</text>
+  <g class="l-svc"><rect x="270" y="58" width="66" height="18" rx="4"/><text x="303" y="71" class="tag">service</text></g>
+  <text x="342" y="71" class="desc">regra de negócio</text>
+  <g class="l-repo"><rect x="470" y="58" width="66" height="18" rx="4"/><text x="503" y="71" class="tag">repository</text></g>
+  <text x="542" y="71" class="desc">JPA / outbox</text>
+  <g class="l-cli"><rect x="20" y="82" width="66" height="18" rx="4"/><text x="53" y="95" class="tag">client</text></g>
+  <text x="92" y="95" class="desc">integração externa atrás de interface (nem todo serviço tem)</text>
+
+  <!-- ============ CARDS ============ -->
+  <!-- Card 1: Assessment API (20,118) -->
+  <g>
+    <rect class="card" x="20" y="118" width="305" height="158" rx="8"/>
+    <rect class="hdr" x="20" y="118" width="305" height="26" rx="8"/>
+    <text x="30" y="136" class="svc">Assessment API</text>
+    <g class="l-ctrl"><rect x="28" y="152" width="66" height="22" rx="4"/><text x="61" y="167" class="tag">controller</text></g>
+    <text x="102" y="167" class="desc">REST /assessments + Kafka listener</text>
+    <g class="l-svc"><rect x="28" y="184" width="66" height="22" rx="4"/><text x="61" y="199" class="tag">service</text></g>
+    <text x="102" y="199" class="desc">orquestra fluxo · agrega decisão</text>
+    <g class="l-repo"><rect x="28" y="216" width="66" height="22" rx="4"/><text x="61" y="231" class="tag">repository</text></g>
+    <text x="102" y="231" class="desc">assessments · outbox</text>
+    <g class="l-cli"><rect x="28" y="248" width="66" height="22" rx="4"/><text x="61" y="263" class="tag">client</text></g>
+    <text x="102" y="263" class="desc">— sem integração externa</text>
+  </g>
+
+  <!-- Card 2: Identity (355,118) -->
+  <g>
+    <rect class="card" x="355" y="118" width="305" height="158" rx="8"/>
+    <rect class="hdr" x="355" y="118" width="305" height="26" rx="8"/>
+    <text x="365" y="136" class="svc">Identity</text>
+    <g class="l-ctrl"><rect x="363" y="152" width="66" height="22" rx="4"/><text x="396" y="167" class="tag">controller</text></g>
+    <text x="437" y="167" class="desc">Kafka listener assessment.requested</text>
+    <g class="l-svc"><rect x="363" y="184" width="66" height="22" rx="4"/><text x="396" y="199" class="tag">service</text></g>
+    <text x="437" y="199" class="desc">valida CPF/CNPJ</text>
+    <g class="l-repo"><rect x="363" y="216" width="66" height="22" rx="4"/><text x="396" y="231" class="tag">repository</text></g>
+    <text x="437" y="231" class="desc">identity_checks · outbox</text>
+    <g class="l-cli"><rect x="363" y="248" width="66" height="22" rx="4"/><text x="396" y="263" class="tag">client</text></g>
+    <text x="437" y="263" class="desc">BureauProvider (Serpro/Serasa)</text>
+  </g>
+
+  <!-- Card 3: Screening (20,296) -->
+  <g>
+    <rect class="card" x="20" y="296" width="305" height="158" rx="8"/>
+    <rect class="hdr" x="20" y="296" width="305" height="26" rx="8"/>
+    <text x="30" y="314" class="svc">Screening</text>
+    <g class="l-ctrl"><rect x="28" y="330" width="66" height="22" rx="4"/><text x="61" y="345" class="tag">controller</text></g>
+    <text x="102" y="345" class="desc">Kafka listener assessment.requested</text>
+    <g class="l-svc"><rect x="28" y="362" width="66" height="22" rx="4"/><text x="61" y="377" class="tag">service</text></g>
+    <text x="102" y="377" class="desc">match PEP · sanções · mídia adversa</text>
+    <g class="l-repo"><rect x="28" y="394" width="66" height="22" rx="4"/><text x="61" y="409" class="tag">repository</text></g>
+    <text x="102" y="409" class="desc">screening_results · outbox</text>
+    <g class="l-cli"><rect x="28" y="426" width="66" height="22" rx="4"/><text x="61" y="441" class="tag">client</text></g>
+    <text x="102" y="441" class="desc">WatchlistProvider (OFAC/ONU/CGU)</text>
+  </g>
+
+  <!-- Card 4: Risk scoring (355,296) -->
+  <g>
+    <rect class="card" x="355" y="296" width="305" height="158" rx="8"/>
+    <rect class="hdr" x="355" y="296" width="305" height="26" rx="8"/>
+    <text x="365" y="314" class="svc">Risk scoring</text>
+    <g class="l-ctrl"><rect x="363" y="330" width="66" height="22" rx="4"/><text x="396" y="345" class="tag">controller</text></g>
+    <text x="437" y="345" class="desc">listener identity + screening</text>
+    <g class="l-svc"><rect x="363" y="362" width="66" height="22" rx="4"/><text x="396" y="377" class="tag">service</text></g>
+    <text x="437" y="377" class="desc">score baixo/médio/alto</text>
+    <g class="l-repo"><rect x="363" y="394" width="66" height="22" rx="4"/><text x="396" y="409" class="tag">repository</text></g>
+    <text x="437" y="409" class="desc">risk_scores · outbox</text>
+    <g class="l-cli"><rect x="363" y="426" width="66" height="22" rx="4"/><text x="396" y="441" class="tag">client</text></g>
+    <text x="437" y="441" class="desc">— sem integração externa</text>
+  </g>
+
+  <!-- Card 5: Case management (20,474) -->
+  <g>
+    <rect class="card" x="20" y="474" width="305" height="158" rx="8"/>
+    <rect class="hdr" x="20" y="474" width="305" height="26" rx="8"/>
+    <text x="30" y="492" class="svc">Case management</text>
+    <g class="l-ctrl"><rect x="28" y="508" width="66" height="22" rx="4"/><text x="61" y="523" class="tag">controller</text></g>
+    <text x="102" y="523" class="desc">REST analista + listener risk.scored</text>
+    <g class="l-svc"><rect x="28" y="540" width="66" height="22" rx="4"/><text x="61" y="555" class="tag">service</text></g>
+    <text x="102" y="555" class="desc">EDD · fila · decisão manual</text>
+    <g class="l-repo"><rect x="28" y="572" width="66" height="22" rx="4"/><text x="61" y="587" class="tag">repository</text></g>
+    <text x="102" y="587" class="desc">cases · outbox</text>
+    <g class="l-cli"><rect x="28" y="604" width="66" height="22" rx="4"/><text x="61" y="619" class="tag">client</text></g>
+    <text x="102" y="619" class="desc">— sem integração externa</text>
+  </g>
+
+  <!-- Card 6: Webhook dispatcher (355,474) -->
+  <g>
+    <rect class="card" x="355" y="474" width="305" height="158" rx="8"/>
+    <rect class="hdr" x="355" y="474" width="305" height="26" rx="8"/>
+    <text x="365" y="492" class="svc">Webhook dispatcher</text>
+    <g class="l-ctrl"><rect x="363" y="508" width="66" height="22" rx="4"/><text x="396" y="523" class="tag">controller</text></g>
+    <text x="437" y="523" class="desc">listener assessment.completed</text>
+    <g class="l-svc"><rect x="363" y="540" width="66" height="22" rx="4"/><text x="396" y="555" class="tag">service</text></g>
+    <text x="437" y="555" class="desc">monta payload · assina HMAC · retry</text>
+    <g class="l-repo"><rect x="363" y="572" width="66" height="22" rx="4"/><text x="396" y="587" class="tag">repository</text></g>
+    <text x="437" y="587" class="desc">deliveries (status/retry)</text>
+    <g class="l-cli"><rect x="363" y="604" width="66" height="22" rx="4"/><text x="396" y="619" class="tag">client</text></g>
+    <text x="437" y="619" class="desc">WebhookClient (HTTP p/ cliente)</text>
+  </g>
+
+  <!-- Card 7: Audit (20,652) -->
+  <g>
+    <rect class="card" x="20" y="652" width="305" height="158" rx="8"/>
+    <rect class="hdr" x="20" y="652" width="305" height="26" rx="8"/>
+    <text x="30" y="670" class="svc">Audit &amp; compliance</text>
+    <g class="l-ctrl"><rect x="28" y="686" width="66" height="22" rx="4"/><text x="61" y="701" class="tag">controller</text></g>
+    <text x="102" y="701" class="desc">listener * (todos os eventos)</text>
+    <g class="l-svc"><rect x="28" y="718" width="66" height="22" rx="4"/><text x="61" y="733" class="tag">service</text></g>
+    <text x="102" y="733" class="desc">normaliza · grava trilha</text>
+    <g class="l-repo"><rect x="28" y="750" width="66" height="22" rx="4"/><text x="61" y="765" class="tag">repository</text></g>
+    <text x="102" y="765" class="desc">audit_log (append-only)</text>
+    <g class="l-cli"><rect x="28" y="782" width="66" height="22" rx="4"/><text x="61" y="797" class="tag">client</text></g>
+    <text x="102" y="797" class="desc">— sem integração externa</text>
+  </g>
+
+  <!-- Card 8: commons + infra (355,652) -->
+  <g>
+    <rect class="card" x="355" y="652" width="305" height="158" rx="8"/>
+    <rect class="hdr" x="355" y="652" width="305" height="26" rx="8"/>
+    <text x="365" y="670" class="svc">commons + infra (compartilhado)</text>
+    <g class="l-inf"><rect x="363" y="686" width="66" height="22" rx="4"/><text x="396" y="701" class="tag">commons</text></g>
+    <text x="437" y="701" class="desc">contratos de evento · correlação</text>
+    <g class="l-inf"><rect x="363" y="718" width="66" height="22" rx="4"/><text x="396" y="733" class="tag">config</text></g>
+    <text x="437" y="733" class="desc">Kafka · security · beans (por serviço)</text>
+    <g class="l-inf"><rect x="363" y="750" width="66" height="22" rx="4"/><text x="396" y="765" class="tag">kafka</text></g>
+    <text x="437" y="765" class="desc">barramento · outbox relay</text>
+    <g class="l-inf"><rect x="363" y="782" width="66" height="22" rx="4"/><text x="396" y="797" class="tag">postgres</text></g>
+    <text x="437" y="797" class="desc">1 schema por serviço</text>
+  </g>
+
+  <text x="20" y="838" font-size="11" class="tm">azul controller · verde service · âmbar repository · roxo client · cinza infra compartilhada</text>
+</svg>

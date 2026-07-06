@@ -65,6 +65,10 @@ com.kyc.<contexto>
 Disciplina única obrigatória: o `service` acessa integrações externas **por interface**
 (pacote `client`), nunca pelo SDK direto. Custo baixo, ganho alto para teste e auditoria.
 
+O que preenche cada camada em todos os serviços do MVP:
+
+![Arquitetura em camadas por serviço](../diagrams/camadas-por-servico.svg)
+
 ## Padrões transversais
 
 - **Outbox pattern** — evento gravado na mesma transação do banco; relay publica no Kafka.
