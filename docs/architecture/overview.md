@@ -13,7 +13,32 @@
 5. **Fase 1 ⊂ Fase 2.** O motor de risco de hoje é subconjunto da plataforma completa
    de amanhã; a evolução adiciona módulos, não reescreve.
 
-## Topologia (MVP — modelo motor de risco)
+## Corte atual — Risk Engine API
+
+O primeiro corte **não** são os 6 microserviços de uma vez. Começamos por uma única
+**Risk Engine API** (um deployable) que encapsula Identity, Screening e Risk scoring como
+módulos internos em camadas clássicas, conversando por chamada de método em processo — ver
+[ADR-0009](../adr/0009-risk-engine-modular-monolith-first.md).
+
+```
+sistema do cliente ──POST /assessments──▶ Risk Engine API ──202 {id, em_analise}──▶ cliente
+                                               │  (GET /assessments/{id} p/ status)
+                                               │  identity → screening → risk → decisão
+                                               ▼ (outbox)
+                                        ┌──────────────┐
+                                        │    Kafka     │  assessment.completed
+                                        └──────────────┘
+                                               │
+                                               ▼  (fase seguinte)
+                                        Webhook API  ── callback ──▶ cliente
+```
+
+A **Webhook API** entra depois como deployable separado, consumindo `assessment.completed`.
+
+## Topologia-alvo (visão de longo prazo — microserviços)
+
+A visão abaixo é o **destino**, não o corte inicial. O núcleo de risco será dividido
+incrementalmente quando a escala exigir.
 
 ![Topologia de microserviços do MVP](../diagrams/topologia-mvp.svg)
 
@@ -37,17 +62,20 @@ sistema do cliente ──POST──▶ Assessment API ──202 síncrono──�
 Ver diagrama detalhado em [event-flow.md](event-flow.md) e o SVG em
 [docs/diagrams/topologia-mvp.svg](../diagrams/topologia-mvp.svg).
 
-## Serviços do MVP
+## Serviços da topologia-alvo
 
-| Serviço              | Papel                                                            |
-|----------------------|------------------------------------------------------------------|
-| **Assessment API**   | Borda. Intake, resposta 202, consulta de status, agregação final |
-| **Identity**         | Validação CPF/CNPJ, cruzamento com bureaus                       |
-| **Screening**        | Match PEP, sanções (ONU/OFAC/CGU), mídia adversa                 |
-| **Risk scoring**     | Classificação de risco (baixo/médio/alto)                        |
-| **Case management**  | Análise manual / EDD, fila de analistas                          |
-| **Webhook dispatcher** | Callback assíncrono ao cliente com retry e assinatura          |
-| **Audit & compliance** | Trilha imutável, retenção, evidência regulatória              |
+Papéis na visão de longo prazo. No corte atual, os três primeiros são **módulos internos**
+da Risk Engine API; os demais entram nas fases seguintes.
+
+| Serviço / módulo     | Papel                                                            | Onde vive agora            |
+|----------------------|------------------------------------------------------------------|----------------------------|
+| **Assessment**       | Borda. Intake, resposta 202, consulta de status, agregação final | módulo da Risk Engine API  |
+| **Identity**         | Validação CPF/CNPJ, cruzamento com bureaus                       | módulo da Risk Engine API  |
+| **Screening**        | Match PEP, sanções (ONU/OFAC/CGU), mídia adversa                 | módulo da Risk Engine API  |
+| **Risk scoring**     | Classificação de risco (baixo/médio/alto)                        | módulo da Risk Engine API  |
+| **Webhook API**      | Callback assíncrono ao cliente com retry e assinatura           | próxima fase (deployable)  |
+| **Case management**  | Análise manual / EDD, fila de analistas                          | fase 2                     |
+| **Audit & compliance** | Trilha imutável, retenção, evidência regulatória              | fase 2                     |
 
 ## Estilo interno de cada serviço (camadas clássicas)
 

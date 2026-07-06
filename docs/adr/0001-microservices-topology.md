@@ -1,7 +1,12 @@
 # ADR-0001: Topologia de microserviços
 
-- **Status:** Aceito
+- **Status:** Substituído parcialmente por [ADR-0009](0009-risk-engine-modular-monolith-first.md)
 - **Data:** 2026-07-04
+
+> **Nota:** a decisão de "microserviços desde o dia 1" foi revista. O núcleo de risco
+> começa como monólito modular (Risk Engine API) com split incremental — ver
+> [ADR-0009](0009-risk-engine-modular-monolith-first.md). A visão de longo prazo em
+> microserviços permanece válida como destino.
 
 ## Contexto
 
