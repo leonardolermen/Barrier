@@ -5,13 +5,12 @@ import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.RiskLevel;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Processa avaliações pendentes.
@@ -64,10 +63,6 @@ public class AssessmentProcessor {
   }
 
   private String serialize(AssessmentCompletedPayload payload) {
-    try {
-      return objectMapper.writeValueAsString(payload);
-    } catch (JsonProcessingException e) {
-      throw new IllegalStateException("Falha ao serializar payload de conclusão", e);
-    }
+    return objectMapper.writeValueAsString(payload);
   }
 }

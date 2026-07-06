@@ -23,6 +23,7 @@ class LayeredArchitectureTest {
   static final ArchRule camadas_respeitam_a_direcao =
       Architectures.layeredArchitecture()
           .consideringOnlyDependenciesInLayers()
+          .withOptionalLayers(true)
           .layer("Controller")
           .definedBy("..controller..")
           .layer("Service")

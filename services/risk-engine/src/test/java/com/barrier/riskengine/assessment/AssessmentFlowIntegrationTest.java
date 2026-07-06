@@ -1,6 +1,7 @@
 package com.barrier.riskengine.assessment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.barrier.commons.outbox.OutboxRelay;
 import com.barrier.commons.outbox.OutboxRepository;
@@ -11,16 +12,19 @@ import com.barrier.riskengine.assessment.domain.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentProcessor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.testcontainers.containers.KafkaContainer;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
@@ -40,24 +44,35 @@ import org.testcontainers.utility.DockerImageName;
 class AssessmentFlowIntegrationTest {
 
   @Container @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>("postgres:17-alpine");
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
 
   @Container @ServiceConnection
   static final KafkaContainer KAFKA =
-      new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.1"));
+      new KafkaContainer(DockerImageName.parse("apache/kafka:3.8.1"));
 
-  @Autowired TestRestTemplate rest;
+  @Value("${local.server.port}")
+  int port;
+
   @Autowired AssessmentProcessor processor;
   @Autowired OutboxRelay relay;
   @Autowired OutboxRepository outboxRepository;
+
+  private RestClient client() {
+    return RestClient.create("http://localhost:" + port);
+  }
 
   @Test
   void submeteProcessaEPublicaEvento() {
     var request = new SubmitAssessmentRequest(DocumentType.CPF, "111.444.777-35", "Fulano de Tal");
 
     ResponseEntity<AssessmentResponse> created =
-        rest.postForEntity("/v1/assessments", request, AssessmentResponse.class);
+        client()
+            .post()
+            .uri("/v1/assessments")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(request)
+            .retrieve()
+            .toEntity(AssessmentResponse.class);
 
     assertThat(created.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
     assertThat(created.getBody()).isNotNull();
@@ -70,7 +85,7 @@ class AssessmentFlowIntegrationTest {
 
     // GET reflete a conclusão
     ResponseEntity<AssessmentResponse> fetched =
-        rest.getForEntity("/v1/assessments/" + id, AssessmentResponse.class);
+        client().get().uri("/v1/assessments/" + id).retrieve().toEntity(AssessmentResponse.class);
     assertThat(fetched.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(fetched.getBody()).isNotNull();
     assertThat(fetched.getBody().status()).isEqualTo("APROVADO");
@@ -87,9 +102,19 @@ class AssessmentFlowIntegrationTest {
   void documentoInvalidoRetorna400() {
     var request = new SubmitAssessmentRequest(DocumentType.CPF, "00000000000", "Fulano");
 
-    ResponseEntity<String> response =
-        rest.postForEntity("/v1/assessments", request, String.class);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThatThrownBy(
+            () ->
+                client()
+                    .post()
+                    .uri("/v1/assessments")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .toBodilessEntity())
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            e ->
+                assertThat(((HttpClientErrorException) e).getStatusCode())
+                    .isEqualTo(HttpStatus.BAD_REQUEST));
   }
 }

@@ -36,5 +36,14 @@ Fase 1 concluída: intake (`POST /v1/assessments` 202, `GET /v1/assessments/{id}
 publicando `barrier.assessment.completed`. Próximo: Fase 2 (módulo Identity com bureau
 atrás de interface), seguindo o plano faseado (Fase 2 → 5).
 
-Nota: build não roda neste ambiente (sem JDK/Maven). `./mvnw verify` deve ser rodado na
-máquina do dev (integração exige Docker/Testcontainers).
+Build validado: `./mvnw test` verde (18 testes, inclui integração com Testcontainers).
+JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).
+
+Peculiaridades do Spring Boot 4 (aprendidas na prática):
+- Autoconfig é modularizada: use `spring-boot-starter-kafka` e `spring-boot-starter-flyway`
+  (o `spring-kafka`/`flyway-core` crus NÃO ativam a autoconfiguração nem o `@ServiceConnection`).
+- Jackson 3 é o padrão (`tools.jackson.*`), com `java.time` embutido; exceções são unchecked.
+- `TestRestTemplate` foi removido — usar `RestClient`/`RestTestClient`.
+- `@ServiceConnection` de Kafka suporta `org.testcontainers.kafka.KafkaContainer` (imagem
+  apache), não o container clássico nem o `ConfluentKafkaContainer`.
+- Testcontainers não é gerenciado pelo BOM do Boot 4 — importar `testcontainers-bom`.

@@ -13,13 +13,14 @@ import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.DocumentType;
 import com.barrier.riskengine.assessment.domain.RiskLevel;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @ExtendWith(MockitoExtension.class)
 class AssessmentProcessorTest {
@@ -27,9 +28,14 @@ class AssessmentProcessorTest {
   @Mock AssessmentRepository repository;
   @Mock OutboxRecorder outbox;
 
+  private static ObjectMapper objectMapper() {
+    // Jackson 3: suporte a java.time é embutido no databind.
+    return JsonMapper.builder().build();
+  }
+
   @Test
   void concluiPendenteEGravaEventoNaOutbox() {
-    var processor = new AssessmentProcessor(repository, outbox, new ObjectMapper().findAndRegisterModules());
+    var processor = new AssessmentProcessor(repository, outbox, objectMapper());
     Assessment pending = Assessment.submit(DocumentType.CPF, "11144477735", "Fulano");
     when(repository.findPending(anyInt())).thenReturn(List.of(pending));
 
@@ -52,7 +58,7 @@ class AssessmentProcessorTest {
 
   @Test
   void semPendentesNaoFazNada() {
-    var processor = new AssessmentProcessor(repository, outbox, new ObjectMapper().findAndRegisterModules());
+    var processor = new AssessmentProcessor(repository, outbox, objectMapper());
     when(repository.findPending(anyInt())).thenReturn(List.of());
 
     assertThat(processor.process()).isZero();
