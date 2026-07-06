@@ -57,9 +57,10 @@ docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 
 ## Status
 
-🏗️ **Fase 2 concluída** — sobre a Fase 1 (intake `202` + outbox), agora com o módulo
-**Identity**: `BureauProvider` (integração atrás de interface, stub ativo + esqueleto Serpro),
-`IdentityService` seleciona o provider por tipo de documento (Strategy) e grava
-`identity_checks`. O `AssessmentProcessor` decide pela identidade: NOT_FOUND/MISMATCH →
-REPROVADO; verificada ou bureau indisponível → APROVADO. Próximo: Fase 3 (Screening). Ver o
+🏗️ **Fase 3 concluída** — sobre as Fases 1-2, agora com o módulo **Screening**:
+`WatchlistProvider` (Gateway atrás de interface, stub em memória), regras de match como
+Strategy (`PepMatchRule`, `SanctionMatchRule`) aplicadas em cadeia, `ScreeningService`
+agrega os apontamentos em `screening_results` (hits em JSON). O `AssessmentProcessor`
+orquestra identidade → screening: identidade reprovada → REPROVADO; apontamento de
+screening → EM_REVISAO; caso contrário → APROVADO. Próximo: Fase 4 (Risk scoring). Ver o
 [plano de implementação](docs/implementation/risk-engine-plan.md).

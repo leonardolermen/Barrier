@@ -17,6 +17,11 @@ import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
+import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.ScreeningHit;
+import com.barrier.riskengine.screening.domain.ScreeningResult;
+import com.barrier.riskengine.screening.service.ScreeningCommand;
+import com.barrier.riskengine.screening.service.ScreeningService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,15 +36,22 @@ class AssessmentProcessorTest {
 
   @Mock AssessmentRepository repository;
   @Mock IdentityService identityService;
+  @Mock ScreeningService screeningService;
   @Mock OutboxRecorder outbox;
 
   private static ObjectMapper objectMapper() {
-    // Jackson 3: suporte a java.time é embutido no databind.
     return JsonMapper.builder().build();
   }
 
   private AssessmentProcessor newProcessor() {
-    return new AssessmentProcessor(repository, identityService, outbox, objectMapper());
+    return new AssessmentProcessor(
+        repository, identityService, screeningService, outbox, objectMapper());
+  }
+
+  private Assessment pendingAssessment() {
+    Assessment a = Assessment.submit(DocumentType.CPF, "11144477735", "Fulano");
+    when(repository.findPending(anyInt())).thenReturn(List.of(a));
+    return a;
   }
 
   private void stubIdentity(IdentityStatus status) {
@@ -47,12 +59,21 @@ class AssessmentProcessorTest {
         .thenReturn(IdentityCheck.create("aid", status, "stub", "detalhe"));
   }
 
+  private void stubScreening(boolean hasHits) {
+    List<ScreeningHit> hits =
+        hasHits
+            ? List.of(new ScreeningHit(MatchType.SANCTION, "OFAC", "X", "SDN"))
+            : List.of();
+    when(screeningService.screen(any(ScreeningCommand.class)))
+        .thenReturn(ScreeningResult.of("aid", hits));
+  }
+
   @Test
-  void identidadeVerificadaAprovaEGravaEvento() {
+  void identidadeVerificadaSemHitAprovaEGravaEvento() {
     var processor = newProcessor();
-    Assessment pending = Assessment.submit(DocumentType.CPF, "11144477735", "Fulano");
-    when(repository.findPending(anyInt())).thenReturn(List.of(pending));
+    Assessment pending = pendingAssessment();
     stubIdentity(IdentityStatus.VERIFIED);
+    stubScreening(false);
 
     int processed = processor.process();
 
@@ -72,10 +93,22 @@ class AssessmentProcessorTest {
   }
 
   @Test
-  void identidadeNaoEncontradaReprova() {
+  void screeningComApontamentoVaiParaRevisao() {
     var processor = newProcessor();
-    Assessment pending = Assessment.submit(DocumentType.CPF, "11144477735", "Fulano");
-    when(repository.findPending(anyInt())).thenReturn(List.of(pending));
+    Assessment pending = pendingAssessment();
+    stubIdentity(IdentityStatus.VERIFIED);
+    stubScreening(true);
+
+    processor.process();
+
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.EM_REVISAO);
+    assertThat(pending.riskLevel()).isEqualTo(RiskLevel.ALTO);
+  }
+
+  @Test
+  void identidadeNaoEncontradaReprovaSemScreening() {
+    var processor = newProcessor();
+    Assessment pending = pendingAssessment();
     stubIdentity(IdentityStatus.NOT_FOUND);
 
     processor.process();
@@ -85,11 +118,11 @@ class AssessmentProcessorTest {
   }
 
   @Test
-  void bureauIndisponivelNaoReprova() {
+  void bureauIndisponivelSegueParaScreening() {
     var processor = newProcessor();
-    Assessment pending = Assessment.submit(DocumentType.CPF, "11144477735", "Fulano");
-    when(repository.findPending(anyInt())).thenReturn(List.of(pending));
+    Assessment pending = pendingAssessment();
     stubIdentity(IdentityStatus.UNAVAILABLE);
+    stubScreening(false);
 
     processor.process();
 

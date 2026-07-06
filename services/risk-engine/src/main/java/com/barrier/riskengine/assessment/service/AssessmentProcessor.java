@@ -8,6 +8,9 @@ import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
+import com.barrier.riskengine.screening.domain.ScreeningResult;
+import com.barrier.riskengine.screening.service.ScreeningCommand;
+import com.barrier.riskengine.screening.service.ScreeningService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,10 +21,10 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Processa avaliações pendentes.
  *
- * <p>Fase 2: executa a verificação de identidade. Identidade reprovada (NOT_FOUND/MISMATCH)
- * → REPROVADO; verificada ou bureau indisponível → APROVADO (screening e risco entram nas
- * fases seguintes). Ao concluir, grava {@code barrier.assessment.completed} na outbox, na
- * mesma transação da mudança de estado.
+ * <p>Fase 3: identidade → screening. Identidade reprovada (NOT_FOUND/MISMATCH) → REPROVADO;
+ * apontamento de screening (PEP/sanção) → EM_REVISAO; caso contrário → APROVADO (o risco
+ * consolidado entra na Fase 4). Ao concluir, grava {@code barrier.assessment.completed} na
+ * outbox, na mesma transação da mudança de estado.
  */
 @Component
 public class AssessmentProcessor {
@@ -33,16 +36,19 @@ public class AssessmentProcessor {
 
   private final AssessmentRepository repository;
   private final IdentityService identityService;
+  private final ScreeningService screeningService;
   private final OutboxRecorder outbox;
   private final ObjectMapper objectMapper;
 
   public AssessmentProcessor(
       AssessmentRepository repository,
       IdentityService identityService,
+      ScreeningService screeningService,
       OutboxRecorder outbox,
       ObjectMapper objectMapper) {
     this.repository = repository;
     this.identityService = identityService;
+    this.screeningService = screeningService;
     this.outbox = outbox;
     this.objectMapper = objectMapper;
   }
@@ -74,10 +80,23 @@ public class AssessmentProcessor {
           AssessmentStatus.REPROVADO,
           "Identidade não confirmada (" + identity.status() + ")");
     } else {
-      assessment.complete(
-          RiskLevel.BAIXO,
-          AssessmentStatus.APROVADO,
-          "Identidade " + identity.status().name().toLowerCase());
+      ScreeningResult screening =
+          screeningService.screen(
+              new ScreeningCommand(
+                  assessment.id().asString(),
+                  assessment.documentType().name(),
+                  assessment.documentDigits(),
+                  assessment.name()));
+
+      if (screening.hasHits()) {
+        assessment.complete(
+            RiskLevel.ALTO,
+            AssessmentStatus.EM_REVISAO,
+            "Screening com " + screening.hits().size() + " apontamento(s)");
+      } else {
+        assessment.complete(
+            RiskLevel.BAIXO, AssessmentStatus.APROVADO, "Identidade verificada, sem apontamentos");
+      }
     }
 
     repository.save(assessment);
