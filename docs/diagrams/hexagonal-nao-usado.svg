@@ -1,0 +1,82 @@
+<svg width="100%" viewBox="0 0 680 500" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <title>Referência: serviço de screening em arquitetura hexagonal (alternativa não adotada)</title>
+  <desc>Diagrama ilustrativo da hexagonal considerada e descartada no ADR-0002. Adaptadores de entrada acionam o domínio por portas; o domínio usa portas de saída implementadas por adaptadores.</desc>
+  <style>
+    .t-primary { fill: #1a1a1a; }
+    .t-sec     { fill: #444a52; }
+    .t-muted   { fill: #8a8f98; }
+    .blue rect { fill: #dbeafe; stroke: #93c5fd; }
+    .blue text { fill: #1e3a8a; }
+    .teal rect { fill: #ccfbf1; stroke: #5eead4; }
+    .teal text { fill: #0f766e; }
+    .hex       { fill: #eceff1; stroke: #b0bec5; }
+  </style>
+
+  <text x="20" y="28" font-size="16" font-weight="500" class="t-primary">Referência — hexagonal (não adotada, ver ADR-0002)</text>
+  <text x="20" y="50" font-size="12" class="t-muted">setas = fluxo de dados · dependência sempre aponta para o domínio</text>
+
+  <!-- Driving adapters (left) -->
+  <text x="20" y="92" font-size="12" font-weight="500" class="t-sec">adaptadores de entrada</text>
+  <g class="blue">
+    <rect x="20" y="105" width="150" height="60" rx="8"/>
+    <text x="95" y="132" text-anchor="middle" font-size="13" font-weight="500">REST controller</text>
+    <text x="95" y="150" text-anchor="middle" font-size="11">POST /screenings</text>
+  </g>
+  <g class="blue">
+    <rect x="20" y="255" width="150" height="60" rx="8"/>
+    <text x="95" y="282" text-anchor="middle" font-size="13" font-weight="500">Kafka consumer</text>
+    <text x="95" y="300" text-anchor="middle" font-size="11">onboarding.iniciado</text>
+  </g>
+
+  <!-- Domain hexagon (center) -->
+  <polygon points="250,290 300,150 420,150 470,290 420,430 300,430" class="hex"/>
+  <text x="360" y="205" text-anchor="middle" font-size="14" font-weight="500" class="t-primary">domínio</text>
+  <text x="360" y="225" text-anchor="middle" font-size="12" class="t-sec">regras de screening</text>
+  <text x="360" y="252" text-anchor="middle" font-size="11" class="t-sec">match PEP / sanções</text>
+  <text x="360" y="270" text-anchor="middle" font-size="11" class="t-sec">score de risco</text>
+  <text x="360" y="288" text-anchor="middle" font-size="11" class="t-sec">decisão + evidência</text>
+  <text x="360" y="330" text-anchor="middle" font-size="11" class="t-muted">sem JPA · sem SDK</text>
+  <text x="360" y="348" text-anchor="middle" font-size="11" class="t-muted">só interfaces (ports)</text>
+
+  <!-- Inbound port marker -->
+  <circle cx="250" cy="290" r="7" fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
+  <text x="240" y="360" text-anchor="middle" font-size="10" class="t-muted">port in</text>
+  <text x="240" y="374" text-anchor="middle" font-size="10" class="t-muted">ScreeningUseCase</text>
+
+  <!-- Outbound port markers -->
+  <circle cx="470" cy="290" r="7" fill="#ffffff" stroke="#14b8a6" stroke-width="2"/>
+  <text x="470" y="372" text-anchor="middle" font-size="10" class="t-muted">ports out</text>
+
+  <!-- Data-in arrows -->
+  <line x1="170" y1="135" x2="300" y2="200" stroke="#3b82f6" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="170" y1="285" x2="252" y2="290" stroke="#3b82f6" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- Driven adapters (right) -->
+  <text x="510" y="92" font-size="12" font-weight="500" class="t-sec">adaptadores de saída</text>
+  <g class="teal">
+    <rect x="510" y="105" width="150" height="56" rx="8"/>
+    <text x="585" y="128" text-anchor="middle" font-size="12" font-weight="500">Watchlist client</text>
+    <text x="585" y="146" text-anchor="middle" font-size="10">OFAC / ONU / PEP</text>
+  </g>
+  <g class="teal">
+    <rect x="510" y="262" width="150" height="56" rx="8"/>
+    <text x="585" y="285" text-anchor="middle" font-size="12" font-weight="500">Repository JPA</text>
+    <text x="585" y="303" text-anchor="middle" font-size="10">Postgres</text>
+  </g>
+  <g class="teal">
+    <rect x="510" y="392" width="150" height="56" rx="8"/>
+    <text x="585" y="415" text-anchor="middle" font-size="12" font-weight="500">Event producer</text>
+    <text x="585" y="433" text-anchor="middle" font-size="10">screening.concluido</text>
+  </g>
+
+  <!-- Data-out arrows -->
+  <line x1="472" y1="255" x2="510" y2="150" stroke="#14b8a6" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="475" y1="290" x2="510" y2="290" stroke="#14b8a6" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="472" y1="325" x2="510" y2="415" stroke="#14b8a6" stroke-width="2" marker-end="url(#ar)"/>
+
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#8a8f98"/>
+    </marker>
+  </defs>
+</svg>

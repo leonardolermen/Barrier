@@ -1,0 +1,105 @@
+<svg width="100%" viewBox="0 0 680 560" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <title>Topologia de microserviços do KYC — modelo motor de risco</title>
+  <desc>Sistema do cliente chama a Assessment API, que responde 202 na hora e publica no Kafka; serviços de identidade, screening, risco e casos reagem em coreografia; o webhook dispatcher faz o callback e a auditoria consome todos os eventos.</desc>
+  <style>
+    .t-primary { fill: #1a1a1a; }
+    .t-muted   { fill: #8a8f98; }
+    .blue rect { fill: #dbeafe; stroke: #93c5fd; }
+    .blue text { fill: #1e3a8a; }
+    .teal rect { fill: #ccfbf1; stroke: #5eead4; }
+    .teal text { fill: #0f766e; }
+  </style>
+
+  <text x="20" y="26" font-size="16" font-weight="500" class="t-primary">Topologia MVP — motor de risco</text>
+  <text x="20" y="46" font-size="12" class="t-muted">azul = borda (fala com o cliente) · verde = serviços internos · setas cinza = fluxo de eventos</text>
+
+  <!-- Client -->
+  <g class="blue">
+    <rect x="20" y="72" width="130" height="58" rx="8"/>
+    <text x="85" y="98" text-anchor="middle" font-size="13" font-weight="500">sistema do cliente</text>
+    <text x="85" y="116" text-anchor="middle" font-size="11">cadastro dele</text>
+  </g>
+
+  <!-- Assessment API -->
+  <g class="blue">
+    <rect x="255" y="66" width="175" height="70" rx="8"/>
+    <text x="342" y="92" text-anchor="middle" font-size="13" font-weight="500">Assessment API</text>
+    <text x="342" y="110" text-anchor="middle" font-size="11">intake · 202 em_analise</text>
+    <text x="342" y="126" text-anchor="middle" font-size="11">GET status · agrega</text>
+  </g>
+
+  <!-- Webhook dispatcher -->
+  <g class="blue">
+    <rect x="510" y="72" width="150" height="58" rx="8"/>
+    <text x="585" y="98" text-anchor="middle" font-size="13" font-weight="500">webhook dispatcher</text>
+    <text x="585" y="116" text-anchor="middle" font-size="11">callback assíncrono</text>
+  </g>
+
+  <!-- Client <-> API arrows -->
+  <line x1="150" y1="92" x2="253" y2="92" stroke="#3b82f6" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="200" y="84" text-anchor="middle" font-size="10" class="t-muted">POST</text>
+  <line x1="253" y1="116" x2="150" y2="116" stroke="#3b82f6" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="200" y="130" text-anchor="middle" font-size="10" class="t-muted">202 síncrono</text>
+  <line x1="510" y1="118" x2="152" y2="128" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+  <text x="330" y="150" text-anchor="middle" font-size="10" class="t-muted">callback quando conclui</text>
+
+  <!-- Kafka bus -->
+  <g class="teal">
+    <rect x="20" y="200" width="640" height="46" rx="8"/>
+    <text x="340" y="228" text-anchor="middle" font-size="13" font-weight="500">Kafka — barramento de eventos · outbox pattern</text>
+  </g>
+  <line x1="342" y1="136" x2="342" y2="198" stroke="#8a8f98" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="560" y1="198" x2="570" y2="132" stroke="#8a8f98" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- Domain services -->
+  <g class="teal">
+    <rect x="26" y="300" width="148" height="78" rx="8"/>
+    <text x="100" y="326" text-anchor="middle" font-size="12" font-weight="500">Identity</text>
+    <text x="100" y="344" text-anchor="middle" font-size="10">CPF/CNPJ · bureau</text>
+    <text x="100" y="362" text-anchor="middle" font-size="10">→ identity.verified</text>
+  </g>
+  <g class="teal">
+    <rect x="188" y="300" width="148" height="78" rx="8"/>
+    <text x="262" y="326" text-anchor="middle" font-size="12" font-weight="500">Screening</text>
+    <text x="262" y="344" text-anchor="middle" font-size="10">PEP · sanções</text>
+    <text x="262" y="362" text-anchor="middle" font-size="10">→ screening.done</text>
+  </g>
+  <g class="teal">
+    <rect x="350" y="300" width="148" height="78" rx="8"/>
+    <text x="424" y="326" text-anchor="middle" font-size="12" font-weight="500">Risk scoring</text>
+    <text x="424" y="344" text-anchor="middle" font-size="10">baixo/médio/alto</text>
+    <text x="424" y="362" text-anchor="middle" font-size="10">→ risk.scored</text>
+  </g>
+  <g class="teal">
+    <rect x="512" y="300" width="148" height="78" rx="8"/>
+    <text x="586" y="326" text-anchor="middle" font-size="12" font-weight="500">Case mgmt</text>
+    <text x="586" y="344" text-anchor="middle" font-size="10">EDD · fila analista</text>
+    <text x="586" y="362" text-anchor="middle" font-size="10">→ case.decided</text>
+  </g>
+
+  <!-- bus <-> services -->
+  <line x1="100" y1="246" x2="100" y2="298" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#ar)"/>
+  <line x1="262" y1="246" x2="262" y2="298" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#ar)"/>
+  <line x1="424" y1="246" x2="424" y2="298" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#ar)"/>
+  <line x1="586" y1="246" x2="586" y2="298" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#ar)"/>
+  <line x1="120" y1="298" x2="120" y2="248" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#ar)"/>
+  <line x1="282" y1="298" x2="282" y2="248" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#ar)"/>
+  <line x1="444" y1="298" x2="444" y2="248" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#ar)"/>
+  <line x1="606" y1="298" x2="606" y2="248" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#ar)"/>
+
+  <!-- Audit -->
+  <g class="teal">
+    <rect x="20" y="430" width="640" height="52" rx="8"/>
+    <text x="340" y="452" text-anchor="middle" font-size="12" font-weight="500">Audit &amp; compliance — trilha imutável</text>
+    <text x="340" y="470" text-anchor="middle" font-size="10">consome todos os eventos · retenção · evidência regulatória</text>
+  </g>
+  <line x1="340" y1="246" x2="340" y2="428" stroke="#8a8f98" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+
+  <text x="20" y="512" font-size="11" class="t-muted">fase 2 (modelo B): + document store · biometria · retenção 10 anos · direitos do titular · monitoramento contínuo · reporting COAF</text>
+
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#8a8f98"/>
+    </marker>
+  </defs>
+</svg>

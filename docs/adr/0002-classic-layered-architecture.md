@@ -32,6 +32,8 @@ Disciplina única obrigatória: o `service` acessa integrações externas (burea
 - **Hexagonal (ports & adapters)** — isola melhor o domínio de infra e é excelente em
   domínios regulatórios complexos, mas adiciona cerimônia. Em microserviços já pequenos e
   com fronteira bem definida, o ganho não compensa o custo cognitivo para o time. Descartado.
+  Diagrama de referência da alternativa avaliada:
+  [hexagonal-nao-usado.svg](../diagrams/hexagonal-nao-usado.svg).
 
 ## Consequências
 

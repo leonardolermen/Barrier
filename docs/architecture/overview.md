@@ -15,6 +15,8 @@
 
 ## Topologia (MVP — modelo motor de risco)
 
+![Topologia de microserviços do MVP](../diagrams/topologia-mvp.svg)
+
 ```
 sistema do cliente ──POST──▶ Assessment API ──202 síncrono──▶ sistema do cliente
                                    │
@@ -32,7 +34,8 @@ sistema do cliente ──POST──▶ Assessment API ──202 síncrono──�
                           └──────────────────┘
 ```
 
-Ver diagrama detalhado em [event-flow.md](event-flow.md).
+Ver diagrama detalhado em [event-flow.md](event-flow.md) e o SVG em
+[docs/diagrams/topologia-mvp.svg](../diagrams/topologia-mvp.svg).
 
 ## Serviços do MVP
 
