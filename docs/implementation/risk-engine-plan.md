@@ -5,19 +5,20 @@ Plano faseado para construir a **Risk Engine API** (ver
 [padrões de código](coding-standards.md). Cada fase é entregável, testável e mergeável
 sozinha. **Ler e aprovar antes de implementar.**
 
-## Estrutura do repositório (monorepo Gradle — ADR-0008)
+## Estrutura do repositório (monorepo Maven — ADR-0008)
 
 ```
 barrier/
-├── settings.gradle.kts
-├── build.gradle.kts                 config comum (Java 25, Spotless, versões)
+├── pom.xml                          POM pai: versões, plugins, Java 25, Spotless
 ├── docker-compose.yml               Postgres + Kafka + Kafka UI
-├── commons/                         módulo compartilhado
+├── commons/
+│   ├── pom.xml
 │   └── src/main/java/com/barrier/commons/
 │       ├── event/                   envelope de evento, correlação
 │       └── outbox/                  entidade Outbox + relay + publisher (reutilizável)
 └── services/
     └── risk-engine/
+        ├── pom.xml
         └── src/main/java/com/barrier/riskengine/
             ├── assessment/          orquestra, REST, agrega decisão
             ├── identity/            valida CPF/CNPJ · client BureauProvider
@@ -58,14 +59,14 @@ Evento emitido ao concluir: `barrier.assessment.completed` (via outbox).
 
 **Objetivo:** projeto compila, sobe e responde health check.
 
-- `settings.gradle.kts` + `build.gradle.kts` (Java 25, Spring Boot, Spotless).
-- Módulos `commons` e `services/risk-engine`.
+- POM pai (`pom.xml`) com `dependencyManagement` (Spring Boot BOM, Java 25, Spotless).
+- Módulos Maven `commons` e `services/risk-engine` no `<modules>` do pai.
 - `docker-compose.yml`: Postgres, Kafka, Kafka UI.
 - `application.yml` com profiles (`local`, `test`).
 - Flyway ligado; migration `V001__baseline.sql` vazia/estrutural.
 - ArchUnit configurado com as regras de camada (mesmo que os pacotes estejam vazios).
 
-**Aceite:** `./gradlew build` verde; app sobe; `GET /actuator/health` = UP.
+**Aceite:** `./mvnw verify` verde; app sobe; `GET /actuator/health` = UP.
 
 ---
 

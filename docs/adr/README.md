@@ -14,7 +14,7 @@ Formato baseado em [Michael Nygard](https://cognitect.com/blog/2011/11/15/docume
 | [0005](0005-product-model-risk-engine.md) | Modelo de produto: motor de risco (A→B) | Aceito |
 | [0006](0006-sync-and-webhook-response.md) | Retorno síncrono + webhook       | Aceito    |
 | [0007](0007-java25-spring-boot.md) | Java 25 + Spring Boot 3           | Aceito    |
-| [0008](0008-monorepo-gradle.md) | Monorepo Gradle multi-módulo          | Proposto  |
+| [0008](0008-monorepo-maven.md) | Monorepo Maven multi-módulo           | Aceito    |
 | [0009](0009-risk-engine-modular-monolith-first.md) | Risk Engine como monólito modular primeiro | Aceito |
 
 ## Status possíveis

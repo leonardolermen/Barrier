@@ -10,7 +10,7 @@ e o `CLAUDE.md` apontam para cá.
 |-------------|-----------------------------------------------------|
 | Linguagem   | Java 25 (LTS) — records, pattern matching, virtual threads |
 | Framework   | Spring Boot 3.x                                     |
-| Build       | Gradle (Kotlin DSL), monorepo multi-módulo          |
+| Build       | Maven (Reactor), monorepo multi-módulo              |
 | Banco       | PostgreSQL + Flyway (migrations versionadas)        |
 | Mensageria  | Apache Kafka (Spring for Apache Kafka)              |
 | Mapeamento  | MapStruct (DTO ↔ domínio ↔ entidade)               |

@@ -26,7 +26,7 @@ escrever ou revisar código de implementação.
 
 ## Stack
 
-Java 25 · Spring Boot 3 · Gradle (monorepo) · PostgreSQL + Flyway · Kafka · MapStruct ·
+Java 25 · Spring Boot 3 · Maven (monorepo) · PostgreSQL + Flyway · Kafka · MapStruct ·
 JUnit 5 / Testcontainers / ArchUnit. Pacote raiz `com.barrier.<contexto>`.
 
 ## Estado atual

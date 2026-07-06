@@ -32,5 +32,5 @@ schema, comunicando-se apenas por eventos.
   natural para a fase 2.
 - **Negativas / custos:** complexidade operacional (observabilidade, infra, consistência
   distribuída) desde o dia 1; exige disciplina de contratos de evento.
-- **Mitigações:** monorepo para reduzir atrito de desenvolvimento ([ADR-0008](0008-monorepo-gradle.md));
+- **Mitigações:** monorepo para reduzir atrito de desenvolvimento ([ADR-0008](0008-monorepo-maven.md));
   `docker-compose` local; começar por uma fatia vertical fina antes dos 6 serviços.

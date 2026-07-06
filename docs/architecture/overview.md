@@ -108,7 +108,7 @@ O que preenche cada camada em todos os serviços do MVP:
 
 ## Infraestrutura de desenvolvimento
 
-- Monorepo Gradle multi-módulo (um módulo por serviço + módulo `commons` de eventos).
+- Monorepo Maven multi-módulo (um módulo por serviço + módulo `commons` de eventos).
 - `docker-compose` local sobe Kafka + PostgreSQL.
 
-> Decisão de monorepo ainda em ADR proposto — ver [ADR-0008](../adr/0008-monorepo-gradle.md).
+> Ver [ADR-0008](../adr/0008-monorepo-maven.md).
