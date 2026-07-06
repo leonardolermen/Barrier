@@ -2,7 +2,7 @@
 name: barrier-implementation
 description: >
   Standards and step-by-step checklist for writing or reviewing implementation code in the
-  Barrier KYC/PLD-FT platform (Java 25 + Spring Boot 3, classic layered architecture,
+  Barrier KYC/PLD-FT platform (Java 25 + Spring Boot 4, classic layered architecture,
   transactional outbox, Kafka, Testcontainers/ArchUnit). Use whenever creating or modifying
   a module or service in the barrier repo — controllers, services, repositories, external
   clients, events, migrations, or tests — so every change follows the agreed patterns.
