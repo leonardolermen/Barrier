@@ -1,0 +1,18 @@
+package com.barrier.riskengine.assessment.service;
+
+import com.barrier.riskengine.assessment.domain.Assessment;
+import java.time.Instant;
+
+/** Payload do evento {@code barrier.assessment.completed} (contrato v1). */
+public record AssessmentCompletedPayload(
+    String assessmentId, String status, String riskLevel, String decision, Instant completedAt) {
+
+  static AssessmentCompletedPayload from(Assessment a) {
+    return new AssessmentCompletedPayload(
+        a.id().asString(),
+        a.status().name(),
+        a.riskLevel() == null ? null : a.riskLevel().name(),
+        a.decision(),
+        a.completedAt());
+  }
+}

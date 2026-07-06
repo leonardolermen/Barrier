@@ -31,6 +31,10 @@ JUnit 5 / Testcontainers / ArchUnit. Pacote raiz `com.barrier.<contexto>`.
 
 ## Estado atual
 
-Fase 0 (scaffolding) concluída: monorepo Maven, `commons` + `services/risk-engine`, Spring
-Boot 4 + Java 25, Flyway/Kafka/ArchUnit configurados. Próximo: Fase 1 (intake `202` +
-outbox), seguindo o plano faseado (Fase 1 → 5).
+Fase 1 concluída: intake (`POST /v1/assessments` 202, `GET /v1/assessments/{id}`), agregado
+`Assessment` + VOs (Cpf/Cnpj), processamento assíncrono stub e transactional outbox
+publicando `barrier.assessment.completed`. Próximo: Fase 2 (módulo Identity com bureau
+atrás de interface), seguindo o plano faseado (Fase 2 → 5).
+
+Nota: build não roda neste ambiente (sem JDK/Maven). `./mvnw verify` deve ser rodado na
+máquina do dev (integração exige Docker/Testcontainers).

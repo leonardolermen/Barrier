@@ -33,6 +33,8 @@ management:
 server:
   port: ${SERVER_PORT:8080}
 
-springdoc:
-  swagger-ui:
-    path: /swagger-ui.html
+barrier:
+  assessment:
+    processor-delay-ms: 2000
+  outbox:
+    relay-delay-ms: 2000

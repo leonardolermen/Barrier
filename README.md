@@ -44,8 +44,8 @@ docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 ```
 
 - Health: <http://localhost:8080/actuator/health>
-- Swagger UI: <http://localhost:8080/swagger-ui.html>
 - Kafka UI: <http://localhost:8081>
+- API: `POST /v1/assessments` (202) · `GET /v1/assessments/{id}` (Swagger vem na Fase 5)
 
 ## Documentação
 
@@ -57,7 +57,8 @@ docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 
 ## Status
 
-🏗️ **Fase 0 (scaffolding) concluída** — monorepo Maven, módulos `commons` e
-`services/risk-engine`, Spring Boot 4 + Java 25, Flyway, Kafka e ArchUnit configurados;
-app sobe e responde health. Próximo: Fase 1 (intake `202` + outbox). Ver o
+🏗️ **Fase 1 concluída** — intake `POST /v1/assessments` (202) + `GET /v1/assessments/{id}`,
+agregado `Assessment` com value objects (CPF/CNPJ validados), processamento assíncrono
+(stub que aprova com risco BAIXO) e **transactional outbox** publicando
+`barrier.assessment.completed` no Kafka. Próximo: Fase 2 (módulo Identity com bureau). Ver o
 [plano de implementação](docs/implementation/risk-engine-plan.md).
