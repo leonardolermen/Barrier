@@ -57,8 +57,9 @@ docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 
 ## Status
 
-🏗️ **Fase 1 concluída** — intake `POST /v1/assessments` (202) + `GET /v1/assessments/{id}`,
-agregado `Assessment` com value objects (CPF/CNPJ validados), processamento assíncrono
-(stub que aprova com risco BAIXO) e **transactional outbox** publicando
-`barrier.assessment.completed` no Kafka. Próximo: Fase 2 (módulo Identity com bureau). Ver o
+🏗️ **Fase 2 concluída** — sobre a Fase 1 (intake `202` + outbox), agora com o módulo
+**Identity**: `BureauProvider` (integração atrás de interface, stub ativo + esqueleto Serpro),
+`IdentityService` seleciona o provider por tipo de documento (Strategy) e grava
+`identity_checks`. O `AssessmentProcessor` decide pela identidade: NOT_FOUND/MISMATCH →
+REPROVADO; verificada ou bureau indisponível → APROVADO. Próximo: Fase 3 (Screening). Ver o
 [plano de implementação](docs/implementation/risk-engine-plan.md).

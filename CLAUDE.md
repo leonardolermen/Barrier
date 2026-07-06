@@ -31,10 +31,11 @@ JUnit 5 / Testcontainers / ArchUnit. Pacote raiz `com.barrier.<contexto>`.
 
 ## Estado atual
 
-Fase 1 concluída: intake (`POST /v1/assessments` 202, `GET /v1/assessments/{id}`), agregado
-`Assessment` + VOs (Cpf/Cnpj), processamento assíncrono stub e transactional outbox
-publicando `barrier.assessment.completed`. Próximo: Fase 2 (módulo Identity com bureau
-atrás de interface), seguindo o plano faseado (Fase 2 → 5).
+Fases 1 e 2 concluídas (build verde, 24 testes). Fase 1: intake (`POST /v1/assessments`
+202, `GET /v1/assessments/{id}`), agregado `Assessment` + VOs, outbox. Fase 2: módulo
+Identity (`BureauProvider` interface + stub/Serpro, `IdentityService` com seleção por tipo,
+tabela `identity_checks`); o `AssessmentProcessor` decide pela identidade. Próximo: Fase 3
+(Screening — PEP/sanções), seguindo o plano faseado (Fase 3 → 5).
 
 Build validado: `./mvnw test` verde (18 testes, inclui integração com Testcontainers).
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

@@ -32,8 +32,10 @@ class LayeredArchitectureTest {
           .definedBy("..repository..")
           .whereLayer("Controller")
           .mayNotBeAccessedByAnyLayer()
+          // Service pode ser acessado por Controller e por outro Service (orquestração
+          // entre módulos: ex. AssessmentProcessor -> IdentityService).
           .whereLayer("Service")
-          .mayOnlyBeAccessedByLayers("Controller")
+          .mayOnlyBeAccessedByLayers("Controller", "Service")
           .whereLayer("Repository")
           .mayOnlyBeAccessedByLayers("Service");
 
