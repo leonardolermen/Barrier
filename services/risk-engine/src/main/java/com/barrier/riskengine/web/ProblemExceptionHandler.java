@@ -2,6 +2,7 @@ package com.barrier.riskengine.web;
 
 import com.barrier.riskengine.assessment.domain.AssessmentNotFoundException;
 import com.barrier.riskengine.assessment.domain.InvalidDocumentException;
+import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -13,8 +14,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 class ProblemExceptionHandler {
 
-  @ExceptionHandler(AssessmentNotFoundException.class)
-  ProblemDetail handleNotFound(AssessmentNotFoundException e) {
+  @ExceptionHandler({AssessmentNotFoundException.class, SubjectNotFoundException.class})
+  ProblemDetail handleNotFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
 

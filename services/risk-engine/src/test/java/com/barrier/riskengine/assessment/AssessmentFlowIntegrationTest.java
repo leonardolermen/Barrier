@@ -8,6 +8,7 @@ import com.barrier.commons.outbox.OutboxRepository;
 import com.barrier.commons.outbox.OutboxStatus;
 import com.barrier.riskengine.assessment.controller.AssessmentResponse;
 import com.barrier.riskengine.assessment.controller.SubmitAssessmentRequest;
+import com.barrier.riskengine.subject.controller.SubjectResponse;
 import com.barrier.riskengine.assessment.domain.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentProcessor;
 import org.junit.jupiter.api.Test;
@@ -99,6 +100,31 @@ class AssessmentFlowIntegrationTest {
     assertThat(sent)
         .hasSize(1)
         .allSatisfy(e -> assertThat(e.getType()).isEqualTo("barrier.assessment.completed"));
+
+    // o subject foi criado e vinculado ao tenant → visível para ele (documento mascarado)
+    ResponseEntity<SubjectResponse> subject =
+        client().get().uri("/v1/subjects/11144477735").retrieve().toEntity(SubjectResponse.class);
+    assertThat(subject.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(subject.getBody()).isNotNull();
+    assertThat(subject.getBody().name()).isEqualTo("Fulano de Tal");
+    assertThat(subject.getBody().document()).endsWith("35");
+  }
+
+  @Test
+  void subjectNaoConhecidoResponde404() {
+    // documento que nenhum teste submete → o tenant não tem vínculo → 404
+    assertThatThrownBy(
+            () ->
+                client()
+                    .get()
+                    .uri("/v1/subjects/99999999999")
+                    .retrieve()
+                    .toBodilessEntity())
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            e ->
+                assertThat(((HttpClientErrorException) e).getStatusCode())
+                    .isEqualTo(HttpStatus.NOT_FOUND));
   }
 
   @Test

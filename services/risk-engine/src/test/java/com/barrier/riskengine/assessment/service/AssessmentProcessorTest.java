@@ -52,7 +52,10 @@ class AssessmentProcessorTest {
   }
 
   private Assessment pendingAssessment() {
-    Assessment a = Assessment.submit("default", DocumentType.CPF, "11144477735", "Fulano");
+    Assessment a =
+        Assessment.submit(
+            "default", "11111111-1111-1111-1111-111111111111", DocumentType.CPF, "11144477735",
+            "Fulano");
     when(repository.findPending(anyInt())).thenReturn(List.of(a));
     when(identityService.verify(any(VerifyIdentityCommand.class)))
         .thenReturn(IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"));

@@ -31,6 +31,14 @@ JUnit 5 / Testcontainers / ArchUnit. Pacote raiz `com.barrier.<contexto>`.
 
 ## Estado atual
 
+Subjects (ADR-0011): o cliente final (CPF/CNPJ) é um **subject global** — 1 registro por
+documento (`subjects`, UNIQUE). A visibilidade é por associação (`tenant_subjects`): o `POST`
+acha-ou-cria o subject e garante o vínculo; `GET /v1/subjects/{documento}` só retorna se o
+tenant tem vínculo (senão 404 — não vaza cliente de outra empresa). `assessments.subject_id`
+liga a avaliação ao subject. Decisão de aceitar/recusar (EM_REVISAO) será **por tenant no
+assessment**, nunca no subject. Cache compartilhado de dados objetivos entre tenants = futuro
+opt-in.
+
 Multi-tenancy: cada avaliação pertence a um **tenant** (cliente da API). Header `X-Client-Id`
 → `TenantService.resolve` (tabela `tenants`, seed `default`); `assessments.tenant_id` +
 `deliveries.tenant_id`; o evento carrega `tenantId`; `GET` é escopado por tenant. Pré-auth

@@ -3,7 +3,10 @@ package com.barrier.riskengine.assessment.service;
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentId;
 import com.barrier.riskengine.assessment.domain.AssessmentNotFoundException;
+import com.barrier.riskengine.assessment.domain.Documents;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.subject.domain.Subject;
+import com.barrier.riskengine.subject.service.SubjectService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,20 +15,32 @@ import org.springframework.transaction.annotation.Transactional;
 public class AssessmentService {
 
   private final AssessmentRepository repository;
+  private final SubjectService subjectService;
 
-  public AssessmentService(AssessmentRepository repository) {
+  public AssessmentService(AssessmentRepository repository, SubjectService subjectService) {
     this.repository = repository;
+    this.subjectService = subjectService;
   }
 
   /**
-   * Cria uma avaliação em EM_ANALISE. O processamento (identity/screening/risk) ocorre de
-   * forma assíncrona em {@link AssessmentProcessor}.
+   * Cria uma avaliação em EM_ANALISE. Antes, acha-ou-cria o subject (cliente final) por documento
+   * e garante o vínculo do tenant com ele. O processamento ocorre de forma assíncrona em
+   * {@link AssessmentProcessor}.
    */
   @Transactional
   public Assessment submit(SubmitAssessmentCommand command) {
+    String digits = Documents.normalize(command.documentType(), command.document());
+    Subject subject =
+        subjectService.findOrCreate(command.documentType().name(), digits, command.name());
+    subjectService.link(command.tenantId(), subject.id());
+
     Assessment assessment =
         Assessment.submit(
-            command.tenantId(), command.documentType(), command.document(), command.name());
+            command.tenantId(),
+            subject.id().toString(),
+            command.documentType(),
+            command.document(),
+            command.name());
     return repository.save(assessment);
   }
 

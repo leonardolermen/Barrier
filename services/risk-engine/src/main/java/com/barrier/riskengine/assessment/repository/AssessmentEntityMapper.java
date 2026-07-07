@@ -3,6 +3,7 @@ package com.barrier.riskengine.assessment.repository;
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentId;
 import java.util.List;
+import java.util.UUID;
 
 /** Conversão entre o agregado de domínio e a entidade JPA. */
 final class AssessmentEntityMapper {
@@ -13,6 +14,7 @@ final class AssessmentEntityMapper {
     AssessmentEntity e = new AssessmentEntity();
     e.setId(a.id().value());
     e.setTenantId(a.tenantId());
+    e.setSubjectId(a.subjectId() == null ? null : UUID.fromString(a.subjectId()));
     e.setDocumentType(a.documentType());
     e.setDocumentValue(a.documentDigits());
     e.setName(a.name());
@@ -29,6 +31,7 @@ final class AssessmentEntityMapper {
     return Assessment.rehydrate(
         new AssessmentId(e.getId()),
         e.getTenantId(),
+        e.getSubjectId() == null ? null : e.getSubjectId().toString(),
         e.getDocumentType(),
         e.getDocumentValue(),
         e.getName(),
