@@ -41,7 +41,7 @@ casa por documento. Fonte atual é a semente `resources/watchlists/ceis-seed.csv
 Fases 1-4 concluídas (build verde). Fase 1: intake + outbox. Fase 2: Identity.
 Fase 3: Screening. Fase 4: motor de risco — `RiskRule` (Strategy) devolve `RiskResult`
 padronizado (score/severidade/motivo/evidências/recomendação); `RiskScoringService` soma
-0–1000 em bandas BAIXO/MEDIO/ALTO/CRITICO + override, grava `risk_scores` com a versão do
+0–1000 em bandas LOW/MEDIUM/HIGH/CRITICAL + override, grava `risk_scores` com a versão do
 motor (`ENGINE_VERSION`). O `AssessmentProcessor` reúne identidade+screening e delega a
 decisão ao motor; fatores explicáveis ficam no assessment (coluna `factors`) e voltam no GET.
 

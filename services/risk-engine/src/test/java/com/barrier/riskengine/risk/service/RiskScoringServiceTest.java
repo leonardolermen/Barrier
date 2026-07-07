@@ -58,7 +58,7 @@ class RiskScoringServiceTest {
     RiskDecision d = service.score(context(IdentityStatus.VERIFIED));
 
     assertThat(d.totalScore()).isZero();
-    assertThat(d.level()).isEqualTo(RiskLevel.BAIXO);
+    assertThat(d.level()).isEqualTo(RiskLevel.LOW);
     assertThat(d.recommendation()).isEqualTo(RiskRecommendation.APPROVE);
     assertThat(d.results()).isEmpty();
     assertThat(d.engineVersion()).isEqualTo(RiskScoringService.ENGINE_VERSION);
@@ -72,7 +72,7 @@ class RiskScoringServiceTest {
                 IdentityStatus.VERIFIED, new ScreeningHit(MatchType.SANCTION, "OFAC", "X", "sdn")));
 
     assertThat(d.totalScore()).isEqualTo(1000);
-    assertThat(d.level()).isEqualTo(RiskLevel.CRITICO);
+    assertThat(d.level()).isEqualTo(RiskLevel.CRITICAL);
     assertThat(d.recommendation()).isEqualTo(RiskRecommendation.REJECT);
   }
 
@@ -83,7 +83,7 @@ class RiskScoringServiceTest {
             context(IdentityStatus.VERIFIED, new ScreeningHit(MatchType.PEP, "base", "X", "cargo")));
 
     assertThat(d.totalScore()).isEqualTo(300);
-    assertThat(d.level()).isEqualTo(RiskLevel.MEDIO);
+    assertThat(d.level()).isEqualTo(RiskLevel.MEDIUM);
     assertThat(d.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
   }
 
@@ -92,7 +92,7 @@ class RiskScoringServiceTest {
     RiskDecision d = service.score(context(IdentityStatus.NOT_FOUND));
 
     assertThat(d.totalScore()).isEqualTo(900);
-    assertThat(d.level()).isEqualTo(RiskLevel.CRITICO);
+    assertThat(d.level()).isEqualTo(RiskLevel.CRITICAL);
     assertThat(d.recommendation()).isEqualTo(RiskRecommendation.REJECT);
   }
 
@@ -101,7 +101,7 @@ class RiskScoringServiceTest {
     RiskDecision d = service.score(context(IdentityStatus.UNAVAILABLE));
 
     assertThat(d.totalScore()).isEqualTo(150);
-    assertThat(d.level()).isEqualTo(RiskLevel.BAIXO);
+    assertThat(d.level()).isEqualTo(RiskLevel.LOW);
     assertThat(d.recommendation()).isEqualTo(RiskRecommendation.APPROVE);
     assertThat(d.results()).hasSize(1);
   }

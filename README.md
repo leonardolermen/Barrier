@@ -80,7 +80,7 @@ concluídas + Webhook API:
 - **Fase 3** — módulo Screening (`WatchlistProvider` + regras Strategy, `screening_results`).
 - **Fase 4** — motor de risco: cada `RiskRule` devolve um `RiskResult` padronizado (score,
   severidade, motivo, evidências, recomendação); score **0–1000** em bandas
-  **BAIXO/MEDIO/ALTO/CRITICO**, com override (sanção→bloqueio, PEP→revisão), fatores
+  **LOW/MEDIUM/HIGH/CRITICAL**, com override (sanção→bloqueio, PEP→revisão), fatores
   explicáveis e **versão do motor** gravada (`risk_scores`).
 - **Webhook API** — entrega assinada (HMAC), retry com backoff, idempotência por evento.
 

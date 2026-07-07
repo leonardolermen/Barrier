@@ -15,7 +15,7 @@ O núcleo de decisão é **em processo** dentro da Risk Engine (os módulos iden
    1. **identity** — valida CPF/CNPJ no bureau (stub) → `IdentityCheck`.
    2. **screening** — busca PEP/sanções nas listas (stub) e aplica as regras → `ScreeningResult`.
    3. **risk** — o motor roda as `RiskRule`, soma um **score 0–1000**, deriva o nível
-      (BAIXO/MEDIO/ALTO/CRITICO) e a recomendação (APPROVE/REVIEW/REJECT) → `RiskDecision`.
+      (LOW/MEDIUM/HIGH/CRITICAL) e a recomendação (APPROVE/REVIEW/REJECT) → `RiskDecision`.
    4. A recomendação vira o status (APROVADO/EM_REVISAO/REPROVADO); os fatores explicáveis
       ficam gravados na avaliação.
 4. Na **mesma transação** da conclusão, grava `barrier.assessment.completed` na `outbox`.

@@ -19,7 +19,7 @@ sozinha.
 
 Detalhe do que ficou diferente do plano original: o motor de risco (Fase 4) adotou o contrato
 padronizado `RiskResult` (score/severidade/motivo/evidências/recomendação), escala **0–1000**
-com nível **CRITICO** adicional e **versionamento do motor** (`engine_version`). Estado atual
+com nível **CRITICAL** adicional e **versionamento do motor** (`engine_version`). Estado atual
 completo em [CLAUDE.md](../../CLAUDE.md).
 
 ## Estrutura do repositório (monorepo Maven — ADR-0008)
@@ -145,9 +145,9 @@ o caminho feliz; ArchUnit verde.
 **Objetivo:** transformar identidade + screening em `RiskLevel` + fatores explicáveis.
 
 - `RiskRule` (Strategy): cada regra recebe o contexto e contribui com peso/fator.
-- `RiskScoringService` agrega as regras → `RiskLevel` (BAIXO/MEDIO/ALTO) + lista de fatores.
-- Decisão: BAIXO → APROVADO; ALTO ou hit → EM_REVISAO (case management é fase 2, aqui só
-  marca o estado); MEDIO conforme política.
+- `RiskScoringService` agrega as regras → `RiskLevel` (LOW/MEDIUM/HIGH/CRITICAL) + fatores.
+- Decisão: LOW/MEDIUM → APROVADO; HIGH → EM_REVISAO; CRITICAL ou override → REPROVADO
+  (case management é fase 2, aqui só marca o estado).
 - Grava `risk_scores`; fatores retornados no `GET`.
 
 **Patterns:** Strategy, Composite (soma de regras), Factory (resultado).

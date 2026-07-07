@@ -70,13 +70,13 @@ class AssessmentProcessorTest {
   void recomendacaoApproveAprovaEGravaEvento() {
     var processor = newProcessor();
     Assessment pending = pendingAssessment();
-    stubRisk(RiskLevel.BAIXO, RiskRecommendation.APPROVE, 0);
+    stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
 
     int processed = processor.process();
 
     assertThat(processed).isEqualTo(1);
     assertThat(pending.status()).isEqualTo(AssessmentStatus.APROVADO);
-    assertThat(pending.riskLevel()).isEqualTo(RiskLevel.BAIXO);
+    assertThat(pending.riskLevel()).isEqualTo(RiskLevel.LOW);
     verify(repository).save(pending);
 
     ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
@@ -86,31 +86,31 @@ class AssessmentProcessorTest {
             eq("barrier.assessment.completed"),
             eq(1),
             payload.capture());
-    assertThat(payload.getValue()).contains("APROVADO").contains("BAIXO");
+    assertThat(payload.getValue()).contains("APROVADO").contains("LOW");
   }
 
   @Test
   void recomendacaoReviewVaiParaRevisao() {
     var processor = newProcessor();
     Assessment pending = pendingAssessment();
-    stubRisk(RiskLevel.MEDIO, RiskRecommendation.REVIEW, 300);
+    stubRisk(RiskLevel.MEDIUM, RiskRecommendation.REVIEW, 300);
 
     processor.process();
 
     assertThat(pending.status()).isEqualTo(AssessmentStatus.EM_REVISAO);
-    assertThat(pending.riskLevel()).isEqualTo(RiskLevel.MEDIO);
+    assertThat(pending.riskLevel()).isEqualTo(RiskLevel.MEDIUM);
   }
 
   @Test
   void recomendacaoRejectReprova() {
     var processor = newProcessor();
     Assessment pending = pendingAssessment();
-    stubRisk(RiskLevel.CRITICO, RiskRecommendation.REJECT, 1000);
+    stubRisk(RiskLevel.CRITICAL, RiskRecommendation.REJECT, 1000);
 
     processor.process();
 
     assertThat(pending.status()).isEqualTo(AssessmentStatus.REPROVADO);
-    assertThat(pending.riskLevel()).isEqualTo(RiskLevel.CRITICO);
+    assertThat(pending.riskLevel()).isEqualTo(RiskLevel.CRITICAL);
   }
 
   @Test

@@ -33,7 +33,7 @@ a Webhook API).
 
 `POST /v1/assessments` → **202** `{id, EM_ANALISE}` → processamento assíncrono
 (**identity → screening → risk**) → o motor consolida um **score 0–1000**, nível
-(BAIXO/MEDIO/ALTO/CRITICO) e recomendação, que vira o status (APROVADO/EM_REVISAO/REPROVADO)
+(LOW/MEDIUM/HIGH/CRITICAL) e recomendação, que vira o status (APROVADO/EM_REVISAO/REPROVADO)
 → evento na outbox → **Webhook API** faz o callback assinado. O cliente também pode consultar
 `GET /v1/assessments/{id}`. Detalhes em [event-flow.md](event-flow.md).
 

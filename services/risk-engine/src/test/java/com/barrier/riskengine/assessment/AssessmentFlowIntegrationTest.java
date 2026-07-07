@@ -89,7 +89,7 @@ class AssessmentFlowIntegrationTest {
     assertThat(fetched.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(fetched.getBody()).isNotNull();
     assertThat(fetched.getBody().status()).isEqualTo("APROVADO");
-    assertThat(fetched.getBody().riskLevel()).isEqualTo("BAIXO");
+    assertThat(fetched.getBody().riskLevel()).isEqualTo("LOW");
 
     // evento foi efetivamente publicado (outbox marcada como SENT)
     var sent = outboxRepository.findByStatusOrderByOccurredAtAsc(OutboxStatus.SENT, Limit.of(10));

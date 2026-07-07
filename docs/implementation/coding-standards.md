@@ -57,7 +57,7 @@ abstração especulativa.
 
 - Use **records** para value objects e DTOs imutáveis.
 - Validação de VO no construtor compacto (ex.: `Cpf` valida dígitos verificadores).
-- Enums para estados e classificações (`RiskLevel { BAIXO, MEDIO, ALTO }`,
+- Enums para estados e classificações (`RiskLevel { LOW, MEDIUM, HIGH, CRITICAL }`,
   `AssessmentStatus { EM_ANALISE, APROVADO, REPROVADO, EM_REVISAO }`).
 - Estados de agregado mudam por métodos de domínio, não por setters soltos.
 
