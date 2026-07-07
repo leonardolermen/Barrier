@@ -31,6 +31,12 @@ JUnit 5 / Testcontainers / ArchUnit. Pacote raiz `com.barrier.<contexto>`.
 
 ## Estado atual
 
+Multi-tenancy: cada avaliação pertence a um **tenant** (cliente da API). Header `X-Client-Id`
+→ `TenantService.resolve` (tabela `tenants`, seed `default`); `assessments.tenant_id` +
+`deliveries.tenant_id`; o evento carrega `tenantId`; `GET` é escopado por tenant. Pré-auth
+confia no header; quando a API key chegar, o tenant será derivado da key (header ignorado).
+Termo `tenant` no código evita colisão com os vários "client" (bureau/HTTP).
+
 Bureaus (identity): cadeia com prioridade (`@Order`) + fallback — bureau indisponível cai
 para o próximo; resultado definitivo encerra. CNPJ real via BrasilAPI; CPF no stub.
 Watchlists (screening): **ingeridas** (ADR-0010) — `WatchlistImporter` (ApplicationRunner +

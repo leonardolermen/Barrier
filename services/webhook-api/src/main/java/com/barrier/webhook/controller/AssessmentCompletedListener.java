@@ -2,6 +2,7 @@ package com.barrier.webhook.controller;
 
 import com.barrier.commons.event.EventEnvelope;
 import com.barrier.webhook.service.WebhookDeliveryService;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -28,10 +29,17 @@ public class AssessmentCompletedListener {
   public void onMessage(String message) {
     try {
       EventEnvelope envelope = objectMapper.readValue(message, EventEnvelope.class);
-      service.onEvent(envelope);
+      service.onEvent(envelope, extractTenantId(envelope.payload()));
     } catch (RuntimeException e) {
       // Não relança: evita loop de reentrega por mensagem malformada. Fica logado para análise.
       log.error("Falha ao processar evento de avaliação concluída", e);
     }
+  }
+
+  private String extractTenantId(String payload) {
+    @SuppressWarnings("unchecked")
+    Map<String, Object> data = objectMapper.readValue(payload, Map.class);
+    Object tenantId = data.get("tenantId");
+    return tenantId == null ? null : tenantId.toString();
   }
 }

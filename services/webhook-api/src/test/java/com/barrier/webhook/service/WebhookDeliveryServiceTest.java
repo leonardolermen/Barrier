@@ -49,7 +49,7 @@ class WebhookDeliveryServiceTest {
     when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
     when(client.send(any(WebhookRequest.class))).thenReturn(WebhookSendResult.ok(200));
 
-    service("http://client/webhook").onEvent(event());
+    service("http://client/webhook").onEvent(event(), "default");
 
     ArgumentCaptor<Delivery> saved = ArgumentCaptor.forClass(Delivery.class);
     verify(repository, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
@@ -63,7 +63,7 @@ class WebhookDeliveryServiceTest {
     when(client.send(any(WebhookRequest.class)))
         .thenReturn(WebhookSendResult.failure(500, "erro"));
 
-    service("http://client/webhook").onEvent(event());
+    service("http://client/webhook").onEvent(event(), "default");
 
     ArgumentCaptor<Delivery> saved = ArgumentCaptor.forClass(Delivery.class);
     verify(repository, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
@@ -75,7 +75,7 @@ class WebhookDeliveryServiceTest {
   void eventoDuplicadoNaoEntrega() {
     when(repository.existsByEventId(any(UUID.class))).thenReturn(true);
 
-    service("http://client/webhook").onEvent(event());
+    service("http://client/webhook").onEvent(event(), "default");
 
     verify(client, never()).send(any());
     verify(repository, never()).save(any());
@@ -85,7 +85,7 @@ class WebhookDeliveryServiceTest {
   void semEndpointConfiguradoNaoEntrega() {
     when(repository.existsByEventId(any(UUID.class))).thenReturn(false);
 
-    service("").onEvent(event());
+    service("").onEvent(event(), "default");
 
     verify(client, never()).send(any());
     verify(repository, never()).save(any());

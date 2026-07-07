@@ -11,6 +11,7 @@ final class DeliveryEntityMapper {
     e.setId(d.id());
     e.setEventId(d.eventId());
     e.setAssessmentId(d.assessmentId());
+    e.setTenantId(d.tenantId());
     e.setTargetUrl(d.targetUrl());
     e.setPayload(d.payload());
     e.setStatus(d.status());
@@ -27,6 +28,7 @@ final class DeliveryEntityMapper {
         e.getId(),
         e.getEventId(),
         e.getAssessmentId(),
+        e.getTenantId(),
         e.getTargetUrl(),
         e.getPayload(),
         e.getStatus(),

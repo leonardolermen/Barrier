@@ -12,6 +12,7 @@ final class AssessmentEntityMapper {
   static AssessmentEntity toEntity(Assessment a) {
     AssessmentEntity e = new AssessmentEntity();
     e.setId(a.id().value());
+    e.setTenantId(a.tenantId());
     e.setDocumentType(a.documentType());
     e.setDocumentValue(a.documentDigits());
     e.setName(a.name());
@@ -27,6 +28,7 @@ final class AssessmentEntityMapper {
   static Assessment toDomain(AssessmentEntity e) {
     return Assessment.rehydrate(
         new AssessmentId(e.getId()),
+        e.getTenantId(),
         e.getDocumentType(),
         e.getDocumentValue(),
         e.getName(),

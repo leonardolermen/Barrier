@@ -58,7 +58,10 @@ class AssessmentFlowIntegrationTest {
   @Autowired OutboxRepository outboxRepository;
 
   private RestClient client() {
-    return RestClient.create("http://localhost:" + port);
+    return RestClient.builder()
+        .baseUrl("http://localhost:" + port)
+        .defaultHeader("X-Client-Id", "default")
+        .build();
   }
 
   @Test

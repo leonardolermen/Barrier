@@ -2,6 +2,7 @@ package com.barrier.riskengine.web;
 
 import com.barrier.riskengine.assessment.domain.AssessmentNotFoundException;
 import com.barrier.riskengine.assessment.domain.InvalidDocumentException;
+import com.barrier.riskengine.tenant.domain.UnknownTenantException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -20,6 +21,11 @@ class ProblemExceptionHandler {
   @ExceptionHandler({InvalidDocumentException.class, IllegalArgumentException.class})
   ProblemDetail handleBadRequest(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(UnknownTenantException.class)
+  ProblemDetail handleUnknownTenant(UnknownTenantException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)

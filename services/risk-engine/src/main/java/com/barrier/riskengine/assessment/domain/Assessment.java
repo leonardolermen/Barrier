@@ -12,6 +12,7 @@ import java.util.Objects;
 public class Assessment {
 
   private final AssessmentId id;
+  private final String tenantId;
   private final DocumentType documentType;
   private final String documentDigits;
   private final String name;
@@ -24,11 +25,13 @@ public class Assessment {
 
   private Assessment(
       AssessmentId id,
+      String tenantId,
       DocumentType documentType,
       String documentDigits,
       String name,
       Instant createdAt) {
     this.id = id;
+    this.tenantId = tenantId;
     this.documentType = documentType;
     this.documentDigits = documentDigits;
     this.name = name;
@@ -41,7 +44,9 @@ public class Assessment {
    *
    * @throws InvalidDocumentException se o CPF/CNPJ for inválido
    */
-  public static Assessment submit(DocumentType documentType, String rawDocument, String name) {
+  public static Assessment submit(
+      String tenantId, DocumentType documentType, String rawDocument, String name) {
+    Objects.requireNonNull(tenantId, "tenantId");
     Objects.requireNonNull(documentType, "documentType");
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("name obrigatório");
@@ -51,12 +56,14 @@ public class Assessment {
           case CPF -> new Cpf(rawDocument).digits();
           case CNPJ -> new Cnpj(rawDocument).digits();
         };
-    return new Assessment(AssessmentId.newId(), documentType, digits, name, Instant.now());
+    return new Assessment(
+        AssessmentId.newId(), tenantId, documentType, digits, name, Instant.now());
   }
 
   /** Reconstrói o agregado a partir da persistência. */
   public static Assessment rehydrate(
       AssessmentId id,
+      String tenantId,
       DocumentType documentType,
       String documentDigits,
       String name,
@@ -66,7 +73,7 @@ public class Assessment {
       List<String> factors,
       Instant createdAt,
       Instant completedAt) {
-    Assessment a = new Assessment(id, documentType, documentDigits, name, createdAt);
+    Assessment a = new Assessment(id, tenantId, documentType, documentDigits, name, createdAt);
     a.status = status;
     a.riskLevel = riskLevel;
     a.decision = decision;
@@ -105,6 +112,10 @@ public class Assessment {
 
   public AssessmentId id() {
     return id;
+  }
+
+  public String tenantId() {
+    return tenantId;
   }
 
   public DocumentType documentType() {

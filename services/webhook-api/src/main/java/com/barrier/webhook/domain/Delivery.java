@@ -12,6 +12,7 @@ public class Delivery {
   private final UUID id;
   private final UUID eventId;
   private final String assessmentId;
+  private final String tenantId;
   private final String targetUrl;
   private final String payload;
   private DeliveryStatus status;
@@ -25,12 +26,14 @@ public class Delivery {
       UUID id,
       UUID eventId,
       String assessmentId,
+      String tenantId,
       String targetUrl,
       String payload,
       Instant createdAt) {
     this.id = id;
     this.eventId = eventId;
     this.assessmentId = assessmentId;
+    this.tenantId = tenantId;
     this.targetUrl = targetUrl;
     this.payload = payload;
     this.status = DeliveryStatus.PENDING;
@@ -41,9 +44,9 @@ public class Delivery {
 
   /** Cria uma entrega pendente para o evento. */
   public static Delivery create(
-      UUID eventId, String assessmentId, String targetUrl, String payload) {
+      UUID eventId, String assessmentId, String tenantId, String targetUrl, String payload) {
     return new Delivery(
-        UUID.randomUUID(), eventId, assessmentId, targetUrl, payload, Instant.now());
+        UUID.randomUUID(), eventId, assessmentId, tenantId, targetUrl, payload, Instant.now());
   }
 
   /** Reconstrói a partir da persistência. */
@@ -51,6 +54,7 @@ public class Delivery {
       UUID id,
       UUID eventId,
       String assessmentId,
+      String tenantId,
       String targetUrl,
       String payload,
       DeliveryStatus status,
@@ -59,7 +63,7 @@ public class Delivery {
       Instant nextAttemptAt,
       Instant createdAt,
       Instant deliveredAt) {
-    Delivery d = new Delivery(id, eventId, assessmentId, targetUrl, payload, createdAt);
+    Delivery d = new Delivery(id, eventId, assessmentId, tenantId, targetUrl, payload, createdAt);
     d.status = status;
     d.attempts = attempts;
     d.lastError = lastError;
@@ -100,6 +104,10 @@ public class Delivery {
 
   public String assessmentId() {
     return assessmentId;
+  }
+
+  public String tenantId() {
+    return tenantId;
   }
 
   public String targetUrl() {

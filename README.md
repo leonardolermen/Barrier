@@ -56,6 +56,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 ```
 
 - Risk Engine: <http://localhost:8080/actuator/health> · `POST /v1/assessments` (202) · `GET /v1/assessments/{id}`
+  - toda chamada exige o header **`X-Client-Id`** (tenant); em dev use `X-Client-Id: default`
 - Webhook API: <http://localhost:8082/actuator/health> (consome `assessment.completed` → callback assinado)
 - Kafka UI: <http://localhost:8081>
 

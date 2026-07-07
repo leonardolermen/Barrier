@@ -24,12 +24,17 @@ public class AssessmentService {
   @Transactional
   public Assessment submit(SubmitAssessmentCommand command) {
     Assessment assessment =
-        Assessment.submit(command.documentType(), command.document(), command.name());
+        Assessment.submit(
+            command.tenantId(), command.documentType(), command.document(), command.name());
     return repository.save(assessment);
   }
 
+  /** Consulta escopada por tenant: uma avaliação de outro cliente responde como não encontrada. */
   @Transactional(readOnly = true)
-  public Assessment get(AssessmentId id) {
-    return repository.findById(id).orElseThrow(() -> new AssessmentNotFoundException(id));
+  public Assessment get(AssessmentId id, String tenantId) {
+    return repository
+        .findById(id)
+        .filter(a -> a.tenantId().equals(tenantId))
+        .orElseThrow(() -> new AssessmentNotFoundException(id));
   }
 }

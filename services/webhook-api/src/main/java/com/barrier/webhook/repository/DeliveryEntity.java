@@ -25,6 +25,9 @@ class DeliveryEntity {
   @Column(name = "assessment_id", nullable = false, length = 64)
   private String assessmentId;
 
+  @Column(name = "tenant_id", length = 40)
+  private String tenantId;
+
   @Column(name = "target_url", nullable = false, length = 500)
   private String targetUrl;
 
@@ -76,6 +79,14 @@ class DeliveryEntity {
 
   void setAssessmentId(String assessmentId) {
     this.assessmentId = assessmentId;
+  }
+
+  String getTenantId() {
+    return tenantId;
+  }
+
+  void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
   }
 
   String getTargetUrl() {

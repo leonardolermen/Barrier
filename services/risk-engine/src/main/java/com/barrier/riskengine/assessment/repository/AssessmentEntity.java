@@ -21,6 +21,9 @@ class AssessmentEntity {
   @Column(name = "id", nullable = false)
   private UUID id;
 
+  @Column(name = "tenant_id", nullable = false, length = 40)
+  private String tenantId;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "document_type", nullable = false, length = 10)
   private DocumentType documentType;
@@ -61,6 +64,14 @@ class AssessmentEntity {
 
   void setId(UUID id) {
     this.id = id;
+  }
+
+  String getTenantId() {
+    return tenantId;
+  }
+
+  void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
   }
 
   DocumentType getDocumentType() {

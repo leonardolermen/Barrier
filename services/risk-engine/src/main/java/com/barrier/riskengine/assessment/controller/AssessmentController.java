@@ -4,6 +4,8 @@ import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentId;
 import com.barrier.riskengine.assessment.service.AssessmentService;
 import com.barrier.riskengine.assessment.service.SubmitAssessmentCommand;
+import com.barrier.riskengine.tenant.domain.Tenant;
+import com.barrier.riskengine.tenant.service.TenantService;
 import jakarta.validation.Valid;
 import java.net.URI;
 import org.springframework.http.ResponseEntity;
@@ -11,34 +13,47 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Endpoints públicos da Risk Engine. */
+/** Endpoints públicos da Risk Engine. Toda operação é escopada por tenant (header X-Client-Id). */
 @RestController
 @RequestMapping("/v1/assessments")
 public class AssessmentController {
 
-  private final AssessmentService service;
+  private static final String CLIENT_HEADER = "X-Client-Id";
 
-  public AssessmentController(AssessmentService service) {
+  private final AssessmentService service;
+  private final TenantService tenantService;
+
+  public AssessmentController(AssessmentService service, TenantService tenantService) {
     this.service = service;
+    this.tenantService = tenantService;
   }
 
   /** Submete uma avaliação. Responde 202 (aceita para processamento assíncrono). */
   @PostMapping
-  public ResponseEntity<AssessmentResponse> submit(@Valid @RequestBody SubmitAssessmentRequest req) {
+  public ResponseEntity<AssessmentResponse> submit(
+      @RequestHeader(name = CLIENT_HEADER, required = false) String clientId,
+      @Valid @RequestBody SubmitAssessmentRequest req) {
+    Tenant tenant = tenantService.resolve(clientId);
     Assessment created =
-        service.submit(new SubmitAssessmentCommand(req.documentType(), req.document(), req.name()));
+        service.submit(
+            new SubmitAssessmentCommand(
+                tenant.id(), req.documentType(), req.document(), req.name()));
     return ResponseEntity.accepted()
         .location(URI.create("/v1/assessments/" + created.id().asString()))
         .body(AssessmentDtoMapper.toResponse(created));
   }
 
-  /** Consulta o status/resultado de uma avaliação. */
+  /** Consulta o status/resultado de uma avaliação (apenas do próprio tenant). */
   @GetMapping("/{id}")
-  public ResponseEntity<AssessmentResponse> get(@PathVariable String id) {
-    Assessment assessment = service.get(AssessmentId.of(id));
+  public ResponseEntity<AssessmentResponse> get(
+      @RequestHeader(name = CLIENT_HEADER, required = false) String clientId,
+      @PathVariable String id) {
+    Tenant tenant = tenantService.resolve(clientId);
+    Assessment assessment = service.get(AssessmentId.of(id), tenant.id());
     return ResponseEntity.ok(AssessmentDtoMapper.toResponse(assessment));
   }
 }

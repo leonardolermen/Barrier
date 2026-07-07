@@ -75,9 +75,13 @@ class WebhookDeliveryIntegrationTest {
   @Test
   void entregaAssinaERegistra() {
     EventEnvelope envelope =
-        EventEnvelope.of("barrier.assessment.completed", "abc-123", 1, "{\"status\":\"APROVADO\"}");
+        EventEnvelope.of(
+            "barrier.assessment.completed",
+            "abc-123",
+            1,
+            "{\"status\":\"APROVADO\",\"tenantId\":\"default\"}");
 
-    service.onEvent(envelope);
+    service.onEvent(envelope, "default");
 
     assertThat(receivedBody).contains("APROVADO");
     assertThat(receivedSignature).startsWith("sha256=");

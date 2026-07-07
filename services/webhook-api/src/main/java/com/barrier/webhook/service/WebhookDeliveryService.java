@@ -43,8 +43,8 @@ public class WebhookDeliveryService {
     this.properties = properties;
   }
 
-  /** Recebe um evento de avaliação concluída e tenta entregá-lo. */
-  public void onEvent(EventEnvelope envelope) {
+  /** Recebe um evento de avaliação concluída e tenta entregá-lo, no escopo de um tenant. */
+  public void onEvent(EventEnvelope envelope, String tenantId) {
     if (repository.existsByEventId(envelope.eventId())) {
       log.debug("Evento {} já registrado; ignorando (idempotência)", envelope.eventId());
       return;
@@ -61,6 +61,7 @@ public class WebhookDeliveryService {
               Delivery.create(
                   envelope.eventId(),
                   envelope.assessmentId(),
+                  tenantId,
                   properties.targetUrl(),
                   envelope.payload()));
     } catch (DataIntegrityViolationException e) {

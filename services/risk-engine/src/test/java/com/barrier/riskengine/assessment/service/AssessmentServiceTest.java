@@ -29,10 +29,12 @@ class AssessmentServiceTest {
         .thenAnswer(inv -> inv.getArgument(0));
 
     Assessment result =
-        service.submit(new SubmitAssessmentCommand(DocumentType.CPF, "111.444.777-35", "Fulano"));
+        service.submit(
+            new SubmitAssessmentCommand("default", DocumentType.CPF, "111.444.777-35", "Fulano"));
 
     assertThat(result.status()).isEqualTo(AssessmentStatus.EM_ANALISE);
     assertThat(result.documentDigits()).isEqualTo("11144477735");
+    assertThat(result.tenantId()).isEqualTo("default");
   }
 
   @Test
@@ -42,7 +44,8 @@ class AssessmentServiceTest {
     assertThatThrownBy(
             () ->
                 service.submit(
-                    new SubmitAssessmentCommand(DocumentType.CPF, "00000000000", "Fulano")))
+                    new SubmitAssessmentCommand(
+                        "default", DocumentType.CPF, "00000000000", "Fulano")))
         .isInstanceOf(InvalidDocumentException.class);
   }
 
@@ -52,6 +55,17 @@ class AssessmentServiceTest {
     var id = AssessmentId.newId();
     when(repository.findById(id)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.get(id)).isInstanceOf(AssessmentNotFoundException.class);
+    assertThatThrownBy(() -> service.get(id, "default"))
+        .isInstanceOf(AssessmentNotFoundException.class);
+  }
+
+  @Test
+  void getDeOutroTenantNaoEncontra() {
+    var service = new AssessmentService(repository);
+    var assessment = Assessment.submit("acme", DocumentType.CPF, "111.444.777-35", "Fulano");
+    when(repository.findById(assessment.id())).thenReturn(Optional.of(assessment));
+
+    assertThatThrownBy(() -> service.get(assessment.id(), "outro-tenant"))
+        .isInstanceOf(AssessmentNotFoundException.class);
   }
 }
