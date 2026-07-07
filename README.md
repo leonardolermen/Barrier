@@ -40,12 +40,14 @@ Pré-requisitos: JDK 25 e Docker.
 ```bash
 docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 ./mvnw verify                 # build + testes (unidade + arquitetura)
-./mvnw -pl services/risk-engine spring-boot:run   # sobe a Risk Engine
+./mvnw -pl services/risk-engine spring-boot:run    # sobe a Risk Engine (8080)
+# webhook opcional: aponte o endpoint de destino e suba a Webhook API (8082)
+WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api spring-boot:run
 ```
 
-- Health: <http://localhost:8080/actuator/health>
+- Risk Engine: <http://localhost:8080/actuator/health> · `POST /v1/assessments` (202) · `GET /v1/assessments/{id}`
+- Webhook API: <http://localhost:8082/actuator/health> (consome `assessment.completed` → callback assinado)
 - Kafka UI: <http://localhost:8081>
-- API: `POST /v1/assessments` (202) · `GET /v1/assessments/{id}` (Swagger vem na Fase 5)
 
 ## Documentação
 
@@ -63,5 +65,10 @@ docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 toma a recomendação mais severa (aprovar/revisar/bloquear), gravando os fatores e a **versão
 do motor** (`risk_scores`). Regras iniciais: **sanção = bloqueio**, **PEP = revisão (EDD)**,
 **identidade não confirmada**, e o esqueleto de **estrutura societária (PJ)**. A recomendação
-do motor vira o status da avaliação; os fatores explicáveis voltam no `GET`. Próximo: Fase 5
-(hardening) e a Webhook API. Ver o [plano de implementação](docs/implementation/risk-engine-plan.md).
+do motor vira o status da avaliação; os fatores explicáveis voltam no `GET`.
+
+Além da Risk Engine, existe a **Webhook API** (`services/webhook-api`): consome
+`barrier.assessment.completed` do Kafka e entrega o resultado no endpoint do cliente, com
+**assinatura HMAC**, **retry com backoff**, idempotência por evento e rastreio em
+`deliveries` (schema Postgres próprio `webhook`). Próximo: Fase 5 (hardening: OpenAPI,
+idempotência no intake, mascaramento). Ver o [plano de implementação](docs/implementation/risk-engine-plan.md).

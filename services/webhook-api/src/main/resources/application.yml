@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: webhook-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/barrier}
+    username: ${DB_USER:barrier}
+    password: ${DB_PASSWORD:barrier}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: webhook
+  flyway:
+    enabled: true
+    schemas: webhook
+    default-schema: webhook
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    consumer:
+      group-id: webhook-api
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+server:
+  port: ${SERVER_PORT:8082}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+barrier:
+  webhook:
+    target-url: ${WEBHOOK_TARGET_URL:}
+    secret: ${WEBHOOK_SECRET:dev-secret}
+    max-attempts: 5
+    base-backoff: 30s
+    retry-delay-ms: 5000

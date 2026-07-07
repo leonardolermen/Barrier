@@ -43,9 +43,16 @@ Convenções novas: domain do módulo `risk` dividido em subpastas (`domain/enum
 pendente). Regras de risco: adicionar fonte = adicionar uma `RiskRule`, sem tocar no motor.
 `ENGINE_VERSION` deve subir a cada mudança de regra/peso (auditoria).
 
+Webhook API (`services/webhook-api`, pacote `com.barrier.webhook`) concluída: consome
+`barrier.assessment.completed`, entrega no endpoint do cliente com HMAC (`HmacSigner`),
+retry/backoff (`DeliveryRetryScheduler`), idempotência por `eventId` e rastreio em
+`deliveries`. Usa schema Postgres próprio `webhook` (Flyway `schemas=webhook`); escaneia só
+`com.barrier.webhook` (não puxa os beans de outbox do commons). Endpoint de destino é config
+única (`barrier.webhook.target-url`) — registro por cliente/tenant é evolução futura.
+
 Fase B (mapeada, não implementada): monitoramento contínuo, reavaliação periódica, recálculo
-por transação, e a regra de estrutura societária (precisa de provedor KYB). Próximo: Fase 5
-(hardening) + Webhook API.
+por transação, regra de estrutura societária (KYB), e registro multi-tenant de endpoints.
+Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento).
 
 Build validado: `./mvnw test` verde (18 testes, inclui integração com Testcontainers).
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

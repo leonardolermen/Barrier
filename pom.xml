@@ -21,6 +21,7 @@
     <modules>
         <module>commons</module>
         <module>services/risk-engine</module>
+        <module>services/webhook-api</module>
     </modules>
 
     <properties>
