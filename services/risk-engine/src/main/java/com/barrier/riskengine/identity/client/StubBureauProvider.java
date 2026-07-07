@@ -3,20 +3,21 @@ package com.barrier.riskengine.identity.client;
 import org.springframework.stereotype.Component;
 
 /**
- * Provider stub para desenvolvimento: confirma qualquer documento (já validado sintaticamente
- * no domínio). Será substituído pelas integrações reais (ver {@link SerproBureauProvider}).
+ * Provider stub de <b>CPF</b>: confirma qualquer CPF (já validado sintaticamente no domínio).
+ * Não há bureau público/legal de CPF (sigilo fiscal + LGPD); a integração real é via Serpro
+ * pago (ver {@link SerproBureauProvider}). CNPJ é atendido pelo {@link BrasilApiBureauProvider}.
  */
 @Component
 public class StubBureauProvider implements BureauProvider {
 
   @Override
   public boolean supports(String documentType) {
-    return "CPF".equals(documentType) || "CNPJ".equals(documentType);
+    return "CPF".equals(documentType);
   }
 
   @Override
   public BureauResult check(BureauQuery query) {
-    return BureauResult.match("stub: documento confirmado");
+    return BureauResult.match("stub: CPF confirmado");
   }
 
   @Override

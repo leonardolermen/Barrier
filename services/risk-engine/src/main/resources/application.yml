@@ -38,3 +38,6 @@ barrier:
     processor-delay-ms: 2000
   outbox:
     relay-delay-ms: 2000
+  identity:
+    brasilapi:
+      base-url: https://brasilapi.com.br
