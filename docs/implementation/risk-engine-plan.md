@@ -3,7 +3,24 @@
 Plano faseado para construir a **Risk Engine API** (ver
 [ADR-0009](../adr/0009-risk-engine-modular-monolith-first.md)) seguindo os
 [padrões de código](coding-standards.md). Cada fase é entregável, testável e mergeável
-sozinha. **Ler e aprovar antes de implementar.**
+sozinha.
+
+## Progresso
+
+| Fase | Escopo | Estado |
+|------|--------|--------|
+| 0 | Scaffolding (monorepo, Spring Boot 4, Flyway, ArchUnit) | ✅ |
+| 1 | Intake `202` + `GET` + transactional outbox | ✅ |
+| 2 | Módulo Identity (BureauProvider, `identity_checks`) | ✅ |
+| 3 | Módulo Screening (WatchlistProvider + regras, `screening_results`) | ✅ |
+| 4 | Motor de risco (RiskRule → RiskResult, score 0–1000, `risk_scores`) | ✅ |
+| — | **Webhook API** (deployable separado: HMAC, retry, idempotência) | ✅ |
+| 5 | Hardening (OpenAPI, idempotency-key no intake, mascaramento) | ⏳ |
+
+Detalhe do que ficou diferente do plano original: o motor de risco (Fase 4) adotou o contrato
+padronizado `RiskResult` (score/severidade/motivo/evidências/recomendação), escala **0–1000**
+com nível **CRITICO** adicional e **versionamento do motor** (`engine_version`). Estado atual
+completo em [CLAUDE.md](../../CLAUDE.md).
 
 ## Estrutura do repositório (monorepo Maven — ADR-0008)
 

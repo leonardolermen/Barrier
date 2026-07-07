@@ -21,6 +21,16 @@ por **webhook** quando a análise conclui.
 
 A arquitetura da fase 1 é subconjunto da fase 2 — nada é descartado na evolução.
 
+## Arquitetura
+
+![Arquitetura implementada](docs/diagrams/arquitetura-atual.svg)
+
+| Deployable | Porta | Papel |
+|------------|-------|-------|
+| **Risk Engine** (`services/risk-engine`) | 8080 | Intake, verificação de identidade, screening e motor de risco (módulos internos). Publica `barrier.assessment.completed`. |
+| **Webhook API** (`services/webhook-api`) | 8082 | Consome o evento e entrega o resultado ao cliente com HMAC, retry e idempotência. |
+| `commons` | — | Contrato de evento (`EventEnvelope`) e outbox reutilizável. |
+
 ## Stack
 
 | Camada        | Tecnologia                          |
@@ -55,20 +65,24 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 - [Bounded contexts](docs/architecture/domain-contexts.md)
 - [Fluxo de eventos e saga](docs/architecture/event-flow.md)
 - [Requisitos regulatórios](docs/architecture/compliance.md)
+- [Padrões de código e design patterns](docs/implementation/coding-standards.md)
+- [Plano de implementação e progresso](docs/implementation/risk-engine-plan.md)
+- [Diagramas](docs/diagrams/README.md)
 - [Registros de decisão (ADRs)](docs/adr/README.md)
 
 ## Status
 
-🏗️ **Fase 4 concluída** — motor de **Risk scoring**. Cada `RiskRule` (Strategy) devolve um
-`RiskResult` padronizado (score, severidade, motivo, evidências, recomendação); o
-`RiskScoringService` soma numa escala **0–1000** com bandas **BAIXO/MEDIO/ALTO/CRITICO** e
-toma a recomendação mais severa (aprovar/revisar/bloquear), gravando os fatores e a **versão
-do motor** (`risk_scores`). Regras iniciais: **sanção = bloqueio**, **PEP = revisão (EDD)**,
-**identidade não confirmada**, e o esqueleto de **estrutura societária (PJ)**. A recomendação
-do motor vira o status da avaliação; os fatores explicáveis voltam no `GET`.
+🏗️ **Fluxo ponta a ponta funcionando** (build verde, 45 testes). Fases 0–4 da Risk Engine
+concluídas + Webhook API:
 
-Além da Risk Engine, existe a **Webhook API** (`services/webhook-api`): consome
-`barrier.assessment.completed` do Kafka e entrega o resultado no endpoint do cliente, com
-**assinatura HMAC**, **retry com backoff**, idempotência por evento e rastreio em
-`deliveries` (schema Postgres próprio `webhook`). Próximo: Fase 5 (hardening: OpenAPI,
-idempotência no intake, mascaramento). Ver o [plano de implementação](docs/implementation/risk-engine-plan.md).
+- **Fase 0–1** — scaffolding, intake `202`/`GET`, transactional outbox.
+- **Fase 2** — módulo Identity (`BureauProvider` atrás de interface, `identity_checks`).
+- **Fase 3** — módulo Screening (`WatchlistProvider` + regras Strategy, `screening_results`).
+- **Fase 4** — motor de risco: cada `RiskRule` devolve um `RiskResult` padronizado (score,
+  severidade, motivo, evidências, recomendação); score **0–1000** em bandas
+  **BAIXO/MEDIO/ALTO/CRITICO**, com override (sanção→bloqueio, PEP→revisão), fatores
+  explicáveis e **versão do motor** gravada (`risk_scores`).
+- **Webhook API** — entrega assinada (HMAC), retry com backoff, idempotência por evento.
+
+**Próximo:** Fase 5 (hardening: OpenAPI, idempotency-key no intake, mascaramento de CPF/CNPJ).
+Progresso detalhado no [plano de implementação](docs/implementation/risk-engine-plan.md).

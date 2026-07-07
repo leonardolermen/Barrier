@@ -13,27 +13,29 @@
 5. **Fase 1 ⊂ Fase 2.** O motor de risco de hoje é subconjunto da plataforma completa
    de amanhã; a evolução adiciona módulos, não reescreve.
 
-## Corte atual — Risk Engine API
+## Estado implementado
 
-O primeiro corte **não** são os 6 microserviços de uma vez. Começamos por uma única
-**Risk Engine API** (um deployable) que encapsula Identity, Screening e Risk scoring como
-módulos internos em camadas clássicas, conversando por chamada de método em processo — ver
-[ADR-0009](../adr/0009-risk-engine-modular-monolith-first.md).
+Dois deployables no monorepo — ver [ADR-0009](../adr/0009-risk-engine-modular-monolith-first.md):
 
-```
-sistema do cliente ──POST /assessments──▶ Risk Engine API ──202 {id, em_analise}──▶ cliente
-                                               │  (GET /assessments/{id} p/ status)
-                                               │  identity → screening → risk → decisão
-                                               ▼ (outbox)
-                                        ┌──────────────┐
-                                        │    Kafka     │  assessment.completed
-                                        └──────────────┘
-                                               │
-                                               ▼  (fase seguinte)
-                                        Webhook API  ── callback ──▶ cliente
-```
+1. **Risk Engine API** (`services/risk-engine`, `:8080`): um único deployable que encapsula
+   **assessment, identity, screening e risk** como módulos internos em camadas clássicas,
+   conversando por chamada de método em processo. Publica `barrier.assessment.completed` no
+   Kafka via outbox.
+2. **Webhook API** (`services/webhook-api`, `:8082`): consome `assessment.completed` e entrega
+   o resultado no endpoint do cliente, com HMAC, retry/backoff e idempotência.
 
-A **Webhook API** entra depois como deployable separado, consumindo `assessment.completed`.
+Cada serviço é dono do seu schema no PostgreSQL (`public` para a Risk Engine, `webhook` para
+a Webhook API).
+
+![Arquitetura implementada](../diagrams/arquitetura-atual.svg)
+
+### Fluxo de uma avaliação
+
+`POST /v1/assessments` → **202** `{id, EM_ANALISE}` → processamento assíncrono
+(**identity → screening → risk**) → o motor consolida um **score 0–1000**, nível
+(BAIXO/MEDIO/ALTO/CRITICO) e recomendação, que vira o status (APROVADO/EM_REVISAO/REPROVADO)
+→ evento na outbox → **Webhook API** faz o callback assinado. O cliente também pode consultar
+`GET /v1/assessments/{id}`. Detalhes em [event-flow.md](event-flow.md).
 
 ## Topologia-alvo (visão de longo prazo — microserviços)
 
@@ -67,33 +69,37 @@ Ver diagrama detalhado em [event-flow.md](event-flow.md) e o SVG em
 Papéis na visão de longo prazo. No corte atual, os três primeiros são **módulos internos**
 da Risk Engine API; os demais entram nas fases seguintes.
 
-| Serviço / módulo     | Papel                                                            | Onde vive agora            |
+| Serviço / módulo     | Papel                                                            | Estado                     |
 |----------------------|------------------------------------------------------------------|----------------------------|
-| **Assessment**       | Borda. Intake, resposta 202, consulta de status, agregação final | módulo da Risk Engine API  |
-| **Identity**         | Validação CPF/CNPJ, cruzamento com bureaus                       | módulo da Risk Engine API  |
-| **Screening**        | Match PEP, sanções (ONU/OFAC/CGU), mídia adversa                 | módulo da Risk Engine API  |
-| **Risk scoring**     | Classificação de risco (baixo/médio/alto)                        | módulo da Risk Engine API  |
-| **Webhook API**      | Callback assíncrono ao cliente com retry e assinatura           | próxima fase (deployable)  |
-| **Case management**  | Análise manual / EDD, fila de analistas                          | fase 2                     |
-| **Audit & compliance** | Trilha imutável, retenção, evidência regulatória              | fase 2                     |
+| **Assessment**       | Borda. Intake, resposta 202, consulta de status, agregação final | ✅ módulo da Risk Engine    |
+| **Identity**         | Validação CPF/CNPJ, cruzamento com bureaus (stub)               | ✅ módulo da Risk Engine    |
+| **Screening**        | Match PEP, sanções (ONU/OFAC/CGU) (stub)                        | ✅ módulo da Risk Engine    |
+| **Risk scoring**     | Motor de regras: score 0–1000, nível e recomendação             | ✅ módulo da Risk Engine    |
+| **Webhook API**      | Callback assíncrono ao cliente com HMAC, retry e idempotência   | ✅ deployable próprio       |
+| **Case management**  | Análise manual / EDD, fila de analistas                          | ⏳ fase 2                   |
+| **Audit & compliance** | Trilha imutável, retenção, evidência regulatória              | ⏳ fase 2                   |
 
 ## Estilo interno de cada serviço (camadas clássicas)
 
 ```
-com.kyc.<contexto>
+com.barrier.<serviço>.<contexto>
 ├── controller     REST (@RestController) + listeners Kafka (@KafkaListener)
-├── service        regra de negócio
-├── repository     JPA (@Repository)
-├── domain/model   entidades e enums
-├── dto            request/response + contratos de evento
-├── client         integrações externas atrás de interface (ex.: WatchlistProvider)
+├── service        regra de negócio (+ Strategy: RiskRule, ScreeningRule)
+├── repository     JPA (@Repository) atrás de interface de domínio
+├── domain         entidades/records e enums (no módulo risk: domain/enums, domain/model)
+├── client         integrações externas atrás de interface (BureauProvider, WatchlistProvider)
 └── config         Kafka, security, beans
 ```
+
+> Nota de arquitetura: um serviço orquestrador pode chamar outro serviço de domínio
+> (`AssessmentProcessor → IdentityService/ScreeningService/RiskScoringService`) — orquestração
+> legítima num monólito modular. O ArchUnit valida as camadas e garante ausência de ciclos
+> entre módulos.
 
 Disciplina única obrigatória: o `service` acessa integrações externas **por interface**
 (pacote `client`), nunca pelo SDK direto. Custo baixo, ganho alto para teste e auditoria.
 
-O que preenche cada camada em todos os serviços do MVP:
+Referência do padrão de camadas na visão-alvo de longo prazo (microserviços):
 
 ![Arquitetura em camadas por serviço](../diagrams/camadas-por-servico.svg)
 
@@ -101,8 +107,8 @@ O que preenche cada camada em todos os serviços do MVP:
 
 - **Outbox pattern** — evento gravado na mesma transação do banco; relay publica no Kafka.
   Garante "gravou = publicou", sem *dual-write*.
-- **Idempotência** — consumidores tratam entrega repetida (Kafka é *at-least-once*).
-  Chave: `assessmentId + eventType`.
+- **Idempotência** — consumidores tratam entrega repetida (Kafka é *at-least-once*). A
+  Webhook API desduplica por `eventId` (constraint UNIQUE em `deliveries`).
 - **Correlação** — `assessmentId` viaja em todos os eventos como *correlation id*,
   alimentando auditoria e *tracing*.
 

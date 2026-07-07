@@ -1,64 +1,72 @@
 # Fluxo de eventos e saga
 
-O fluxo de avaliação é uma **saga por coreografia**: cada serviço reage a eventos e emite
-os seus, sem orquestrador central.
+## Como está implementado hoje
 
-## Passo a passo de uma avaliação
+O núcleo de decisão é **em processo** dentro da Risk Engine (os módulos identity → screening
+→ risk conversam por chamada de método, não por Kafka). O **único evento publicado** é
+`barrier.assessment.completed`, consumido pela **Webhook API**.
 
-1. Cliente faz `POST /assessments` com os dados do cliente final.
-2. **Assessment API** persiste o pedido, responde **`202 { id, status: em_analise }`** na
-   hora e grava `assessment.requested` na tabela `outbox` (mesma transação).
-3. O relay de outbox publica `assessment.requested` no Kafka.
-4. **Identity** e **Screening** consomem em paralelo e emitem `identity.verified` /
-   `identity.failed` e `screening.completed` (com eventuais hits).
-5. **Risk scoring** aguarda identidade + screening, calcula o nível e emite `risk.scored`
-   (`baixo` | `medio` | `alto`).
-6. Se `alto` **ou** houve hit de sanção/PEP → **Case management** entra (fila do analista,
-   EDD) e emite `case.decided`. Se `baixo` e sem hit, pula esta etapa.
-7. **Assessment API** agrega o resultado final e emite `assessment.completed`.
-8. **Webhook dispatcher** faz o callback no endpoint do cliente (retry + assinatura HMAC).
-   O cliente também pode consultar `GET /assessments/{id}` a qualquer momento.
-9. **Audit** consome todos os eventos em paralelo e grava a trilha imutável.
+### Passo a passo de uma avaliação
 
-## Sequência
+1. Cliente faz `POST /v1/assessments` com os dados do cliente final.
+2. **assessment** (módulo) persiste em `EM_ANALISE` e responde **`202 { id, status:
+   EM_ANALISE }`** na hora.
+3. Um processador assíncrono (`@Scheduled`) pega os pendentes e, para cada um:
+   1. **identity** — valida CPF/CNPJ no bureau (stub) → `IdentityCheck`.
+   2. **screening** — busca PEP/sanções nas listas (stub) e aplica as regras → `ScreeningResult`.
+   3. **risk** — o motor roda as `RiskRule`, soma um **score 0–1000**, deriva o nível
+      (BAIXO/MEDIO/ALTO/CRITICO) e a recomendação (APPROVE/REVIEW/REJECT) → `RiskDecision`.
+   4. A recomendação vira o status (APROVADO/EM_REVISAO/REPROVADO); os fatores explicáveis
+      ficam gravados na avaliação.
+4. Na **mesma transação** da conclusão, grava `barrier.assessment.completed` na `outbox`.
+5. O **relay de outbox** (`@Scheduled`) publica o evento no Kafka.
+6. A **Webhook API** consome o evento, monta o corpo, assina com **HMAC** e faz `POST` no
+   endpoint do cliente; registra a entrega em `deliveries` (idempotência por `eventId`,
+   retry com backoff). O cliente também pode consultar `GET /v1/assessments/{id}`.
+
+### Sequência
 
 ```
-Cliente        Assessment API      Kafka        Identity/Screening   Risk   Case   Webhook
-  │  POST            │                │                 │             │      │        │
-  ├─────────────────▶│                │                 │             │      │        │
-  │  202 em_analise  │                │                 │             │      │        │
-  │◀─────────────────┤                │                 │             │      │        │
-  │                  ├─assessment.requested─▶│           │             │      │        │
-  │                  │                │──────────────────▶│            │      │        │
-  │                  │                │◀─identity.verified┤            │      │        │
-  │                  │                │◀─screening.completed           │      │        │
-  │                  │                │───────────────────────────────▶│     │        │
-  │                  │                │◀────────────────────risk.scored┤     │        │
-  │                  │                │  (se alto/hit)──────────────────────▶│        │
-  │                  │                │◀──────────────────────────case.decided┤        │
-  │                  │◀─agrega─────────                                       │        │
-  │                  ├─assessment.completed─▶│──────────────────────────────────────▶│
-  │◀────────────────────────────── webhook callback ──────────────────────────────────┤
+Cliente        Risk Engine (assessment→identity→screening→risk)   Kafka        Webhook API
+  │  POST            │                                              │              │
+  ├─────────────────▶│                                              │              │
+  │  202 EM_ANALISE  │                                              │              │
+  │◀─────────────────┤                                              │              │
+  │                  │ processa (em processo) → decisão             │              │
+  │                  ├─ outbox → assessment.completed ─────────────▶│              │
+  │                  │                                              │─ consome ───▶│
+  │◀──────────────────────────── callback assinado (HMAC) ────────────────────────┤
 ```
 
-## Contratos de evento (nomes canônicos)
+### Contrato de evento
+
+| Evento                        | Emitido por | Consumido por |
+|-------------------------------|-------------|---------------|
+| `barrier.assessment.completed`| Risk Engine | Webhook API   |
+
+Envelope (`EventEnvelope` em `commons`): `eventId` (idempotência), `type`, `assessmentId`
+(correlation id + chave de partição no Kafka), `occurredAt`, `version`, `payload`.
+
+### Garantias
+
+- **Outbox pattern** — atomicidade entre gravação no banco e publicação no Kafka.
+- **Idempotência** — a Webhook API desduplica por `eventId` (UNIQUE em `deliveries`).
+- **At-least-once** — Kafka pode reentregar; nenhum consumidor assume exactly-once.
+- **Ordenação** — partição por `assessmentId` garante ordem por avaliação.
+
+## Visão futura — saga por coreografia
+
+Quando os módulos forem extraídos em serviços próprios (escala), o fluxo em processo vira
+uma **saga por coreografia**, com eventos intermediários entre os contextos:
 
 | Evento                  | Emitido por     | Consumido por                    |
 |-------------------------|-----------------|----------------------------------|
-| `assessment.requested`  | Assessment API  | Identity, Screening, Audit       |
+| `assessment.requested`  | Assessment      | Identity, Screening, Audit       |
 | `identity.verified`     | Identity        | Risk, Audit                      |
-| `identity.failed`       | Identity        | Assessment API, Audit            |
 | `screening.completed`   | Screening       | Risk, Audit                      |
-| `risk.scored`           | Risk scoring    | Case mgmt, Assessment API, Audit |
-| `case.decided`          | Case management | Assessment API, Audit            |
-| `assessment.completed`  | Assessment API  | Webhook dispatcher, Audit        |
+| `risk.scored`           | Risk scoring    | Case mgmt, Assessment, Audit     |
+| `case.decided`          | Case management | Assessment, Audit                |
+| `assessment.completed`  | Assessment      | Webhook API, Audit               |
 
-Todos os eventos carregam: `assessmentId` (correlation id), `eventId` (idempotência),
-`occurredAt`, `version` e `payload`.
-
-## Garantias
-
-- **Outbox pattern** — atomicidade entre gravação no banco e publicação no Kafka.
-- **Idempotência** — chave `assessmentId + eventType`; consumidores descartam duplicados.
-- **At-least-once** — Kafka pode reentregar; nenhum consumidor assume exactly-once.
-- **Ordenação** — partição por `assessmentId` garante ordem por avaliação.
+Os contratos de evento já vivem no módulo `commons` para facilitar essa extração — ver
+[ADR-0009](../adr/0009-risk-engine-modular-monolith-first.md).

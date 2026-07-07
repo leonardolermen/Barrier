@@ -1,0 +1,107 @@
+<svg width="100%" viewBox="0 0 680 545" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <title>Arquitetura implementada do Barrier</title>
+  <desc>Risk Engine API com os módulos assessment, identity, screening e risk; publica assessment.completed no Kafka via outbox; a Webhook API consome e entrega o callback assinado ao endpoint do cliente. Cada serviço tem seu schema no PostgreSQL.</desc>
+  <style>
+    .tp{fill:#1a1a1a;} .tm{fill:#8a8f98;} .ts{fill:#334155;}
+    .blue rect{fill:#dbeafe;stroke:#93c5fd;} .blue text{fill:#1e3a8a;}
+    .teal rect{fill:#ccfbf1;stroke:#5eead4;} .teal text{fill:#0f766e;}
+    .outer{fill:#f8fafc;stroke:#cbd5e1;}
+    .mod rect{fill:#eef2f7;stroke:#cbd5e1;} .mod text{fill:#334155;}
+    .lbl{font-size:10px;fill:#8a8f98;}
+  </style>
+
+  <text x="20" y="24" font-size="16" font-weight="500" class="tp">Arquitetura implementada</text>
+  <text x="20" y="43" font-size="11" class="tm">azul = deployables/borda · verde = infra (Kafka/Postgres) · cinza = módulos internos</text>
+
+  <!-- Client -->
+  <g class="blue">
+    <rect x="20" y="72" width="140" height="56" rx="8"/>
+    <text x="90" y="97" text-anchor="middle" font-size="12" font-weight="500">sistema do cliente</text>
+    <text x="90" y="114" text-anchor="middle" font-size="10">cadastro dele</text>
+  </g>
+
+  <!-- Risk Engine API -->
+  <rect class="outer" x="200" y="60" width="330" height="188" rx="10"/>
+  <text x="212" y="80" font-size="13" font-weight="500" class="tp">Risk Engine API · :8080</text>
+  <text x="212" y="96" font-size="10" class="tm">monólito modular · decisão em processo</text>
+  <g class="mod">
+    <rect x="212" y="106" width="150" height="36" rx="6"/>
+    <text x="222" y="122" font-size="11" font-weight="500">assessment</text>
+    <text x="222" y="135" font-size="9">intake · 202 · agrega</text>
+  </g>
+  <g class="mod">
+    <rect x="370" y="106" width="150" height="36" rx="6"/>
+    <text x="380" y="122" font-size="11" font-weight="500">identity</text>
+    <text x="380" y="135" font-size="9">bureau (stub)</text>
+  </g>
+  <g class="mod">
+    <rect x="212" y="150" width="150" height="36" rx="6"/>
+    <text x="222" y="166" font-size="11" font-weight="500">screening</text>
+    <text x="222" y="179" font-size="9">PEP · sanções (stub)</text>
+  </g>
+  <g class="mod">
+    <rect x="370" y="150" width="150" height="36" rx="6"/>
+    <text x="380" y="166" font-size="11" font-weight="500">risk</text>
+    <text x="380" y="179" font-size="9">score 0–1000 · fatores</text>
+  </g>
+  <text x="212" y="206" font-size="9" class="ts">camadas: controller → service → repository → client</text>
+  <text x="212" y="222" font-size="9" class="ts">outbox · risk_scores com engine_version (auditoria)</text>
+  <text x="212" y="238" font-size="9" class="tm">integrações externas atrás de interface (BureauProvider/WatchlistProvider)</text>
+
+  <!-- Postgres public -->
+  <g class="teal">
+    <rect x="548" y="80" width="112" height="44" rx="8"/>
+    <text x="604" y="100" text-anchor="middle" font-size="11" font-weight="500">PostgreSQL</text>
+    <text x="604" y="115" text-anchor="middle" font-size="9">schema public</text>
+  </g>
+  <line x1="530" y1="102" x2="546" y2="102" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Client <-> Risk Engine -->
+  <line x1="160" y1="90" x2="198" y2="90" stroke="#3b82f6" stroke-width="2" marker-end="url(#a)"/>
+  <text x="179" y="82" text-anchor="middle" class="lbl">POST</text>
+  <line x1="198" y1="112" x2="160" y2="112" stroke="#3b82f6" stroke-width="2" marker-end="url(#a)"/>
+  <text x="179" y="126" text-anchor="middle" class="lbl">202</text>
+
+  <!-- Kafka -->
+  <g class="teal">
+    <rect x="20" y="286" width="640" height="44" rx="8"/>
+    <text x="340" y="313" text-anchor="middle" font-size="12" font-weight="500">Kafka · barrier.assessment.completed  (publicado via outbox)</text>
+  </g>
+  <line x1="360" y1="248" x2="360" y2="284" stroke="#8a8f98" stroke-width="2" marker-end="url(#a)"/>
+  <text x="372" y="270" class="lbl">outbox</text>
+
+  <!-- Webhook API -->
+  <rect class="outer" x="200" y="358" width="330" height="96" rx="10"/>
+  <text x="212" y="378" font-size="13" font-weight="500" class="tp">Webhook API · :8082</text>
+  <text x="212" y="394" font-size="10" class="tm">consome assessment.completed</text>
+  <text x="212" y="414" font-size="10" class="ts">HMAC · retry/backoff · idempotência por eventId</text>
+  <text x="212" y="432" font-size="10" class="ts">rastreio em deliveries</text>
+  <line x1="360" y1="330" x2="360" y2="356" stroke="#8a8f98" stroke-width="2" marker-end="url(#a)"/>
+  <text x="372" y="348" class="lbl">consome</text>
+
+  <!-- Postgres webhook -->
+  <g class="teal">
+    <rect x="548" y="378" width="112" height="44" rx="8"/>
+    <text x="604" y="398" text-anchor="middle" font-size="11" font-weight="500">PostgreSQL</text>
+    <text x="604" y="413" text-anchor="middle" font-size="9">schema webhook</text>
+  </g>
+  <line x1="530" y1="400" x2="546" y2="400" stroke="#8a8f98" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Client endpoint + callback -->
+  <g class="blue">
+    <rect x="20" y="372" width="140" height="56" rx="8"/>
+    <text x="90" y="397" text-anchor="middle" font-size="12" font-weight="500">endpoint do cliente</text>
+    <text x="90" y="414" text-anchor="middle" font-size="10">recebe o callback</text>
+  </g>
+  <line x1="198" y1="400" x2="162" y2="400" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <text x="180" y="392" text-anchor="middle" class="lbl">callback</text>
+
+  <text x="20" y="486" font-size="11" class="tm">Fase 2: Case management · Audit &amp; compliance · monitoramento contínuo · reavaliação periódica · reporting COAF</text>
+  <text x="20" y="506" font-size="11" class="tm">Fase KYB: estrutura societária (quadro até 3º grau) · registro multi-tenant de endpoints de webhook</text>
+
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#8a8f98"/>
+    </marker>
+  </defs>
+</svg>
