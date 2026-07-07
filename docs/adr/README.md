@@ -16,6 +16,7 @@ Formato baseado em [Michael Nygard](https://cognitect.com/blog/2011/11/15/docume
 | [0007](0007-java25-spring-boot.md) | Java 25 + Spring Boot 3           | Aceito    |
 | [0008](0008-monorepo-maven.md) | Monorepo Maven multi-módulo           | Aceito    |
 | [0009](0009-risk-engine-modular-monolith-first.md) | Risk Engine como monólito modular primeiro | Aceito |
+| [0010](0010-watchlists-ingeridas.md) | Watchlists ingeridas (arquivo → tabela), não por request | Aceito |
 
 ## Status possíveis
 

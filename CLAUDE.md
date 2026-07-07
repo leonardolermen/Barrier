@@ -31,7 +31,14 @@ JUnit 5 / Testcontainers / ArchUnit. Pacote raiz `com.barrier.<contexto>`.
 
 ## Estado atual
 
-Fases 1-4 concluídas (build verde, 35 testes). Fase 1: intake + outbox. Fase 2: Identity.
+Bureaus (identity): cadeia com prioridade (`@Order`) + fallback — bureau indisponível cai
+para o próximo; resultado definitivo encerra. CNPJ real via BrasilAPI; CPF no stub.
+Watchlists (screening): **ingeridas** (ADR-0010) — `WatchlistImporter` (ApplicationRunner +
+@Scheduled) carrega `WatchlistSource`s numa tabela `watchlist_entries`; `LocalWatchlistProvider`
+casa por documento. Fonte atual é a semente `resources/watchlists/ceis-seed.csv`; fontes reais
+(CGU/OFAC) são novos `WatchlistSource`. Match por nome (fuzzy) é fase seguinte.
+
+Fases 1-4 concluídas (build verde). Fase 1: intake + outbox. Fase 2: Identity.
 Fase 3: Screening. Fase 4: motor de risco — `RiskRule` (Strategy) devolve `RiskResult`
 padronizado (score/severidade/motivo/evidências/recomendação); `RiskScoringService` soma
 0–1000 em bandas BAIXO/MEDIO/ALTO/CRITICO + override, grava `risk_scores` com a versão do

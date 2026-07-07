@@ -58,19 +58,19 @@ public class RiskScoringService {
 
   private static RiskLevel band(int score) {
     if (score <= 199) {
-      return RiskLevel.BAIXO;
+      return RiskLevel.LOW;
     }
     if (score <= 499) {
-      return RiskLevel.MEDIO;
+      return RiskLevel.MEDIUM;
     }
-    return score <= 799 ? RiskLevel.ALTO : RiskLevel.CRITICO;
+    return score <= 799 ? RiskLevel.HIGH : RiskLevel.CRITICAL;
   }
 
   private static RiskRecommendation fromLevel(RiskLevel level) {
     return switch (level) {
-      case BAIXO, MEDIO -> RiskRecommendation.APPROVE;
-      case ALTO -> RiskRecommendation.REVIEW;
-      case CRITICO -> RiskRecommendation.REJECT;
+      case LOW, MEDIUM -> RiskRecommendation.APPROVE;
+      case HIGH -> RiskRecommendation.REVIEW;
+      case CRITICAL -> RiskRecommendation.REJECT;
     };
   }
 }
