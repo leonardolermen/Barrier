@@ -1,5 +1,6 @@
 package com.barrier.riskengine.identity.client;
 
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
  * pago (ver {@link SerproBureauProvider}). CNPJ é atendido pelo {@link BrasilApiBureauProvider}.
  */
 @Component
+@Order(100) // stub tem baixa prioridade: só é usado quando não há bureau real para o tipo
 public class StubBureauProvider implements BureauProvider {
 
   @Override

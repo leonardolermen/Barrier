@@ -1,6 +1,7 @@
 package com.barrier.riskengine.identity.client;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -14,6 +15,7 @@ import org.springframework.web.client.RestClientException;
  * {@link BureauUnavailableException} (não derruba a avaliação).
  */
 @Component
+@Order(10) // bureau real tem prioridade sobre stubs na cadeia de fallback
 public class BrasilApiBureauProvider implements BureauProvider {
 
   private final RestClient restClient;

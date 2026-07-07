@@ -13,10 +13,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Verifica a identidade de um documento consultando um bureau (Gateway atrás de interface).
+ * Verifica a identidade de um documento consultando bureaus (Gateway atrás de interface).
  *
- * <p>Seleciona o provider por tipo de documento (Strategy). A indisponibilidade do bureau é
- * registrada como {@link IdentityStatus#UNAVAILABLE} e não interrompe a avaliação.
+ * <p>Seleciona os providers que atendem o tipo de documento (Strategy), em ordem de
+ * prioridade (a lista chega ordenada por {@code @Order}). Percorre a cadeia com <b>fallback</b>:
+ * um bureau indisponível ({@link BureauUnavailableException}) faz cair para o próximo. Um
+ * resultado definitivo (MATCH/NOT_FOUND/MISMATCH) encerra a cadeia. Se todos os providers
+ * estiverem indisponíveis, o resultado é {@link IdentityStatus#UNAVAILABLE} — e a avaliação
+ * segue mesmo assim.
  */
 @Service
 public class IdentityService {
@@ -32,35 +36,35 @@ public class IdentityService {
   }
 
   public IdentityCheck verify(VerifyIdentityCommand command) {
-    BureauProvider provider =
-        providers.stream().filter(p -> p.supports(command.documentType())).findFirst().orElse(null);
+    List<BureauProvider> chain =
+        providers.stream().filter(p -> p.supports(command.documentType())).toList();
 
-    if (provider == null) {
+    if (chain.isEmpty()) {
       log.warn("Sem bureau para o tipo de documento {}", command.documentType());
-      return repository.save(
-          IdentityCheck.create(
-              command.assessmentId(),
-              IdentityStatus.UNAVAILABLE,
-              "nenhum",
-              "Sem provider para " + command.documentType()));
+      return save(command, IdentityStatus.UNAVAILABLE, "nenhum", "Sem provider para " + command.documentType());
     }
 
-    IdentityCheck check;
-    try {
-      BureauResult result =
-          provider.check(
-              new BureauQuery(
-                  command.documentType(), command.documentDigits(), command.name()));
-      check =
-          IdentityCheck.create(
-              command.assessmentId(), toStatus(result.outcome()), provider.name(), result.detail());
-    } catch (BureauUnavailableException e) {
-      log.warn("Bureau {} indisponível: {}", provider.name(), e.getMessage());
-      check =
-          IdentityCheck.create(
-              command.assessmentId(), IdentityStatus.UNAVAILABLE, provider.name(), e.getMessage());
+    BureauQuery query =
+        new BureauQuery(command.documentType(), command.documentDigits(), command.name());
+    String lastError = null;
+
+    for (BureauProvider provider : chain) {
+      try {
+        BureauResult result = provider.check(query);
+        return save(command, toStatus(result.outcome()), provider.name(), result.detail());
+      } catch (BureauUnavailableException e) {
+        lastError = provider.name() + ": " + e.getMessage();
+        log.warn("Bureau {} indisponível; tentando o próximo. {}", provider.name(), e.getMessage());
+      }
     }
-    return repository.save(check);
+
+    // Toda a cadeia esgotada por indisponibilidade.
+    return save(command, IdentityStatus.UNAVAILABLE, "todos", lastError);
+  }
+
+  private IdentityCheck save(
+      VerifyIdentityCommand command, IdentityStatus status, String provider, String detail) {
+    return repository.save(IdentityCheck.create(command.assessmentId(), status, provider, detail));
   }
 
   private static IdentityStatus toStatus(BureauResult.Outcome outcome) {

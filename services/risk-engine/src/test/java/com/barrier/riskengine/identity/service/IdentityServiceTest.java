@@ -2,6 +2,8 @@ package com.barrier.riskengine.identity.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.identity.client.BureauProvider;
@@ -22,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class IdentityServiceTest {
 
   @Mock BureauProvider provider;
+  @Mock BureauProvider fallback;
   @Mock IdentityCheckRepository repository;
 
   @BeforeEach
@@ -82,5 +85,55 @@ class IdentityServiceTest {
 
     assertThat(check.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
     assertThat(check.provider()).isEqualTo("nenhum");
+  }
+
+  @Test
+  void primarioIndisponivelCaiParaOProximo() {
+    when(provider.supports("CPF")).thenReturn(true);
+    when(fallback.supports("CPF")).thenReturn(true);
+    when(provider.check(any(BureauQuery.class)))
+        .thenThrow(new BureauUnavailableException("timeout"));
+    when(provider.name()).thenReturn("primario");
+    when(fallback.check(any(BureauQuery.class))).thenReturn(BureauResult.match("ok"));
+    when(fallback.name()).thenReturn("secundario");
+
+    IdentityCheck check =
+        new IdentityService(List.of(provider, fallback), repository).verify(cpfCommand());
+
+    assertThat(check.status()).isEqualTo(IdentityStatus.VERIFIED);
+    assertThat(check.provider()).isEqualTo("secundario");
+  }
+
+  @Test
+  void todosIndisponiveisResultaUnavailable() {
+    when(provider.supports("CPF")).thenReturn(true);
+    when(fallback.supports("CPF")).thenReturn(true);
+    when(provider.check(any(BureauQuery.class)))
+        .thenThrow(new BureauUnavailableException("t1"));
+    when(fallback.check(any(BureauQuery.class)))
+        .thenThrow(new BureauUnavailableException("t2"));
+    when(provider.name()).thenReturn("p1");
+    when(fallback.name()).thenReturn("p2");
+
+    IdentityCheck check =
+        new IdentityService(List.of(provider, fallback), repository).verify(cpfCommand());
+
+    assertThat(check.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
+    assertThat(check.provider()).isEqualTo("todos");
+  }
+
+  @Test
+  void resultadoDefinitivoNaoTentaOProximo() {
+    when(provider.supports("CPF")).thenReturn(true);
+    when(fallback.supports("CPF")).thenReturn(true);
+    when(provider.check(any(BureauQuery.class)))
+        .thenReturn(new BureauResult(BureauResult.Outcome.NOT_FOUND, "não existe"));
+    when(provider.name()).thenReturn("primario");
+
+    IdentityCheck check =
+        new IdentityService(List.of(provider, fallback), repository).verify(cpfCommand());
+
+    assertThat(check.status()).isEqualTo(IdentityStatus.NOT_FOUND);
+    verify(fallback, never()).check(any());
   }
 }
