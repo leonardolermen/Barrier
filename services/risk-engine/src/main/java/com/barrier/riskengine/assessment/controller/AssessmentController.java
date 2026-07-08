@@ -56,4 +56,17 @@ public class AssessmentController {
     Assessment assessment = service.get(AssessmentId.of(id), tenant.id());
     return ResponseEntity.ok(AssessmentDtoMapper.toResponse(assessment));
   }
+
+  /** Decisão humana de uma avaliação em revisão (EDD). Só o tenant dono pode decidir. */
+  @PostMapping("/{id}/decision")
+  public ResponseEntity<AssessmentResponse> decide(
+      @RequestHeader(name = CLIENT_HEADER, required = false) String clientId,
+      @PathVariable String id,
+      @Valid @RequestBody ReviewDecisionRequest req) {
+    Tenant tenant = tenantService.resolve(clientId);
+    boolean approve = req.decision() == ReviewDecisionRequest.Decision.APPROVE;
+    Assessment decided =
+        service.decide(AssessmentId.of(id), tenant.id(), approve, req.reviewedBy(), req.reason());
+    return ResponseEntity.ok(AssessmentDtoMapper.toResponse(decided));
+  }
 }

@@ -18,6 +18,9 @@ final class AssessmentDtoMapper {
         a.decision(),
         a.factors(),
         a.createdAt(),
-        a.completedAt());
+        a.completedAt(),
+        a.reviewedBy(),
+        a.reviewReason(),
+        a.reviewedAt());
   }
 }

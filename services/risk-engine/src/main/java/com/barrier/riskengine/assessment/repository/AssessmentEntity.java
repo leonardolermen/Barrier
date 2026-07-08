@@ -57,6 +57,15 @@ class AssessmentEntity {
   @Column(name = "completed_at")
   private Instant completedAt;
 
+  @Column(name = "reviewed_by", length = 200)
+  private String reviewedBy;
+
+  @Column(name = "review_reason", length = 500)
+  private String reviewReason;
+
+  @Column(name = "reviewed_at")
+  private Instant reviewedAt;
+
   protected AssessmentEntity() {
     // JPA
   }
@@ -155,5 +164,29 @@ class AssessmentEntity {
 
   void setCompletedAt(Instant completedAt) {
     this.completedAt = completedAt;
+  }
+
+  String getReviewedBy() {
+    return reviewedBy;
+  }
+
+  void setReviewedBy(String reviewedBy) {
+    this.reviewedBy = reviewedBy;
+  }
+
+  String getReviewReason() {
+    return reviewReason;
+  }
+
+  void setReviewReason(String reviewReason) {
+    this.reviewReason = reviewReason;
+  }
+
+  Instant getReviewedAt() {
+    return reviewedAt;
+  }
+
+  void setReviewedAt(Instant reviewedAt) {
+    this.reviewedAt = reviewedAt;
   }
 }

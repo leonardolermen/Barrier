@@ -23,6 +23,9 @@ public class Assessment {
   private List<String> factors = List.of();
   private final Instant createdAt;
   private Instant completedAt;
+  private String reviewedBy;
+  private String reviewReason;
+  private Instant reviewedAt;
 
   private Assessment(
       AssessmentId id,
@@ -73,7 +76,10 @@ public class Assessment {
       String decision,
       List<String> factors,
       Instant createdAt,
-      Instant completedAt) {
+      Instant completedAt,
+      String reviewedBy,
+      String reviewReason,
+      Instant reviewedAt) {
     Assessment a =
         new Assessment(id, tenantId, subjectId, documentType, documentDigits, name, createdAt);
     a.status = status;
@@ -81,6 +87,9 @@ public class Assessment {
     a.decision = decision;
     a.factors = List.copyOf(factors);
     a.completedAt = completedAt;
+    a.reviewedBy = reviewedBy;
+    a.reviewReason = reviewReason;
+    a.reviewedAt = reviewedAt;
     return a;
   }
 
@@ -98,6 +107,25 @@ public class Assessment {
     this.decision = decision;
     this.factors = List.copyOf(factors);
     this.completedAt = Instant.now();
+  }
+
+  /**
+   * Decisão humana de uma avaliação em revisão (EDD). Só é válida a partir de EM_REVISAO.
+   *
+   * @param approve true aprova (APROVADO), false reprova (REPROVADO)
+   */
+  public void decide(boolean approve, String reviewedBy, String reason) {
+    if (this.status != AssessmentStatus.EM_REVISAO) {
+      throw new IllegalStateException("Avaliação não está em revisão: " + id.asString());
+    }
+    if (reviewedBy == null || reviewedBy.isBlank()) {
+      throw new IllegalArgumentException("reviewedBy obrigatório");
+    }
+    this.status = approve ? AssessmentStatus.APROVADO : AssessmentStatus.REPROVADO;
+    this.decision = (approve ? "Aprovado" : "Reprovado") + " em revisão por " + reviewedBy;
+    this.reviewedBy = reviewedBy;
+    this.reviewReason = reason;
+    this.reviewedAt = Instant.now();
   }
 
   public boolean isPending() {
@@ -158,5 +186,17 @@ public class Assessment {
 
   public Instant completedAt() {
     return completedAt;
+  }
+
+  public String reviewedBy() {
+    return reviewedBy;
+  }
+
+  public String reviewReason() {
+    return reviewReason;
+  }
+
+  public Instant reviewedAt() {
+    return reviewedAt;
   }
 }

@@ -11,4 +11,7 @@ public record AssessmentResponse(
     String decision,
     List<String> factors,
     Instant createdAt,
-    Instant completedAt) {}
+    Instant completedAt,
+    String reviewedBy,
+    String reviewReason,
+    Instant reviewedAt) {}

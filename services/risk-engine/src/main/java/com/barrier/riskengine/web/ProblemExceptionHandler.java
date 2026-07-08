@@ -29,6 +29,11 @@ class ProblemExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
   }
 
+  @ExceptionHandler(IllegalStateException.class)
+  ProblemDetail handleConflict(IllegalStateException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+  }
+
   @ExceptionHandler(MethodArgumentNotValidException.class)
   ProblemDetail handleValidation(MethodArgumentNotValidException e) {
     ProblemDetail problem =

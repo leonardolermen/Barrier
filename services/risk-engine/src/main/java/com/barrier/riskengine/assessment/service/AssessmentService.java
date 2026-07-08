@@ -16,10 +16,15 @@ public class AssessmentService {
 
   private final AssessmentRepository repository;
   private final SubjectService subjectService;
+  private final AssessmentEventPublisher eventPublisher;
 
-  public AssessmentService(AssessmentRepository repository, SubjectService subjectService) {
+  public AssessmentService(
+      AssessmentRepository repository,
+      SubjectService subjectService,
+      AssessmentEventPublisher eventPublisher) {
     this.repository = repository;
     this.subjectService = subjectService;
+    this.eventPublisher = eventPublisher;
   }
 
   /**
@@ -51,5 +56,19 @@ public class AssessmentService {
         .findById(id)
         .filter(a -> a.tenantId().equals(tenantId))
         .orElseThrow(() -> new AssessmentNotFoundException(id));
+  }
+
+  /**
+   * Decisão humana de uma avaliação em revisão (EDD), no escopo do tenant. Emite novamente o
+   * evento de conclusão com o desfecho final (o webhook entrega ao cliente).
+   */
+  @Transactional
+  public Assessment decide(
+      AssessmentId id, String tenantId, boolean approve, String reviewedBy, String reason) {
+    Assessment assessment = get(id, tenantId);
+    assessment.decide(approve, reviewedBy, reason);
+    Assessment saved = repository.save(assessment);
+    eventPublisher.publishCompleted(saved);
+    return saved;
   }
 }

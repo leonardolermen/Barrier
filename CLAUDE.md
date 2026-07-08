@@ -35,9 +35,16 @@ Subjects (ADR-0011): o cliente final (CPF/CNPJ) é um **subject global** — 1 r
 documento (`subjects`, UNIQUE). A visibilidade é por associação (`tenant_subjects`): o `POST`
 acha-ou-cria o subject e garante o vínculo; `GET /v1/subjects/{documento}` só retorna se o
 tenant tem vínculo (senão 404 — não vaza cliente de outra empresa). `assessments.subject_id`
-liga a avaliação ao subject. Decisão de aceitar/recusar (EM_REVISAO) será **por tenant no
+liga a avaliação ao subject. Decisão de aceitar/recusar (EM_REVISAO) é **por tenant no
 assessment**, nunca no subject. Cache compartilhado de dados objetivos entre tenants = futuro
 opt-in.
+
+Revisão manual (EDD): avaliação em `EM_REVISAO` é decidida por humano via
+`POST /v1/assessments/{id}/decision` (`ReviewDecisionRequest`: APPROVE/REJECT + `reviewedBy` +
+`reason`), escopado por tenant. `Assessment.decide` só vale a partir de EM_REVISAO (senão 409),
+grava a trilha (`reviewed_by`/`review_reason`/`reviewed_at`, migration V013) e reemite
+`barrier.assessment.completed` via `AssessmentEventPublisher` (o webhook entrega o desfecho
+final). A resposta e o `GET` expõem a trilha de review.
 
 Multi-tenancy: cada avaliação pertence a um **tenant** (cliente da API). Header `X-Client-Id`
 → `TenantService.resolve` (tabela `tenants`, seed `default`); `assessments.tenant_id` +
@@ -89,7 +96,7 @@ contínuo, reavaliação periódica, recálculo por transação, navegação do 
 KYB dedicado), e registro multi-tenant de endpoints.
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento).
 
-Build validado: `./mvnw test` verde (76 testes, inclui integração com Testcontainers).
+Build validado: `./mvnw test` verde (78 testes, inclui integração com Testcontainers).
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).
 
 Peculiaridades do Spring Boot 4 (aprendidas na prática):

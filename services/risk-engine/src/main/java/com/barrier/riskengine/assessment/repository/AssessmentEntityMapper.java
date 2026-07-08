@@ -24,6 +24,9 @@ final class AssessmentEntityMapper {
     e.setFactors(a.factors().isEmpty() ? null : String.join("\n", a.factors()));
     e.setCreatedAt(a.createdAt());
     e.setCompletedAt(a.completedAt());
+    e.setReviewedBy(a.reviewedBy());
+    e.setReviewReason(a.reviewReason());
+    e.setReviewedAt(a.reviewedAt());
     return e;
   }
 
@@ -40,7 +43,10 @@ final class AssessmentEntityMapper {
         e.getDecision(),
         parseFactors(e.getFactors()),
         e.getCreatedAt(),
-        e.getCompletedAt());
+        e.getCompletedAt(),
+        e.getReviewedBy(),
+        e.getReviewReason(),
+        e.getReviewedAt());
   }
 
   private static List<String> parseFactors(String factors) {
