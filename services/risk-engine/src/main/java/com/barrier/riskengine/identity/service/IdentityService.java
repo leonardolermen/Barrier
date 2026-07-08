@@ -35,13 +35,13 @@ public class IdentityService {
     this.repository = repository;
   }
 
-  public IdentityCheck verify(VerifyIdentityCommand command) {
+  public IdentityResult verify(VerifyIdentityCommand command) {
     List<BureauProvider> chain =
         providers.stream().filter(p -> p.supports(command.documentType())).toList();
 
     if (chain.isEmpty()) {
       log.warn("Sem bureau para o tipo de documento {}", command.documentType());
-      return save(command, IdentityStatus.UNAVAILABLE, "nenhum", "Sem provider para " + command.documentType());
+      return unavailable(command, "nenhum", "Sem provider para " + command.documentType());
     }
 
     BureauQuery query =
@@ -51,7 +51,9 @@ public class IdentityService {
     for (BureauProvider provider : chain) {
       try {
         BureauResult result = provider.check(query);
-        return save(command, toStatus(result.outcome()), provider.name(), result.detail());
+        IdentityCheck check =
+            save(command, toStatus(result.outcome()), provider.name(), result.detail());
+        return new IdentityResult(check, result.company());
       } catch (BureauUnavailableException e) {
         lastError = provider.name() + ": " + e.getMessage();
         log.warn("Bureau {} indisponível; tentando o próximo. {}", provider.name(), e.getMessage());
@@ -59,7 +61,11 @@ public class IdentityService {
     }
 
     // Toda a cadeia esgotada por indisponibilidade.
-    return save(command, IdentityStatus.UNAVAILABLE, "todos", lastError);
+    return unavailable(command, "todos", lastError);
+  }
+
+  private IdentityResult unavailable(VerifyIdentityCommand command, String provider, String detail) {
+    return new IdentityResult(save(command, IdentityStatus.UNAVAILABLE, provider, detail), null);
   }
 
   private IdentityCheck save(

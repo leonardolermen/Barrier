@@ -1,10 +1,9 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.commons.outbox.OutboxRecorder;
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
-import com.barrier.riskengine.identity.domain.IdentityCheck;
+import com.barrier.riskengine.identity.service.IdentityResult;
 import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
@@ -19,7 +18,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
 
 /**
  * Processa avaliações pendentes: reúne os sinais (identidade + screening) e delega a decisão
@@ -33,30 +31,25 @@ import tools.jackson.databind.ObjectMapper;
 public class AssessmentProcessor {
 
   private static final Logger log = LoggerFactory.getLogger(AssessmentProcessor.class);
-  private static final String EVENT_TYPE = "barrier.assessment.completed";
-  private static final int EVENT_VERSION = 1;
   private static final int BATCH = 50;
 
   private final AssessmentRepository repository;
   private final IdentityService identityService;
   private final ScreeningService screeningService;
   private final RiskScoringService riskScoringService;
-  private final OutboxRecorder outbox;
-  private final ObjectMapper objectMapper;
+  private final AssessmentEventPublisher eventPublisher;
 
   public AssessmentProcessor(
       AssessmentRepository repository,
       IdentityService identityService,
       ScreeningService screeningService,
       RiskScoringService riskScoringService,
-      OutboxRecorder outbox,
-      ObjectMapper objectMapper) {
+      AssessmentEventPublisher eventPublisher) {
     this.repository = repository;
     this.identityService = identityService;
     this.screeningService = screeningService;
     this.riskScoringService = riskScoringService;
-    this.outbox = outbox;
-    this.objectMapper = objectMapper;
+    this.eventPublisher = eventPublisher;
   }
 
   /** Executado periodicamente; também chamável diretamente (ex.: em testes). */
@@ -72,7 +65,7 @@ public class AssessmentProcessor {
   }
 
   private void complete(Assessment assessment) {
-    IdentityCheck identity =
+    IdentityResult identity =
         identityService.verify(
             new VerifyIdentityCommand(
                 assessment.id().asString(),
@@ -89,7 +82,9 @@ public class AssessmentProcessor {
                 assessment.name()));
 
     RiskDecision decision =
-        riskScoringService.score(new RiskContext(assessment.id().asString(), identity, screening));
+        riskScoringService.score(
+            new RiskContext(
+                assessment.id().asString(), identity.check(), screening, identity.company()));
 
     assessment.complete(
         decision.level(),
@@ -98,11 +93,7 @@ public class AssessmentProcessor {
         decision.explanations());
 
     repository.save(assessment);
-    outbox.record(
-        assessment.id().asString(),
-        EVENT_TYPE,
-        EVENT_VERSION,
-        serialize(AssessmentCompletedPayload.from(assessment)));
+    eventPublisher.publishCompleted(assessment);
     log.info(
         "Avaliação {} concluída: {} (score {}, motor {})",
         assessment.id().asString(),
@@ -117,9 +108,5 @@ public class AssessmentProcessor {
       case REVIEW -> AssessmentStatus.EM_REVISAO;
       case REJECT -> AssessmentStatus.REPROVADO;
     };
-  }
-
-  private String serialize(AssessmentCompletedPayload payload) {
-    return objectMapper.writeValueAsString(payload);
   }
 }

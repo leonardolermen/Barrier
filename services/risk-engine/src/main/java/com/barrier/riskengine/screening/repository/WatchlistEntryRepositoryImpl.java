@@ -43,11 +43,16 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
     if (document == null || document.isBlank()) {
       return List.of();
     }
-    return jpa.findByDocument(document).stream()
-        .map(
-            e ->
-                new WatchlistRecord(
-                    e.getSource(), e.getEntryType(), e.getDocument(), e.getName(), e.getDetail()))
-        .toList();
+    return jpa.findByDocument(document).stream().map(WatchlistEntryRepositoryImpl::toRecord).toList();
+  }
+
+  @Override
+  public List<WatchlistRecord> findNameEntries() {
+    return jpa.findByDocumentIsNull().stream().map(WatchlistEntryRepositoryImpl::toRecord).toList();
+  }
+
+  private static WatchlistRecord toRecord(WatchlistEntryEntity e) {
+    return new WatchlistRecord(
+        e.getSource(), e.getEntryType(), e.getDocument(), e.getName(), e.getDetail());
   }
 }

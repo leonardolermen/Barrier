@@ -51,6 +51,30 @@ class BrasilApiBureauProviderTest {
   }
 
   @Test
+  void extraiPerfilDaPjParaAsRegrasDeRisco() {
+    server
+        .expect(requestTo("/api/cnpj/v1/11222333000181"))
+        .andRespond(
+            withSuccess(
+                """
+                {"razao_social":"ACME LTDA","descricao_situacao_cadastral":"ATIVA",
+                 "cnae_fiscal":6619302,"cnae_fiscal_descricao":"Servicos financeiros",
+                 "data_inicio_atividade":"2026-05-10",
+                 "qsa":[{"nome_socio":"JOHN DOE","identificador_de_socio":3,
+                         "qualificacao_socio":"Socio Estrangeiro","pais":"ESTADOS UNIDOS"}]}
+                """,
+                MediaType.APPLICATION_JSON));
+
+    var company = provider.check(cnpj()).company();
+
+    assertThat(company).isNotNull();
+    assertThat(company.cnaeCode()).isEqualTo("6619302");
+    assertThat(company.openingDate().toString()).isEqualTo("2026-05-10");
+    assertThat(company.partners()).hasSize(1);
+    assertThat(company.partners().get(0).foreign()).isTrue();
+  }
+
+  @Test
   void situacaoBaixadaViraMismatch() {
     server
         .expect(requestTo("/api/cnpj/v1/11222333000181"))

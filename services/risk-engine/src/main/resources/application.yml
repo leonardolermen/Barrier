@@ -41,3 +41,22 @@ barrier:
   identity:
     brasilapi:
       base-url: https://brasilapi.com.br
+  watchlist:
+    # Fontes reais que baixam arquivos publicados. Desligadas por padrão (dev/testes não baixam
+    # nada); ligue em produção. A importação isola falhas por fonte.
+    cgu:
+      enabled: false
+      base-url: https://portaldatransparencia.gov.br
+      reference-date: "" # vazio = data de hoje (yyyyMMdd)
+    ofac:
+      enabled: false
+      base-url: https://www.treasury.gov/ofac/downloads
+  screening:
+    fuzzy:
+      threshold: 0.90
+      min-name-length: 6
+  risk:
+    new-company:
+      months: 6
+      score: 150
+    sensitive-cnae-score: 200

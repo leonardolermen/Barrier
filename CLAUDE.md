@@ -46,11 +46,24 @@ confia no header; quando a API key chegar, o tenant será derivado da key (heade
 Termo `tenant` no código evita colisão com os vários "client" (bureau/HTTP).
 
 Bureaus (identity): cadeia com prioridade (`@Order`) + fallback — bureau indisponível cai
-para o próximo; resultado definitivo encerra. CNPJ real via BrasilAPI; CPF no stub.
+para o próximo; resultado definitivo encerra. CNPJ real via BrasilAPI; CPF no stub. O
+BrasilAPI agora também extrai um `CompanyProfile` (abertura/CNAE/QSA) — transiente, não
+persistido; `IdentityService.verify` devolve `IdentityResult(check, company)` e o perfil trafega
+até o motor de risco pelo `RiskContext`. Regras de PJ que consomem isso: `NewCompanyRiskRule`
+(empresa recém-aberta), `SensitiveCnaeRiskRule` (CNAE sensível a PLD-FT) e
+`CorporateStructureRiskRule` (KYB — sócio estrangeiro/PJ no QSA de 1º grau; árvore até 3º grau
+ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.1.0`.
+
 Watchlists (screening): **ingeridas** (ADR-0010) — `WatchlistImporter` (ApplicationRunner +
 @Scheduled) carrega `WatchlistSource`s numa tabela `watchlist_entries`; `LocalWatchlistProvider`
-casa por documento. Fonte atual é a semente `resources/watchlists/ceis-seed.csv`; fontes reais
-(CGU/OFAC) são novos `WatchlistSource`. Match por nome (fuzzy) é fase seguinte.
+casa por documento (exato). Fontes: semente `resources/watchlists/ceis-seed.csv`; CGU real
+(`CeisWatchlistSource`/`CnepWatchlistSource` — baixam o ZIP do Portal da Transparência, parseiam
+CSV ISO-8859-1 `;`); OFAC (`OfacWatchlistSource` — `sdn.csv` + `alt.csv`, entradas por nome sem
+documento, apelidos viram linhas próprias). Fontes que baixam são gated por config
+(`barrier.watchlist.cgu.enabled` / `.ofac.enabled`, **off por padrão** — dev/testes não baixam).
+Match por **nome (fuzzy)**: `FuzzyNameWatchlistProvider` (Jaro-Winkler + `NameNormalizer` sobre
+as entradas sem documento; limiar/`min-name-length` configuráveis). Evolução: índice/blocking
+para volumes grandes do OFAC.
 
 Fases 1-4 concluídas (build verde). Fase 1: intake + outbox. Fase 2: Identity.
 Fase 3: Screening. Fase 4: motor de risco — `RiskRule` (Strategy) devolve `RiskResult`
@@ -71,11 +84,12 @@ retry/backoff (`DeliveryRetryScheduler`), idempotência por `eventId` e rastreio
 `com.barrier.webhook` (não puxa os beans de outbox do commons). Endpoint de destino é config
 única (`barrier.webhook.target-url`) — registro por cliente/tenant é evolução futura.
 
-Fase B (mapeada, não implementada): monitoramento contínuo, reavaliação periódica, recálculo
-por transação, regra de estrutura societária (KYB), e registro multi-tenant de endpoints.
+Fase B (mapeada, parcial): KYB de 1º grau já ativo (ver acima); pendentes: monitoramento
+contínuo, reavaliação periódica, recálculo por transação, navegação do QSA até 3º grau (provedor
+KYB dedicado), e registro multi-tenant de endpoints.
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento).
 
-Build validado: `./mvnw test` verde (18 testes, inclui integração com Testcontainers).
+Build validado: `./mvnw test` verde (76 testes, inclui integração com Testcontainers).
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).
 
 Peculiaridades do Spring Boot 4 (aprendidas na prática):

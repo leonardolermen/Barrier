@@ -1,5 +1,9 @@
 package com.barrier.riskengine.identity.client;
 
+import com.barrier.riskengine.identity.domain.CompanyProfile;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -44,9 +48,12 @@ public class BrasilApiBureauProvider implements BureauProvider {
       }
       String situacao = cnpj.situacaoCadastral();
       String detail = cnpj.razaoSocial() + " — " + situacao;
+      // O perfil objetivo (abertura/CNAE/QSA) alimenta as regras de risco de PJ; sempre que a
+      // empresa existe (ativa ou não) ele é preenchido.
+      CompanyProfile profile = toProfile(cnpj);
       return "ATIVA".equalsIgnoreCase(situacao)
-          ? new BureauResult(BureauResult.Outcome.MATCH, detail)
-          : new BureauResult(BureauResult.Outcome.MISMATCH, "Situação: " + situacao);
+          ? new BureauResult(BureauResult.Outcome.MATCH, detail, profile)
+          : new BureauResult(BureauResult.Outcome.MISMATCH, "Situação: " + situacao, profile);
     } catch (HttpClientErrorException.NotFound e) {
       return new BureauResult(BureauResult.Outcome.NOT_FOUND, "CNPJ não encontrado");
     } catch (RestClientException e) {
@@ -57,5 +64,36 @@ public class BrasilApiBureauProvider implements BureauProvider {
   @Override
   public String name() {
     return "brasilapi";
+  }
+
+  private static CompanyProfile toProfile(BrasilApiCnpj cnpj) {
+    List<CompanyProfile.Partner> partners =
+        cnpj.qsa() == null
+            ? List.of()
+            : cnpj.qsa().stream().filter(s -> s != null).map(BrasilApiBureauProvider::toPartner).toList();
+    String cnaeCode = cnpj.cnaeFiscal() == null ? null : String.valueOf(cnpj.cnaeFiscal());
+    return new CompanyProfile(parseDate(cnpj.dataInicioAtividade()), cnaeCode, cnpj.cnae(), partners);
+  }
+
+  private static CompanyProfile.Partner toPartner(BrasilApiCnpj.Socio socio) {
+    boolean legalEntity = Integer.valueOf(1).equals(socio.identificadorDeSocio());
+    boolean foreign =
+        Integer.valueOf(3).equals(socio.identificadorDeSocio())
+            || (socio.pais() != null
+                && !socio.pais().isBlank()
+                && !"BRASIL".equalsIgnoreCase(socio.pais().trim()));
+    return new CompanyProfile.Partner(
+        socio.nomeSocio(), legalEntity, foreign, socio.qualificacaoSocio());
+  }
+
+  private static LocalDate parseDate(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    try {
+      return LocalDate.parse(value.trim());
+    } catch (DateTimeParseException e) {
+      return null; // data fora do padrão ISO não derruba a verificação
+    }
   }
 }

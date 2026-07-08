@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class RiskScoringService {
 
-  static final String ENGINE_VERSION = "barrier-risk-rules/1.0.0";
+  static final String ENGINE_VERSION = "barrier-risk-rules/1.1.0";
   private static final int MAX_SCORE = 1000;
 
   private final List<RiskRule> rules;

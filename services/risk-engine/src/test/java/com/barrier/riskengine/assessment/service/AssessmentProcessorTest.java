@@ -3,17 +3,17 @@ package com.barrier.riskengine.assessment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.barrier.commons.outbox.OutboxRecorder;
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.DocumentType;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
+import com.barrier.riskengine.identity.service.IdentityResult;
 import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
@@ -27,11 +27,8 @@ import com.barrier.riskengine.screening.service.ScreeningService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 
 @ExtendWith(MockitoExtension.class)
 class AssessmentProcessorTest {
@@ -40,15 +37,11 @@ class AssessmentProcessorTest {
   @Mock IdentityService identityService;
   @Mock ScreeningService screeningService;
   @Mock RiskScoringService riskScoringService;
-  @Mock OutboxRecorder outbox;
-
-  private static ObjectMapper objectMapper() {
-    return JsonMapper.builder().build();
-  }
+  @Mock AssessmentEventPublisher eventPublisher;
 
   private AssessmentProcessor newProcessor() {
     return new AssessmentProcessor(
-        repository, identityService, screeningService, riskScoringService, outbox, objectMapper());
+        repository, identityService, screeningService, riskScoringService, eventPublisher);
   }
 
   private Assessment pendingAssessment() {
@@ -58,7 +51,9 @@ class AssessmentProcessorTest {
             "Fulano");
     when(repository.findPending(anyInt())).thenReturn(List.of(a));
     when(identityService.verify(any(VerifyIdentityCommand.class)))
-        .thenReturn(IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"));
+        .thenReturn(
+            new IdentityResult(
+                IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"), null));
     when(screeningService.screen(any(ScreeningCommand.class)))
         .thenReturn(ScreeningResult.of("aid", List.of()));
     return a;
@@ -70,7 +65,7 @@ class AssessmentProcessorTest {
   }
 
   @Test
-  void recomendacaoApproveAprovaEGravaEvento() {
+  void recomendacaoApproveAprovaEPublicaEvento() {
     var processor = newProcessor();
     Assessment pending = pendingAssessment();
     stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
@@ -81,15 +76,7 @@ class AssessmentProcessorTest {
     assertThat(pending.status()).isEqualTo(AssessmentStatus.APROVADO);
     assertThat(pending.riskLevel()).isEqualTo(RiskLevel.LOW);
     verify(repository).save(pending);
-
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(outbox)
-        .record(
-            eq(pending.id().asString()),
-            eq("barrier.assessment.completed"),
-            eq(1),
-            payload.capture());
-    assertThat(payload.getValue()).contains("APROVADO").contains("LOW");
+    verify(eventPublisher).publishCompleted(pending);
   }
 
   @Test
@@ -122,6 +109,6 @@ class AssessmentProcessorTest {
     when(repository.findPending(anyInt())).thenReturn(List.of());
 
     assertThat(processor.process()).isZero();
-    verify(outbox, org.mockito.Mockito.never()).record(any(), any(), anyInt(), any());
+    verify(eventPublisher, never()).publishCompleted(any());
   }
 }

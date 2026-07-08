@@ -11,4 +11,7 @@ public interface WatchlistEntryRepository {
 
   /** Entradas que casam com o documento (match exato por CPF/CNPJ). */
   List<WatchlistRecord> findByDocument(String document);
+
+  /** Entradas sem documento (listas por nome, ex.: OFAC/ONU), para match fuzzy. */
+  List<WatchlistRecord> findNameEntries();
 }
