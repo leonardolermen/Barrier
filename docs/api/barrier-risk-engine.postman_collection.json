@@ -1,0 +1,217 @@
+{
+  "info": {
+    "name": "Barrier — Risk Engine",
+    "_postman_id": "b0a11e00-0000-4000-8000-000000000001",
+    "description": "API da Risk Engine (KYC/PLD-FT). Toda operação é escopada por tenant via header `X-Client-Id` (seed `default`).\n\nFluxos cobertos:\n- **Automático:** POST assessment → processamento assíncrono → GET reflete APROVADO/REPROVADO/EM_REVISAO.\n- **Revisão manual (EDD):** documento com apontamento (ex.: PEP) cai em EM_REVISAO → POST /decision aprova/reprova.\n- **CNPJ real:** bureau via BrasilAPI popula o CompanyProfile (abertura/CNAE/QSA) que alimenta as regras de risco de PJ.\n\nVariáveis: `baseUrl`, `clientId`, `assessmentId` (capturada automaticamente no POST), `document`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "clientId", "value": "default", "type": "string" },
+    { "key": "assessmentId", "value": "", "type": "string" },
+    { "key": "document", "value": "11144477735", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/actuator/health", "host": ["{{baseUrl}}"], "path": ["actuator", "health"] },
+        "description": "Liveness/readiness da aplicação."
+      }
+    },
+    {
+      "name": "Assessments",
+      "item": [
+        {
+          "name": "Submit — CPF (fluxo automático → APROVADO)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('assessmentId', body.id);",
+                  "pm.test('status EM_ANALISE', () => pm.expect(body.status).to.eql('EM_ANALISE'));",
+                  "console.log('assessmentId =', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Id", "value": "{{clientId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"CPF\",\n  \"document\": \"111.444.777-35\",\n  \"name\": \"Fulano de Tal\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/v1/assessments", "host": ["{{baseUrl}}"], "path": ["v1", "assessments"] },
+            "description": "Submete uma avaliação (202). O processador conclui de forma assíncrona; use o GET para acompanhar."
+          }
+        },
+        {
+          "name": "Submit — CPF PEP (cai em EM_REVISAO)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('assessmentId', pm.response.json().id);",
+                  "console.log('assessmentId (PEP) =', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Id", "value": "{{clientId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"CPF\",\n  \"document\": \"529.982.247-25\",\n  \"name\": \"Fulano Pep Exemplo\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/v1/assessments", "host": ["{{baseUrl}}"], "path": ["v1", "assessments"] },
+            "description": "Documento com apontamento PEP (seed) → a regra de PEP força EDD → EM_REVISAO. Decida em `Decision — APPROVE/REJECT`."
+          }
+        },
+        {
+          "name": "Submit — CNPJ (BrasilAPI → regras de PJ)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('assessmentId', pm.response.json().id);",
+                  "console.log('assessmentId (CNPJ) =', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Id", "value": "{{clientId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"CNPJ\",\n  \"document\": \"18.236.120/0001-58\",\n  \"name\": \"Nubank\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/v1/assessments", "host": ["{{baseUrl}}"], "path": ["v1", "assessments"] },
+            "description": "CNPJ real: o bureau (BrasilAPI) devolve situação cadastral + CompanyProfile (abertura/CNAE/QSA), que alimenta NewCompany/SensitiveCnae/CorporateStructure. Os `factors` no GET explicam a decisão."
+          }
+        },
+        {
+          "name": "Get assessment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log('status =', b.status, '| risco =', b.riskLevel, '| factors =', JSON.stringify(b.factors));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Client-Id", "value": "{{clientId}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assessments", "{{assessmentId}}"]
+            },
+            "description": "Status/resultado da avaliação (escopo do tenant). Traz `factors` (explicabilidade) e a trilha de review quando houver."
+          }
+        },
+        {
+          "name": "Decision — APPROVE (EM_REVISAO → APROVADO)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('status APROVADO', () => pm.expect(b.status).to.eql('APROVADO'));",
+                  "pm.test('trilha preenchida', () => pm.expect(b.reviewedBy).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Id", "value": "{{clientId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\",\n  \"reviewedBy\": \"analista@empresa\",\n  \"reason\": \"EDD concluida, cliente conhecido\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assessments", "{{assessmentId}}", "decision"]
+            },
+            "description": "Decisão humana (EDD). Só vale a partir de EM_REVISAO — decidir fora disso responde 409. `reviewedBy` é obrigatório.\n\nObs.: evite acentos no `reason` ao testar via terminais que reescrevem o encoding; o corpo deve ser UTF-8 válido."
+          }
+        },
+        {
+          "name": "Decision — REJECT (EM_REVISAO → REPROVADO)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Id", "value": "{{clientId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"REJECT\",\n  \"reviewedBy\": \"analista@empresa\",\n  \"reason\": \"risco acima do apetite\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assessments", "{{assessmentId}}", "decision"]
+            },
+            "description": "Reprova manualmente uma avaliação em revisão."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subjects",
+      "item": [
+        {
+          "name": "Get subject por documento",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Client-Id", "value": "{{clientId}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/subjects/{{document}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "subjects", "{{document}}"]
+            },
+            "description": "Retorna o subject (documento mascarado) só se o tenant tem vínculo; senão 404 (não vaza cliente de outro tenant)."
+          }
+        }
+      ]
+    }
+  ]
+}
