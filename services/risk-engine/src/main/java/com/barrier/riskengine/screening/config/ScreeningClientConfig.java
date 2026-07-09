@@ -1,5 +1,6 @@
 package com.barrier.riskengine.screening.config;
 
+import java.net.http.HttpClient;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -26,7 +27,14 @@ class ScreeningClientConfig {
   }
 
   private static RestClient download(String baseUrl, Duration readTimeout) {
-    JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
+    // As fontes publicam via CDN/S3 e respondem 302 para uma URL pré-assinada; sem seguir o
+    // redirect o download vem vazio. NORMAL segue (não faz downgrade HTTPS→HTTP).
+    HttpClient httpClient =
+        HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(15))
+            .build();
+    JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
     factory.setReadTimeout(readTimeout);
     return RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
   }

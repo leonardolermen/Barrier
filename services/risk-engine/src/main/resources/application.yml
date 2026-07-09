@@ -60,7 +60,9 @@ barrier:
       reference-date: "" # vazio = data de hoje (yyyyMMdd)
     ofac:
       enabled: false
-      base-url: https://www.treasury.gov/ofac/downloads
+      base-url: https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports
+      sdn-path: /SDN.CSV # nomes primários (SDN)
+      alt-path: /ALT.CSV # apelidos/aka
   screening:
     fuzzy:
       threshold: 0.90
