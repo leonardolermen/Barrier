@@ -34,6 +34,12 @@ management:
       exposure:
         include: health,info
 
+logging:
+  level:
+    # Silencia os dumps verbosos de startup (info do banco e configs completas do Kafka).
+    org.hibernate.orm.connections.pooling: WARN
+    org.apache.kafka.common.config.AbstractConfig: WARN
+
 barrier:
   webhook:
     target-url: ${WEBHOOK_TARGET_URL:}

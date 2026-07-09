@@ -39,6 +39,9 @@ logging:
     # Baixar para INFO em produção se o volume incomodar (o essencial já sai em INFO).
     com.barrier.riskengine.identity: DEBUG
     com.barrier.riskengine.screening: DEBUG
+    # Silencia os dumps verbosos de startup (info do banco e configs completas do Kafka).
+    org.hibernate.orm.connections.pooling: WARN
+    org.apache.kafka.common.config.AbstractConfig: WARN
 
 barrier:
   assessment:
