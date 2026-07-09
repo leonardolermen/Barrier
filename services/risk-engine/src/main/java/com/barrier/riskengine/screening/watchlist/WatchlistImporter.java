@@ -41,6 +41,10 @@ public class WatchlistImporter implements ApplicationRunner {
   }
 
   public void importAll() {
+    log.info(
+        "Importando watchlists de {} fonte(s) ativa(s): {}",
+        sources.size(),
+        sources.stream().map(WatchlistSource::source).toList());
     for (WatchlistSource source : sources) {
       try {
         WatchlistBatch batch = source.fetch();

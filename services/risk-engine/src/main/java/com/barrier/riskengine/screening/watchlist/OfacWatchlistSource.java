@@ -5,6 +5,8 @@ import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,6 +25,7 @@ import org.springframework.web.client.RestClient;
 @ConditionalOnProperty("barrier.watchlist.ofac.enabled")
 class OfacWatchlistSource implements WatchlistSource {
 
+  private static final Logger log = LoggerFactory.getLogger(OfacWatchlistSource.class);
   private static final int SDN_NAME_COLUMN = 1;
   private static final int ALT_NAME_COLUMN = 3;
 
@@ -46,9 +49,13 @@ class OfacWatchlistSource implements WatchlistSource {
 
   @Override
   public WatchlistBatch fetch() {
-    List<WatchlistRecord> records = new ArrayList<>();
-    records.addAll(names(download(sdnPath), SDN_NAME_COLUMN, "OFAC SDN"));
-    records.addAll(names(download(altPath), ALT_NAME_COLUMN, "OFAC aka"));
+    log.info("OFAC: baixando lista SDN ({}) e apelidos ({})", sdnPath, altPath);
+    List<WatchlistRecord> sdn = names(download(sdnPath), SDN_NAME_COLUMN, "OFAC SDN");
+    List<WatchlistRecord> alt = names(download(altPath), ALT_NAME_COLUMN, "OFAC aka");
+    log.info("OFAC: {} nomes (SDN) + {} apelidos (alt) = {} entradas", sdn.size(), alt.size(), sdn.size() + alt.size());
+    List<WatchlistRecord> records = new ArrayList<>(sdn.size() + alt.size());
+    records.addAll(sdn);
+    records.addAll(alt);
     return new WatchlistBatch("ofac-" + java.time.LocalDate.now(), records);
   }
 

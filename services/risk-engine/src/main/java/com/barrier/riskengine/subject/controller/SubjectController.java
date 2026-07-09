@@ -1,5 +1,6 @@
 package com.barrier.riskengine.subject.controller;
 
+import com.barrier.commons.mask.Documents;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
 import com.barrier.riskengine.tenant.domain.Tenant;
@@ -47,15 +48,7 @@ public class SubjectController {
         new SubjectResponse(
             subject.id().toString(),
             subject.documentType(),
-            mask(subject.document()),
+            Documents.mask(subject.document()),
             subject.name()));
-  }
-
-  /** Mascara o documento mantendo apenas os 2 últimos dígitos (minimização de dado). */
-  private static String mask(String digits) {
-    if (digits.length() <= 2) {
-      return digits;
-    }
-    return "*".repeat(digits.length() - 2) + digits.substring(digits.length() - 2);
   }
 }

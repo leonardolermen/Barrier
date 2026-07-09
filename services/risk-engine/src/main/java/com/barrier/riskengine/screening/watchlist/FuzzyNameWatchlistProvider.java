@@ -6,6 +6,8 @@ import com.barrier.riskengine.screening.client.WatchlistQuery;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +23,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class FuzzyNameWatchlistProvider implements WatchlistProvider {
+
+  private static final Logger log = LoggerFactory.getLogger(FuzzyNameWatchlistProvider.class);
 
   private final WatchlistEntryRepository repository;
   private final double threshold;
@@ -42,10 +46,16 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
       return List.of();
     }
 
-    return repository.findNameEntries().stream()
-        .map(record -> scored(normalizedQuery, record))
-        .filter(m -> m != null)
-        .toList();
+    List<WatchlistRecord> candidates = repository.findNameEntries();
+    List<WatchlistEntry> matches =
+        candidates.stream().map(record -> scored(normalizedQuery, record)).filter(m -> m != null).toList();
+    log.debug(
+        "Fuzzy: '{}' comparado a {} entrada(s) por nome (limiar {}) -> {} match(es)",
+        query.name(),
+        candidates.size(),
+        threshold,
+        matches.size());
+    return matches;
   }
 
   private WatchlistEntry scored(String normalizedQuery, WatchlistRecord record) {
@@ -53,9 +63,11 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
     if (score < threshold) {
       return null;
     }
+    log.info(
+        "Fuzzy match {}@{}: '{}' ({}%)",
+        record.type(), record.source(), record.name(), Math.round(score * 100));
     String detail =
-        String.format(
-            "match por nome %.0f%% — %s", score * 100, nullSafe(record.detail()));
+        String.format("match por nome %.0f%% — %s", score * 100, nullSafe(record.detail()));
     return new WatchlistEntry(record.type(), record.source(), record.name(), detail);
   }
 

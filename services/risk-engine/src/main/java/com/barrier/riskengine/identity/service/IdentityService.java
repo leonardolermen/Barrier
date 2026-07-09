@@ -1,5 +1,6 @@
 package com.barrier.riskengine.identity.service;
 
+import com.barrier.commons.mask.Documents;
 import com.barrier.riskengine.identity.client.BureauProvider;
 import com.barrier.riskengine.identity.client.BureauQuery;
 import com.barrier.riskengine.identity.client.BureauResult;
@@ -39,10 +40,16 @@ public class IdentityService {
     List<BureauProvider> chain =
         providers.stream().filter(p -> p.supports(command.documentType())).toList();
 
+    String maskedDoc = Documents.mask(command.documentDigits());
     if (chain.isEmpty()) {
       log.warn("Sem bureau para o tipo de documento {}", command.documentType());
       return unavailable(command, "nenhum", "Sem provider para " + command.documentType());
     }
+    log.debug(
+        "Verificando identidade {} {} na cadeia de bureaus {}",
+        command.documentType(),
+        maskedDoc,
+        chain.stream().map(BureauProvider::name).toList());
 
     BureauQuery query =
         new BureauQuery(command.documentType(), command.documentDigits(), command.name());
@@ -53,6 +60,14 @@ public class IdentityService {
         BureauResult result = provider.check(query);
         IdentityCheck check =
             save(command, toStatus(result.outcome()), provider.name(), result.detail());
+        log.info(
+            "Bureau '{}' respondeu {} para {} {} — {}{}",
+            provider.name(),
+            result.outcome(),
+            command.documentType(),
+            maskedDoc,
+            result.detail(),
+            result.company() != null ? " [perfil PJ obtido]" : "");
         return new IdentityResult(check, result.company());
       } catch (BureauUnavailableException e) {
         lastError = provider.name() + ": " + e.getMessage();

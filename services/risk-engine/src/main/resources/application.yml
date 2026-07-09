@@ -33,6 +33,13 @@ management:
 server:
   port: ${SERVER_PORT:8080}
 
+logging:
+  level:
+    # Visibilidade de bureau (resposta/perfil) e screening (listas/apontamentos, incl. OFAC/CGU).
+    # Baixar para INFO em produção se o volume incomodar (o essencial já sai em INFO).
+    com.barrier.riskengine.identity: DEBUG
+    com.barrier.riskengine.screening: DEBUG
+
 barrier:
   assessment:
     processor-delay-ms: 2000

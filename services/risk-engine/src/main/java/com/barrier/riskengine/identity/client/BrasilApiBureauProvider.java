@@ -1,9 +1,12 @@
 package com.barrier.riskengine.identity.client;
 
+import com.barrier.commons.mask.Documents;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -21,6 +24,8 @@ import org.springframework.web.client.RestClientException;
 @Component
 @Order(10) // bureau real tem prioridade sobre stubs na cadeia de fallback
 public class BrasilApiBureauProvider implements BureauProvider {
+
+  private static final Logger log = LoggerFactory.getLogger(BrasilApiBureauProvider.class);
 
   private final RestClient restClient;
 
@@ -47,6 +52,14 @@ public class BrasilApiBureauProvider implements BureauProvider {
         return new BureauResult(BureauResult.Outcome.NOT_FOUND, "CNPJ sem situação cadastral");
       }
       String situacao = cnpj.situacaoCadastral();
+      log.debug(
+          "BrasilAPI CNPJ {}: situacao={}, cnae={} ({}), abertura={}, socios={}",
+          Documents.mask(query.documentDigits()),
+          situacao,
+          cnpj.cnaeFiscal(),
+          cnpj.cnae(),
+          cnpj.dataInicioAtividade(),
+          cnpj.qsa() == null ? 0 : cnpj.qsa().size());
       String detail = cnpj.razaoSocial() + " — " + situacao;
       // O perfil objetivo (abertura/CNAE/QSA) alimenta as regras de risco de PJ; sempre que a
       // empresa existe (ativa ou não) ele é preenchido.

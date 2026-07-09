@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.function.Predicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -21,6 +23,8 @@ import org.springframework.web.client.RestClient;
  * então não dependem da ordem. Concretas: {@link CeisWatchlistSource}, {@link CnepWatchlistSource}.
  */
 abstract class CguWatchlistSource implements WatchlistSource {
+
+  private static final Logger log = LoggerFactory.getLogger(CguWatchlistSource.class);
 
   private final RestClient client;
 
@@ -36,6 +40,7 @@ abstract class CguWatchlistSource implements WatchlistSource {
 
   @Override
   public WatchlistBatch fetch() {
+    log.info("CGU {}: baixando pacote /download-de-dados/{}/{}", source(), pathSegment(), referenceDate());
     byte[] zip =
         client
             .get()
@@ -46,6 +51,7 @@ abstract class CguWatchlistSource implements WatchlistSource {
       throw new IllegalStateException("Pacote " + source() + " vazio");
     }
     List<WatchlistRecord> records = parse(readCsv(zip));
+    log.info("CGU {}: {} bytes baixados, {} registro(s) parseado(s)", source(), zip.length, records.size());
     return new WatchlistBatch(pathSegment() + "-" + referenceDate(), records);
   }
 
