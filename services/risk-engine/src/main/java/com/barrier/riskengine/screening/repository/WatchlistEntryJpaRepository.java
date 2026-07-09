@@ -8,7 +8,5 @@ interface WatchlistEntryJpaRepository extends JpaRepository<WatchlistEntryEntity
 
   List<WatchlistEntryEntity> findByDocument(String document);
 
-  List<WatchlistEntryEntity> findByDocumentIsNull();
-
   void deleteBySource(String source);
 }

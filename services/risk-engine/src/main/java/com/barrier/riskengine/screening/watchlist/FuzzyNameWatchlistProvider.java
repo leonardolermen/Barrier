@@ -12,7 +12,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Provider de match por <b>nome</b> (fuzzy) contra as listas sem documento (OFAC/ONU e apelidos).
+ * Provider de match por <b>nome</b> (fuzzy) contra todas as entradas com nome (OFAC/ONU, apelidos
+ * e também as que têm documento — uma empresa sancionada casa por CNPJ e por razão social).
  * Normaliza o nome consultado e cada entrada e mede a similaridade Jaro-Winkler; acima do limiar
  * vira apontamento. Os apelidos (aka) das listas são ingeridos como entradas próprias, então são
  * cobertos naturalmente.

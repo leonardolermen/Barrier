@@ -63,7 +63,7 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
 
   @Override
   public List<WatchlistRecord> findNameEntries() {
-    return jpa.findByDocumentIsNull().stream().map(WatchlistEntryRepositoryImpl::toRecord).toList();
+    return jpa.findAll().stream().map(WatchlistEntryRepositoryImpl::toRecord).toList();
   }
 
   private static WatchlistRecord toRecord(WatchlistEntryEntity e) {
