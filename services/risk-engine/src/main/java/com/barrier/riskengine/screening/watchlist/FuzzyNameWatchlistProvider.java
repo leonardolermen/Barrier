@@ -32,7 +32,7 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
 
   public FuzzyNameWatchlistProvider(
       WatchlistEntryRepository repository,
-      @Value("${barrier.screening.fuzzy.threshold:0.90}") double threshold,
+      @Value("${barrier.screening.fuzzy.threshold:0.95}") double threshold,
       @Value("${barrier.screening.fuzzy.min-name-length:6}") int minNameLength) {
     this.repository = repository;
     this.threshold = threshold;

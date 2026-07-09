@@ -54,6 +54,8 @@ barrier:
   watchlist:
     # Fontes reais que baixam arquivos publicados. Desligadas por padrão (dev/testes não baixam
     # nada); ligue em produção. A importação isola falhas por fonte.
+    # Atualização automática: roda no startup e no cron abaixo (replaceSource é atômico).
+    refresh-cron: "0 0 3 * * *" # todo dia às 03:00
     cgu:
       enabled: false
       base-url: https://portaldatransparencia.gov.br
@@ -65,7 +67,7 @@ barrier:
       alt-path: /ALT.CSV # apelidos/aka
   screening:
     fuzzy:
-      threshold: 0.90
+      threshold: 0.95 # mais restritivo: evita falso positivo em nomes genéricos (ex.: "NATIONAL BANK OF …")
       min-name-length: 6
   risk:
     new-company:
