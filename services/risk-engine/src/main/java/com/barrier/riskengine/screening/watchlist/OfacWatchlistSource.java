@@ -5,6 +5,8 @@ import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -14,20 +16,30 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /**
- * OFAC SDN — lista de sancionados do Tesouro dos EUA, por <b>nome</b> (não há documento
- * BR). Ingere a lista principal ({@code sdn.csv}) e os apelidos ({@code alt.csv}) como entradas
- * sem documento; o {@link FuzzyNameWatchlistProvider} faz o match fuzzy contra elas.
+ * OFAC SDN — lista de sancionados do Tesouro dos EUA. Ingere a lista principal ({@code sdn.csv})
+ * e os apelidos ({@code alt.csv}). Cada nome vira uma entrada para o match por nome (fuzzy).
  *
- * <p>Arquivos CSV sem cabeçalho, separados por vírgula, com {@code "-0-"} para vazio. Habilitado
- * por {@code barrier.watchlist.ofac.enabled=true} (desligado por padrão).
+ * <p>Além do nome, a SDN traz no campo <i>remarks</i> o documento nacional (ex.:
+ * {@code Tax ID No. 42987643000110 (Brazil)}). Quando é um CPF/CNPJ do Brasil, ele é extraído e
+ * indexado como {@code document} — habilitando o <b>match exato por documento</b>, muito mais
+ * confiável que o nome (a razão social na lista costuma diferir do nome informado).
+ *
+ * <p>CSV sem cabeçalho, separado por vírgula, {@code "-0-"} para vazio. Habilitado por
+ * {@code barrier.watchlist.ofac.enabled=true} (desligado por padrão).
  */
 @Component
 @ConditionalOnProperty("barrier.watchlist.ofac.enabled")
 class OfacWatchlistSource implements WatchlistSource {
 
   private static final Logger log = LoggerFactory.getLogger(OfacWatchlistSource.class);
+  private static final String SOURCE = "OFAC";
   private static final int SDN_NAME_COLUMN = 1;
+  private static final int SDN_REMARKS_COLUMN = 11;
   private static final int ALT_NAME_COLUMN = 3;
+
+  /** Tax ID brasileiro no remarks: {@code Tax ID No. <digitos> (Brazil)}. */
+  private static final Pattern BRAZIL_TAX_ID =
+      Pattern.compile("Tax ID No\\.\\s*(\\d{11}|\\d{14})\\s*\\(Brazil\\)");
 
   private final RestClient client;
   private final String sdnPath;
@@ -44,15 +56,21 @@ class OfacWatchlistSource implements WatchlistSource {
 
   @Override
   public String source() {
-    return "OFAC";
+    return SOURCE;
   }
 
   @Override
   public WatchlistBatch fetch() {
     log.info("OFAC: baixando lista SDN ({}) e apelidos ({})", sdnPath, altPath);
-    List<WatchlistRecord> sdn = names(download(sdnPath), SDN_NAME_COLUMN, "OFAC SDN");
-    List<WatchlistRecord> alt = names(download(altPath), ALT_NAME_COLUMN, "OFAC aka");
-    log.info("OFAC: {} nomes (SDN) + {} apelidos (alt) = {} entradas", sdn.size(), alt.size(), sdn.size() + alt.size());
+    List<WatchlistRecord> sdn = parseSdn(download(sdnPath));
+    List<WatchlistRecord> alt = parseAlt(download(altPath));
+    long withDoc = sdn.stream().filter(r -> r.document() != null).count();
+    log.info(
+        "OFAC: {} nomes (SDN, {} com CPF/CNPJ) + {} apelidos (alt) = {} entradas",
+        sdn.size(),
+        withDoc,
+        alt.size(),
+        sdn.size() + alt.size());
     List<WatchlistRecord> records = new ArrayList<>(sdn.size() + alt.size());
     records.addAll(sdn);
     records.addAll(alt);
@@ -67,22 +85,57 @@ class OfacWatchlistSource implements WatchlistSource {
     return new String(body, StandardCharsets.ISO_8859_1);
   }
 
-  private List<WatchlistRecord> names(String csv, int nameColumn, String detail) {
+  /** Lista principal: nome (col 1) + documento BR extraído do remarks (col 11), quando houver. */
+  static List<WatchlistRecord> parseSdn(String csv) {
     List<WatchlistRecord> records = new ArrayList<>();
     for (String line : csv.split("\\r?\\n")) {
-      if (line.isBlank()) {
+      List<String> fields = row(line, SDN_NAME_COLUMN);
+      if (fields == null) {
         continue;
       }
-      List<String> fields = CsvSupport.split(line, ',');
-      if (nameColumn >= fields.size()) {
-        continue;
-      }
-      String name = fields.get(nameColumn);
-      if (name == null || name.isBlank() || "-0-".equals(name)) {
-        continue;
-      }
-      records.add(new WatchlistRecord(source(), MatchType.SANCTION, null, name, detail));
+      String name = fields.get(SDN_NAME_COLUMN);
+      String document = brazilTaxId(at(fields, SDN_REMARKS_COLUMN));
+      records.add(new WatchlistRecord(SOURCE, MatchType.SANCTION, document, name, "OFAC SDN"));
     }
     return records;
+  }
+
+  /** Apelidos (aka): nome (col 3), sem documento. */
+  static List<WatchlistRecord> parseAlt(String csv) {
+    List<WatchlistRecord> records = new ArrayList<>();
+    for (String line : csv.split("\\r?\\n")) {
+      List<String> fields = row(line, ALT_NAME_COLUMN);
+      if (fields == null) {
+        continue;
+      }
+      String name = fields.get(ALT_NAME_COLUMN);
+      records.add(new WatchlistRecord(SOURCE, MatchType.SANCTION, null, name, "OFAC aka"));
+    }
+    return records;
+  }
+
+  /** Divide a linha e valida que a coluna do nome existe e não é vazia ({@code -0-}). */
+  private static List<String> row(String line, int nameColumn) {
+    if (line.isBlank()) {
+      return null;
+    }
+    List<String> fields = CsvSupport.split(line, ',');
+    if (nameColumn >= fields.size()) {
+      return null;
+    }
+    String name = fields.get(nameColumn);
+    return name.isBlank() || "-0-".equals(name) ? null : fields;
+  }
+
+  private static String brazilTaxId(String remarks) {
+    if (remarks == null) {
+      return null;
+    }
+    Matcher m = BRAZIL_TAX_ID.matcher(remarks);
+    return m.find() ? m.group(1) : null;
+  }
+
+  private static String at(List<String> fields, int index) {
+    return index < fields.size() ? fields.get(index) : null;
   }
 }
