@@ -1,0 +1,8 @@
+# Profile de produção: habilita as fontes reais de watchlist (ver ADR-0013 e
+# WatchlistReadinessGuard, que falha a subida se estas flags ficarem desligadas aqui).
+barrier:
+  watchlist:
+    cgu:
+      enabled: true
+    ofac:
+      enabled: true

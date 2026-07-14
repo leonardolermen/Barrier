@@ -37,9 +37,14 @@ class OfacWatchlistSource implements WatchlistSource {
   private static final int SDN_REMARKS_COLUMN = 11;
   private static final int ALT_NAME_COLUMN = 3;
 
-  /** Tax ID brasileiro no remarks: {@code Tax ID No. <digitos> (Brazil)}. */
+  /**
+   * Tax ID brasileiro no remarks: {@code Tax ID No. <numero> (Brazil)}. Na lista real a maioria
+   * vem formatada ({@code 238.624.338-97}, {@code 11.791.301/0001-05}), só uma minoria em
+   * dígitos crus ({@code 42987643000110}) — o grupo captura ambos, os dígitos são extraídos e
+   * validados (11 ou 14) depois.
+   */
   private static final Pattern BRAZIL_TAX_ID =
-      Pattern.compile("Tax ID No\\.\\s*(\\d{11}|\\d{14})\\s*\\(Brazil\\)");
+      Pattern.compile("Tax ID No\\.\\s*([\\d./-]{11,18})\\s*\\(Brazil\\)");
 
   private final RestClient client;
   private final String sdnPath;
@@ -132,7 +137,11 @@ class OfacWatchlistSource implements WatchlistSource {
       return null;
     }
     Matcher m = BRAZIL_TAX_ID.matcher(remarks);
-    return m.find() ? m.group(1) : null;
+    if (!m.find()) {
+      return null;
+    }
+    String digits = CsvSupport.digitsOnly(m.group(1));
+    return digits != null && (digits.length() == 11 || digits.length() == 14) ? digits : null;
   }
 
   private static String at(List<String> fields, int index) {

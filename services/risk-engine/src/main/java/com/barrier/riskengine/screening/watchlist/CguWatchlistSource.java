@@ -5,6 +5,8 @@ import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
@@ -12,6 +14,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -21,10 +24,17 @@ import org.springframework.web.client.RestClient;
  *
  * <p>As colunas são resolvidas pelo cabeçalho (tolerante a variações de rótulo entre CEIS/CNEP),
  * então não dependem da ordem. Concretas: {@link CeisWatchlistSource}, {@link CnepWatchlistSource}.
+ *
+ * <p><b>Retenção do portal:</b> verificado contra o serviço real, o pacote do dia corrente
+ * costuma não estar disponível ainda (publicação acontece ao longo do dia) e pacotes de dias
+ * mais antigos somem do bucket — só o do dia anterior é garantido. Por isso {@link #fetch()}
+ * tenta a data de referência e recua um dia de cada vez ({@value #MAX_LOOKBACK_DAYS} tentativas)
+ * até achar um pacote disponível.
  */
 abstract class CguWatchlistSource implements WatchlistSource {
 
   private static final Logger log = LoggerFactory.getLogger(CguWatchlistSource.class);
+  private static final int MAX_LOOKBACK_DAYS = 3;
 
   private final RestClient client;
 
@@ -40,11 +50,32 @@ abstract class CguWatchlistSource implements WatchlistSource {
 
   @Override
   public WatchlistBatch fetch() {
-    log.info("CGU {}: baixando pacote /download-de-dados/{}/{}", source(), pathSegment(), referenceDate());
+    LocalDate date = LocalDate.parse(referenceDate(), DateTimeFormatter.BASIC_ISO_DATE);
+    RuntimeException lastFailure = null;
+    for (int attempt = 0; attempt < MAX_LOOKBACK_DAYS; attempt++) {
+      String candidate = date.minusDays(attempt).format(DateTimeFormatter.BASIC_ISO_DATE);
+      try {
+        return download(candidate);
+      } catch (HttpClientErrorException.Forbidden | HttpClientErrorException.NotFound e) {
+        log.warn(
+            "CGU {}: pacote de {} indisponível ({}), tentando o dia anterior",
+            source(),
+            candidate,
+            e.getStatusCode());
+        lastFailure = e;
+      }
+    }
+    throw new IllegalStateException(
+        "Nenhum pacote " + source() + " disponível nos últimos " + MAX_LOOKBACK_DAYS + " dias",
+        lastFailure);
+  }
+
+  private WatchlistBatch download(String date) {
+    log.info("CGU {}: baixando pacote /download-de-dados/{}/{}", source(), pathSegment(), date);
     byte[] zip =
         client
             .get()
-            .uri("/download-de-dados/{seg}/{date}", pathSegment(), referenceDate())
+            .uri("/download-de-dados/{seg}/{date}", pathSegment(), date)
             .retrieve()
             .body(byte[].class);
     if (zip == null || zip.length == 0) {
@@ -52,7 +83,7 @@ abstract class CguWatchlistSource implements WatchlistSource {
     }
     List<WatchlistRecord> records = parse(readCsv(zip));
     log.info("CGU {}: {} bytes baixados, {} registro(s) parseado(s)", source(), zip.length, records.size());
-    return new WatchlistBatch(pathSegment() + "-" + referenceDate(), records);
+    return new WatchlistBatch(pathSegment() + "-" + date, records);
   }
 
   private String readCsv(byte[] zip) {

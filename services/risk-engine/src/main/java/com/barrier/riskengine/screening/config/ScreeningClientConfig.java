@@ -21,7 +21,9 @@ class ScreeningClientConfig {
 
   @Bean
   RestClient ofacRestClient(
-      @Value("${barrier.watchlist.ofac.base-url:https://www.treasury.gov/ofac/downloads}")
+      @Value(
+              "${barrier.watchlist.ofac.base-url:"
+                  + "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports}")
           String baseUrl) {
     return download(baseUrl, Duration.ofSeconds(60));
   }
