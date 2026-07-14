@@ -16,6 +16,7 @@ sozinha.
 | 4 | Motor de risco (RiskRule → RiskResult, score 0–1000, `risk_scores`) | ✅ |
 | — | **Webhook API** (deployable separado: HMAC, retry, idempotência) | ✅ |
 | 5 | Hardening (OpenAPI, idempotency-key no intake, mascaramento) | ⏳ |
+| 6 | Conformidade Bacen — cadastro (CMN 4.753) e screening pronto para produção | ✅ |
 
 Detalhe do que ficou diferente do plano original: o motor de risco (Fase 4) adotou o contrato
 padronizado `RiskResult` (score/severidade/motivo/evidências/recomendação), escala **0–1000**
@@ -172,6 +173,47 @@ o caminho feliz; ArchUnit verde.
 log; contrato publicado.
 
 ---
+
+## Fase 6 — Conformidade Bacen: cadastro e screening pronto para produção
+
+**Objetivo:** fechar os dois gaps de conformidade mais diretos identificados na análise de
+arquitetura: dados de cadastro exigidos pela CMN 4.753 (hoje só documento/nome/tipo eram
+guardados) e o risco de subir em produção com a watchlist só no CSV seed.
+
+- **`SubjectProfile`** (novo agregado 1:1 com `Subject`, ver
+  [ADR-0012](../adr/0012-subject-registration-profile.md)): cadastro progressivo via
+  `PUT /v1/subjects/{document}/profile`; dados objetivos de PJ do bureau (`CompanyProfile`)
+  passam a ser persistidos em vez de descartados; `RegistrationCompleteness` é o checklist
+  mínimo por tipo de documento (PF/PJ).
+- **Gate de completude:** `AssessmentProcessor` rebaixa a recomendação de `APROVADO` para
+  `EM_REVISAO` quando o cadastro está incompleto, reaproveitando o workflow humano existente.
+- **`WatchlistReadinessGuard`** (ver
+  [ADR-0013](../adr/0013-watchlist-fontes-producao.md)): falha a subida se o profile `prod`
+  estiver ativo e só a watchlist `SEED` estiver disponível; `application-prod.yml` habilita
+  CGU/OFAC por padrão nesse profile.
+- **`BigBoostBureauProvider`** (ver [ADR-0014](../adr/0014-bureau-cpf-bigboost.md)): bureau real
+  de CPF (dataset `basic_data` da BigBoost/BigDataCorp), desligado por padrão
+  (`barrier.identity.bigboost.enabled=false`) — dev/testes continuam no `StubBureauProvider`;
+  habilitar é só configuração (flag + `AccessToken`/`TokenId`), sem CNPJ necessário para
+  contratar (ao contrário do Serpro).
+
+**Aceite:** avaliação de PF/PJ com cadastro incompleto cai em `EM_REVISAO` com fator explicando
+os campos faltantes; dados de PJ do bureau aparecem em `subject_profiles` depois da verificação
+de identidade; subida com `SPRING_PROFILES_ACTIVE=prod` e watchlist não habilitada falha no
+startup.
+
+### Backlog identificado (próxima rodada, ainda não implementado)
+
+- **COAF/SISCOAF** (Lei 9.613/98) — comunicação automática de operações suspeitas.
+- **Retenção de 10 anos** (Circular BCB 3.978) — política de retenção/expurgo, hoje inexistente.
+- **Criptografia em repouso / KMS** — documento e cadastro hoje ficam em texto plano no banco.
+- **UBO além do 1º grau** — `CorporateStructureRiskRule` só navega o QSA direto; falta
+  navegação da árvore societária até a pessoa física final.
+- **Bureau real de CPF via Serpro** — `BigBoostBureauProvider` (ADR-0014) já cobre esse gap sem
+  depender de CNPJ; `SerproBureauProvider` continua como esqueleto para quando a empresa estiver
+  formalizada e o convênio oficial (Receita Federal) fizer sentido como alternativa/fallback.
+- **Idempotency-key no intake** — um `POST /v1/assessments` duplicado ainda cria uma segunda
+  avaliação (o `Subject` fica deduplicado, o `Assessment` não).
 
 ## Fora de escopo (fases seguintes / outros deployables)
 

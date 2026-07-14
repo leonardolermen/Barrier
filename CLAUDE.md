@@ -94,7 +94,38 @@ retry/backoff (`DeliveryRetryScheduler`), idempotência por `eventId` e rastreio
 Fase B (mapeada, parcial): KYB de 1º grau já ativo (ver acima); pendentes: monitoramento
 contínuo, reavaliação periódica, recálculo por transação, navegação do QSA até 3º grau (provedor
 KYB dedicado), e registro multi-tenant de endpoints.
-Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento).
+
+Cadastro (CMN 4.753, ADR-0012): `SubjectProfile` (pacote `subject.profile`) é o cadastro
+completo do subject — 1:1 (`subject_profiles.subject_id UNIQUE`), separado do `Subject` (que
+continua sendo só a identidade mínima para dedup). Campos nullable divididos por tipo (PF:
+`birthDate`/`nationality`/`occupation`; PJ: `foundingDate`/`cnaeCode`/`shareCapital`/
+`legalRepresentative*`/`partners`); `partners` serializado em `partners_json` (mesmo padrão de
+`hits_json`/`results_json`). Cadastro é progressivo: `PUT /v1/subjects/{document}/profile`
+aceita atualização parcial a qualquer momento (`SubjectProfilePatch.applyTo` mescla, campo nulo
+preserva o existente). `RegistrationCompleteness.evaluate(documentType, profile)` é o checklist
+mínimo por tipo — `AssessmentProcessor` consulta depois do score de risco e rebaixa
+`APROVADO` → `EM_REVISAO` (com fator explicando os campos faltantes) se o cadastro estiver
+incompleto; reaproveita o workflow humano de decisão já existente, sem status novo. Os dados
+objetivos de PJ do bureau (`CompanyProfile` — antes descartados) agora são persistidos no
+`SubjectProfile` assim que `IdentityService.verify` retorna.
+
+Watchlist em produção (ADR-0013): `WatchlistReadinessGuard` (`ApplicationRunner`) falha o
+startup (`IllegalStateException`) se o profile `prod` estiver ativo e a única fonte de
+watchlist presente for a `SEED` — evita subir silenciosamente em produção sem CGU/OFAC
+habilitados. `application-prod.yml` já habilita `barrier.watchlist.cgu.enabled` e
+`.ofac.enabled` por padrão nesse profile.
+
+Bureau real de CPF (ADR-0014): `BigBoostBureauProvider` (`@Order(20)`, entre `BrasilApiBureauProvider`
+`=10` e `StubBureauProvider` `=100`) chama o dataset `basic_data` da BigBoost/BigDataCorp
+(`POST /pessoas`, headers `AccessToken`/`TokenId`) — self-service, sem CNPJ necessário para
+contratar (ao contrário do Serpro). Desligado por padrão
+(`barrier.identity.bigboost.enabled=false`); credenciais via `BIGBOOST_ACCESS_TOKEN`/
+`BIGBOOST_TOKEN_ID`. `Result` vazio → NOT_FOUND, não-vazio → MATCH (status do CPF na Receita
+para MISMATCH ainda não mapeado — campo exato não confirmado na doc pública).
+
+Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
+compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
+1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
 Build validado: `./mvnw test` verde (78 testes, inclui integração com Testcontainers).
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

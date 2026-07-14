@@ -55,7 +55,7 @@ docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api spring-boot:run
 ```
 
-- Risk Engine: <http://localhost:8080/actuator/health> · `POST /v1/assessments` (202) · `GET /v1/assessments/{id}`
+- Risk Engine: <http://localhost:8080/actuator/health> · `POST /v1/assessments` (202) · `GET /v1/assessments/{id}` · `PUT /v1/subjects/{document}/profile` (cadastro CMN 4.753)
   - toda chamada exige o header **`X-Client-Id`** (tenant); em dev use `X-Client-Id: default`
 - Webhook API: <http://localhost:8082/actuator/health> (consome `assessment.completed` → callback assinado)
 - Kafka UI: <http://localhost:8081>
@@ -84,6 +84,12 @@ concluídas + Webhook API:
   **LOW/MEDIUM/HIGH/CRITICAL**, com override (sanção→bloqueio, PEP→revisão), fatores
   explicáveis e **versão do motor** gravada (`risk_scores`).
 - **Webhook API** — entrega assinada (HMAC), retry com backoff, idempotência por evento.
+- **Fase 6** — conformidade Bacen: `SubjectProfile` (cadastro CMN 4.753, progressivo, com gate
+  de completude antes da aprovação automática — [ADR-0012](docs/adr/0012-subject-registration-profile.md))
+  e `WatchlistReadinessGuard` (falha a subida em produção com watchlist incompleta —
+  [ADR-0013](docs/adr/0013-watchlist-fontes-producao.md)).
 
-**Próximo:** Fase 5 (hardening: OpenAPI, idempotency-key no intake, mascaramento de CPF/CNPJ).
-Progresso detalhado no [plano de implementação](docs/implementation/risk-engine-plan.md).
+**Próximo:** Fase 5 (hardening: OpenAPI, idempotency-key no intake, mascaramento de CPF/CNPJ) e
+o backlog de compliance que ainda falta (COAF/SISCOAF, retenção de 10 anos, criptografia em
+repouso, UBO além do 1º grau, bureau real de CPF) — listado em detalhe na
+[Fase 6 do plano de implementação](docs/implementation/risk-engine-plan.md#fase-6--conformidade-bacen-cadastro-e-screening-pronto-para-produção).
