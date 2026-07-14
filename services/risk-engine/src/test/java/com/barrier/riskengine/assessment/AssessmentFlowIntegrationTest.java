@@ -11,6 +11,9 @@ import com.barrier.riskengine.assessment.controller.SubmitAssessmentRequest;
 import com.barrier.riskengine.subject.controller.SubjectResponse;
 import com.barrier.riskengine.assessment.domain.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentProcessor;
+import com.barrier.riskengine.subject.profile.controller.UpdateProfileRequest;
+import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -82,6 +85,33 @@ class AssessmentFlowIntegrationTest {
     assertThat(created.getBody()).isNotNull();
     String id = created.getBody().id();
     assertThat(created.getBody().status()).isEqualTo("EM_ANALISE");
+
+    // completa o cadastro mínimo (CMN 4.753) antes do processamento — sem isso a aprovação
+    // automática seria rebaixada para EM_REVISAO (RegistrationCompleteness)
+    var profileRequest =
+        new UpdateProfileRequest(
+            LocalDate.of(1990, 1, 1),
+            null,
+            "Brasileira",
+            "Engenheira",
+            null,
+            new UpdateProfileRequest.AddressRequest(
+                "Rua A", "10", null, "Centro", "São Paulo", "SP", "01000-000"),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of());
+    client()
+        .put()
+        .uri("/v1/subjects/11144477735/profile")
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(profileRequest)
+        .retrieve()
+        .toBodilessEntity();
 
     // processa e publica de forma determinística
     assertThat(processor.process()).isEqualTo(1);

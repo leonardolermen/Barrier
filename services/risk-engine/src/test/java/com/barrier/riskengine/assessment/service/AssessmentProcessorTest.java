@@ -3,6 +3,7 @@ package com.barrier.riskengine.assessment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,7 +25,10 @@ import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.service.ScreeningCommand;
 import com.barrier.riskengine.screening.service.ScreeningService;
+import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
+import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -37,11 +41,17 @@ class AssessmentProcessorTest {
   @Mock IdentityService identityService;
   @Mock ScreeningService screeningService;
   @Mock RiskScoringService riskScoringService;
+  @Mock SubjectProfileService subjectProfileService;
   @Mock AssessmentEventPublisher eventPublisher;
 
   private AssessmentProcessor newProcessor() {
     return new AssessmentProcessor(
-        repository, identityService, screeningService, riskScoringService, eventPublisher);
+        repository,
+        identityService,
+        screeningService,
+        riskScoringService,
+        subjectProfileService,
+        eventPublisher);
   }
 
   private Assessment pendingAssessment() {
@@ -56,6 +66,9 @@ class AssessmentProcessorTest {
                 IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"), null));
     when(screeningService.screen(any(ScreeningCommand.class)))
         .thenReturn(ScreeningResult.of("aid", List.of()));
+    lenient()
+        .when(subjectProfileService.completeness(any(UUID.class), any(String.class)))
+        .thenReturn(new RegistrationCompleteness(true, List.of()));
     return a;
   }
 
@@ -101,6 +114,20 @@ class AssessmentProcessorTest {
 
     assertThat(pending.status()).isEqualTo(AssessmentStatus.REPROVADO);
     assertThat(pending.riskLevel()).isEqualTo(RiskLevel.CRITICAL);
+  }
+
+  @Test
+  void cadastroIncompletoRebaixaAprovadoParaRevisao() {
+    var processor = newProcessor();
+    Assessment pending = pendingAssessment();
+    stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
+    when(subjectProfileService.completeness(any(UUID.class), any(String.class)))
+        .thenReturn(new RegistrationCompleteness(false, List.of("endereço")));
+
+    processor.process();
+
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.EM_REVISAO);
+    assertThat(pending.factors()).anyMatch(f -> f.contains("Cadastro incompleto"));
   }
 
   @Test

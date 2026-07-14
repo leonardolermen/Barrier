@@ -3,6 +3,7 @@ package com.barrier.riskengine.assessment.service;
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.service.IdentityResult;
 import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
@@ -13,6 +14,13 @@ import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.service.ScreeningCommand;
 import com.barrier.riskengine.screening.service.ScreeningService;
+import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
+import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
+import com.barrier.riskengine.subject.profile.domain.SubjectProfilePatch;
+import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -37,6 +45,7 @@ public class AssessmentProcessor {
   private final IdentityService identityService;
   private final ScreeningService screeningService;
   private final RiskScoringService riskScoringService;
+  private final SubjectProfileService subjectProfileService;
   private final AssessmentEventPublisher eventPublisher;
 
   public AssessmentProcessor(
@@ -44,11 +53,13 @@ public class AssessmentProcessor {
       IdentityService identityService,
       ScreeningService screeningService,
       RiskScoringService riskScoringService,
+      SubjectProfileService subjectProfileService,
       AssessmentEventPublisher eventPublisher) {
     this.repository = repository;
     this.identityService = identityService;
     this.screeningService = screeningService;
     this.riskScoringService = riskScoringService;
+    this.subjectProfileService = subjectProfileService;
     this.eventPublisher = eventPublisher;
   }
 
@@ -81,16 +92,26 @@ public class AssessmentProcessor {
                 assessment.documentDigits(),
                 assessment.name()));
 
+    UUID subjectId = UUID.fromString(assessment.subjectId());
+    if (identity.company() != null) {
+      persistCompanyProfile(subjectId, identity.company());
+    }
+
     RiskDecision decision =
         riskScoringService.score(
             new RiskContext(
                 assessment.id().asString(), identity.check(), screening, identity.company()));
 
-    assessment.complete(
-        decision.level(),
-        toStatus(decision.recommendation()),
-        decision.summary(),
-        decision.explanations());
+    AssessmentStatus finalStatus = toStatus(decision.recommendation());
+    List<String> factors = new ArrayList<>(decision.explanations());
+    RegistrationCompleteness completeness =
+        subjectProfileService.completeness(subjectId, assessment.documentType().name());
+    if (!completeness.complete() && finalStatus == AssessmentStatus.APROVADO) {
+      finalStatus = AssessmentStatus.EM_REVISAO;
+      factors.add("Cadastro incompleto: " + String.join(", ", completeness.missingFields()));
+    }
+
+    assessment.complete(decision.level(), finalStatus, decision.summary(), factors);
 
     repository.save(assessment);
     eventPublisher.publishCompleted(assessment);
@@ -100,6 +121,37 @@ public class AssessmentProcessor {
         assessment.status(),
         decision.totalScore(),
         decision.engineVersion());
+  }
+
+  /**
+   * Persiste os dados objetivos de PJ vindos do bureau (fundação, CNAE, QSA) no cadastro do
+   * subject — antes esses dados eram descartados depois de alimentar as risk rules.
+   */
+  private void persistCompanyProfile(UUID subjectId, CompanyProfile company) {
+    List<SubjectProfile.Partner> partners =
+        company.partners().stream()
+            .map(
+                p ->
+                    new SubjectProfile.Partner(
+                        p.name(), p.legalEntity(), p.foreign(), p.qualification()))
+            .toList();
+    subjectProfileService.upsert(
+        subjectId,
+        new SubjectProfilePatch(
+            null,
+            company.openingDate(),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            company.cnaeCode(),
+            company.cnaeDescription(),
+            null,
+            null,
+            null,
+            partners));
   }
 
   private static AssessmentStatus toStatus(RiskRecommendation recommendation) {
