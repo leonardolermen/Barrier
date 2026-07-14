@@ -51,6 +51,14 @@ barrier:
   identity:
     brasilapi:
       base-url: https://brasilapi.com.br
+    bigboost:
+      # Bureau real de CPF (BigDataCorp, dataset basic_data). Desligado por padrão — dev/testes
+      # usam o StubBureauProvider. Habilitar exige credenciais reais (self-service, sem CNPJ
+      # para contratar — ver docs/adr/0014-bureau-cpf-bigboost.md).
+      enabled: false
+      base-url: https://plataforma.bigdatacorp.com.br
+      access-token: ${BIGBOOST_ACCESS_TOKEN:}
+      token-id: ${BIGBOOST_TOKEN_ID:}
   watchlist:
     # Fontes reais que baixam arquivos publicados. Desligadas por padrão (dev/testes não baixam
     # nada); ligue em produção. A importação isola falhas por fonte.

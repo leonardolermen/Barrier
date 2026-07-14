@@ -18,4 +18,21 @@ class IdentityClientConfig {
     factory.setReadTimeout(Duration.ofSeconds(6));
     return RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
   }
+
+  @Bean
+  RestClient bigBoostRestClient(
+      @Value("${barrier.identity.bigboost.base-url:https://plataforma.bigdatacorp.com.br}")
+          String baseUrl,
+      @Value("${barrier.identity.bigboost.access-token:}") String accessToken,
+      @Value("${barrier.identity.bigboost.token-id:}") String tokenId) {
+    JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
+    factory.setReadTimeout(Duration.ofSeconds(6));
+    return RestClient.builder()
+        .baseUrl(baseUrl)
+        .requestFactory(factory)
+        .defaultHeader("AccessToken", accessToken)
+        .defaultHeader("TokenId", tokenId)
+        .defaultHeader("Accept", "application/json")
+        .build();
+  }
 }
