@@ -48,4 +48,17 @@ class ScreeningRulesTest {
 
     assertThat(hits).isEmpty();
   }
+
+  @Test
+  void adverseMediaRuleSoPegaRegistrosDeMidiaNegativa() {
+    var context =
+        contextWith(
+            new WatchlistEntry(MatchType.PEP, "base-pep", "F", "cargo"),
+            new WatchlistEntry(MatchType.ADVERSE_MEDIA, "stub-negative-media", "F", "fraude"));
+
+    var hits = new AdverseMediaMatchRule().evaluate(context);
+
+    assertThat(hits).hasSize(1);
+    assertThat(hits.get(0).type()).isEqualTo(MatchType.ADVERSE_MEDIA);
+  }
 }

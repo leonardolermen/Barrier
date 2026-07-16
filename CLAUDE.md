@@ -123,6 +123,16 @@ contratar (ao contrário do Serpro). Desligado por padrão
 `BIGBOOST_TOKEN_ID`. `Result` vazio → NOT_FOUND, não-vazio → MATCH (status do CPF na Receita
 para MISMATCH ainda não mapeado — campo exato não confirmado na doc pública).
 
+Mídia negativa: `MatchType.ADVERSE_MEDIA` (já existia, sem uso) ganhou a cadeia completa —
+`NegativeMediaProvider` (marca de `WatchlistProvider`, mesma interface de busca) +
+`StubNegativeMediaProvider` (casa nome contra CSV `barrier.negative-media.flagged-names`, vazio
+por padrão — sem falso positivo em dev; troca por BigBoost/LexisNexis/Dow Jones é só nova
+implementação da interface) + `AdverseMediaMatchRule` (screening, filtra o apontamento, mesmo
+padrão de `PepMatchRule`/`SanctionMatchRule`) + `NegativeMediaRiskRule` (risco, força REVIEW
+como PEP — apontamento de mídia pode ser homônimo/desatualizado, exige julgamento de analista
+antes de reprovar). Nenhuma mudança em `ScreeningService`/`RiskScoringService`: os dois já
+agregam qualquer bean das interfaces `WatchlistProvider`/`RiskRule`.
+
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
