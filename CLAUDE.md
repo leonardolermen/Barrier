@@ -123,6 +123,18 @@ contratar (ao contrário do Serpro). Desligado por padrão
 `BIGBOOST_TOKEN_ID`. `Result` vazio → NOT_FOUND, não-vazio → MATCH (status do CPF na Receita
 para MISMATCH ainda não mapeado — campo exato não confirmado na doc pública).
 
+Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
+(`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode
+variar por desfecho (ex.: `IdentityRiskRule` devolve `IDENTITY_NOT_FOUND`/`IDENTITY_MISMATCH`/
+`IDENTITY_UNAVAILABLE`, mas a família é `IDENTITY`). `risk_rule_registry` (migration V015)
+guarda o estado operacional de cada família — `enabled`, vigência (`valid_from`/`valid_until`)
+e `criticality` (INFO/ALERT/REVIEW/BLOCK, informativa) — editável sem deploy via
+`PUT`/`GET /v1/risk-rules` (`RiskRuleRegistryController`). `RiskRuleRegistryService.isActive`
+é fail-open: regra sem linha no registry fica ativa (o registry é kill switch/vigência, não
+allowlist). `RiskScoringService` filtra as regras pelo registry antes de avaliar — diferente do
+override por tenant (`tenant_risk_config`, que ajusta parâmetro de uma regra já ativa por
+parceiro), isto liga/desliga a regra inteira, globalmente, para todos os tenants.
+
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.

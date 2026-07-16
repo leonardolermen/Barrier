@@ -49,4 +49,9 @@ public class SensitiveCnaeRiskRule implements RiskRule {
   private static String nullSafe(String value) {
     return value == null ? "" : value;
   }
+
+  @Override
+  public String code() {
+    return "SENSITIVE_CNAE";
+  }
 }

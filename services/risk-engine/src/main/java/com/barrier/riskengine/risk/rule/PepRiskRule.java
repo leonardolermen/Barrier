@@ -33,4 +33,9 @@ public class PepRiskRule implements RiskRule {
         evidences,
         RiskRecommendation.REVIEW);
   }
+
+  @Override
+  public String code() {
+    return "PEP";
+  }
 }

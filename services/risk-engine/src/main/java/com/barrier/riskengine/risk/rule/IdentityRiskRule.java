@@ -50,4 +50,9 @@ public class IdentityRiskRule implements RiskRule {
       case VERIFIED -> RiskResult.notApplicable("IDENTITY_OK");
     };
   }
+
+  @Override
+  public String code() {
+    return "IDENTITY";
+  }
 }

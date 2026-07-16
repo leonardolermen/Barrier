@@ -50,4 +50,9 @@ public class NewCompanyRiskRule implements RiskRule {
     }
     return RiskResult.notApplicable("NEW_COMPANY");
   }
+
+  @Override
+  public String code() {
+    return "NEW_COMPANY";
+  }
 }
