@@ -164,6 +164,15 @@ como PEP — apontamento de mídia pode ser homônimo/desatualizado, exige julga
 antes de reprovar). Nenhuma mudança em `ScreeningService`/`RiskScoringService`: os dois já
 agregam qualquer bean das interfaces `WatchlistProvider`/`RiskRule`.
 
+Consistência cadastral: `RiskContext` ganhou `profile` (o `SubjectProfile` do subject, buscado
+por `SubjectProfileService.find` — novo método, cadastro em branco se não houver nenhum dado
+ainda); `AssessmentProcessor` busca uma vez e reaproveita tanto no `RiskContext` quanto no gate
+de completude (`RegistrationCompleteness.evaluate` direto, sem outra query). `ConsistencyRiskRule`
+(código `PHONE_ADDRESS_MISMATCH`) compara o DDD do telefone com o estado do endereço via
+`PhoneAreaCode` (tabela DDD→UF do plano ANATEL) — sinal barato, não depende de provedor externo;
+não força recomendação (mudança/portabilidade é comum), só soma ao score. Nome divergente/CPF de
+outro titular já eram cobertos por `IdentityRiskRule` (`IDENTITY_MISMATCH`), não duplicado aqui.
+
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.

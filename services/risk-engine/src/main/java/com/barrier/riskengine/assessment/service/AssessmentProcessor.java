@@ -96,6 +96,7 @@ public class AssessmentProcessor {
     if (identity.company() != null) {
       persistCompanyProfile(subjectId, identity.company());
     }
+    SubjectProfile profile = subjectProfileService.find(subjectId);
 
     RiskDecision decision =
         riskScoringService.score(
@@ -104,12 +105,13 @@ public class AssessmentProcessor {
                 assessment.tenantId(),
                 identity.check(),
                 screening,
-                identity.company()));
+                identity.company(),
+                profile));
 
     AssessmentStatus finalStatus = toStatus(decision.recommendation());
     List<String> factors = new ArrayList<>(decision.explanations());
     RegistrationCompleteness completeness =
-        subjectProfileService.completeness(subjectId, assessment.documentType().name());
+        RegistrationCompleteness.evaluate(assessment.documentType().name(), profile);
     if (!completeness.complete() && finalStatus == AssessmentStatus.APROVADO) {
       finalStatus = AssessmentStatus.EM_REVISAO;
       factors.add("Cadastro incompleto: " + String.join(", ", completeness.missingFields()));

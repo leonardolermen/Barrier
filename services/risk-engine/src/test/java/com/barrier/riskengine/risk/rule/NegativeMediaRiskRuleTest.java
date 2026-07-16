@@ -20,6 +20,7 @@ class NegativeMediaRiskRuleTest {
         "default",
         IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"),
         ScreeningResult.of("aid", List.of(hits)),
+        null,
         null);
   }
 
