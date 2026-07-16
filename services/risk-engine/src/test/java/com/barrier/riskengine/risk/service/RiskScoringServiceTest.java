@@ -49,6 +49,7 @@ class RiskScoringServiceTest {
   private RiskContext context(IdentityStatus identity, ScreeningHit... hits) {
     return new RiskContext(
         "aid",
+        "default",
         IdentityCheck.create("aid", identity, "stub", "d"),
         ScreeningResult.of("aid", List.of(hits)),
         null);

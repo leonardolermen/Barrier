@@ -100,7 +100,11 @@ public class AssessmentProcessor {
     RiskDecision decision =
         riskScoringService.score(
             new RiskContext(
-                assessment.id().asString(), identity.check(), screening, identity.company()));
+                assessment.id().asString(),
+                assessment.tenantId(),
+                identity.check(),
+                screening,
+                identity.company()));
 
     AssessmentStatus finalStatus = toStatus(decision.recommendation());
     List<String> factors = new ArrayList<>(decision.explanations());
