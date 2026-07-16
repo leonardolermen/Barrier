@@ -17,6 +17,7 @@ sozinha.
 | — | **Webhook API** (deployable separado: HMAC, retry, idempotência) | ✅ |
 | 5 | Hardening (OpenAPI, idempotency-key no intake, mascaramento) | ⏳ |
 | 6 | Conformidade Bacen — cadastro (CMN 4.753) e screening pronto para produção | ✅ |
+| 7 | Regras de risco configuráveis por tenant (`tenant_risk_config`, API de gestão) | ✅ |
 
 Detalhe do que ficou diferente do plano original: o motor de risco (Fase 4) adotou o contrato
 padronizado `RiskResult` (score/severidade/motivo/evidências/recomendação), escala **0–1000**
@@ -214,6 +215,49 @@ startup.
   formalizada e o convênio oficial (Receita Federal) fizer sentido como alternativa/fallback.
 - **Idempotency-key no intake** — um `POST /v1/assessments` duplicado ainda cria uma segunda
   avaliação (o `Subject` fica deduplicado, o `Assessment` não).
+
+## Fase 8 — Motor de risco ampliado (fila de PRs em andamento)
+
+**Objetivo:** cobrir as dimensões de risco que faltam hoje (KYC além do bureau, mídia negativa,
+sinais de fraude digital, histórico/score externo, monitoramento contínuo), mantendo cada
+dimensão como módulo independente (interface de provider + `RiskRule` própria), sem virar
+caixa-preta — toda regra nova segue o mesmo contrato `RiskResult` (score/severidade/motivo/
+evidências/recomendação) já em produção desde a Fase 4.
+
+Ordem (cada item é um PR próprio, com testes unitário + integração; próximo só começa com o
+anterior mergeado):
+
+1. **Rule engine — criticidade/enabled/vigência.** Pré-requisito estrutural pros itens
+   seguintes: cada `RiskRule` ganha metadado consultável/alterável sem deploy (criticidade
+   INFO/ALERT/REVIEW/BLOCK, habilitada ou não, vigência), reaproveitando
+   `tenant_risk_config`/`TenantRiskConfigService` (Fase 7). `RiskScoringService` pula regra
+   desabilitada ou fora de vigência.
+2. **Mídia negativa** — `NegativeMediaProvider` (Strategy/Gateway) + `NegativeMediaRiskRule`;
+   termos: lavagem de dinheiro, corrupção, fraude, tráfico, terrorismo, pirâmide financeira.
+   Stub em dev; interface pronta para BigBoost/LexisNexis/Dow Jones.
+3. **Consistência cadastral** — `ConsistencyRiskRule`: nome divergente do bureau, CPF de titular
+   diferente do informado, DDD do telefone incompatível com o estado do endereço. Usa dados já
+   existentes (`SubjectProfile`/`CompanyProfile`/`IdentityCheck`), sem provider novo.
+4. **Sinais de rede** — módulo `device`: intake aceita `ip`/`deviceId`/`fingerprint` opcionais;
+   `GeoIpProvider` (Strategy) + `DeviceRiskRule` (GeoIP divergente do endereço, VPN/proxy, mesmo
+   device em N cadastros recentes — nova tabela `device_seen`). Maior escopo; dividir em
+   sub-PRs se necessário.
+5. **Telefone e email** — `PhoneRiskRule` (VoIP, descartável, DDD/operadora incompatível) e
+   `EmailRiskRule` (domínio descartável/temporário, idade do domínio, reuso do mesmo email em
+   vários cadastros). Providers atrás de interface, stub em dev.
+6. **Histórico interno e score externo** — tabela `subject_history` (chargeback, PIX devolvido,
+   denúncia, conta encerrada por fraude) + `HistoryRiskRule`; `CreditScoreProvider` (Strategy)
+   para Serasa/Boa Vista/SCR, stub em dev.
+7. **Monitoramento transacional contínuo (PLD/FT pós-onboarding)** — maior mudança estrutural:
+   hoje o motor só roda no onboarding. Precisa de um novo fluxo consumindo eventos de transação
+   via Kafka; **aqui sim vale reavaliar um serviço separado** (ciclo de vida e escala diferentes
+   do onboarding — ao contrário da decisão tomada para cadastro/config, que ficaram no
+   monólito). Regras: PIX em rajada, valor alto em conta nova, layering/smurfing/circularização,
+   contas de passagem. Exige ADR novo se o split for adiante.
+
+**Aceite por item:** regra nova cobre cenário positivo/negativo em teste unitário; teste de
+integração (Testcontainers) prova que a regra entra no score/fatores explicáveis de uma
+avaliação real; ArchUnit e `./mvnw test` verdes antes de abrir o PR seguinte.
 
 ## Fora de escopo (fases seguintes / outros deployables)
 

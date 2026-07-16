@@ -121,7 +121,7 @@ Bureau real de CPF (ADR-0014): `BigBoostBureauProvider` (`@Order(20)`, entre `Br
 contratar (ao contrário do Serpro). Desligado por padrão
 (`barrier.identity.bigboost.enabled=false`); credenciais via `BIGBOOST_ACCESS_TOKEN`/
 `BIGBOOST_TOKEN_ID`. `Result` vazio → NOT_FOUND, não-vazio → MATCH (status do CPF na Receita
-para MISMATCH ainda não mapeado — campo exato não confirmado na doc pública).
+para MISMATCH ainda não mapeado — campo exato não confirmado 
 
 Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
 (`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode
@@ -134,6 +134,25 @@ e `criticality` (INFO/ALERT/REVIEW/BLOCK, informativa) — editável sem deploy 
 allowlist). `RiskScoringService` filtra as regras pelo registry antes de avaliar — diferente do
 override por tenant (`tenant_risk_config`, que ajusta parâmetro de uma regra já ativa por
 parceiro), isto liga/desliga a regra inteira, globalmente, para todos os tenants.
+
+Regras de risco configuráveis por tenant: `tenant_risk_config` (migration V015, chave composta
+`tenant_id`/`rule_code`/`param_key`) guarda overrides por parceiro; `TenantRiskConfigService`
+(pacote `tenant.config.service`) lê o override ou cai no default global (o mesmo `@Value` de
+antes). Só regras de apetite de risco — não regulatórias — são configuráveis:
+`NewCompanyRiskRule` (`months`/`score`) e `SensitiveCnaeRiskRule` (`cnae-codes`, que só é
+**unido** ao default, nunca substituído/`score`). Bandas de score, `IdentityRiskRule`,
+`PepRiskRule`/`SanctionRiskRule` (risco) e `PepMatchRule`/`SanctionMatchRule` (screening)
+continuam fixas — ArchUnit (`regras_fixas_nao_dependem_de_config_por_tenant`) barra essas
+classes de depender de `TenantRiskConfigService`. `RiskContext` ganhou `tenantId`
+(`AssessmentProcessor` preenche a partir de `Assessment.tenantId()`); o parâmetro efetivamente
+usado por uma regra disparada entra na evidência (`config:months=`/`config:score=`) —
+`ENGINE_VERSION` continua só sobre código/algoritmo, não sobre config de tenant. Gestão via
+`PUT`/`GET /v1/tenants/{tenantId}/risk-config` (`TenantRiskConfigController`), validado por
+`TenantRiskConfigValidator` (allowlist de `rule_code`/`param_key` + ranges); é operação
+interna/admin, não self-service do parceiro — deixar o próprio tenant relaxar seus controles é
+o risco que a validação existe para evitar (sem gate de admin-auth dedicado ainda, mesma
+pré-auth por header do resto da API). Decisão de não separar isso (nem o cadastro PF/PJ já
+existente) em serviço novo: ADR-0009 (monólito modular, split incremental por gatilho real).
 
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
