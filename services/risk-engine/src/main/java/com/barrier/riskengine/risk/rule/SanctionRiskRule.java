@@ -30,4 +30,9 @@ public class SanctionRiskRule implements RiskRule {
         evidences,
         RiskRecommendation.REJECT);
   }
+
+  @Override
+  public String code() {
+    return "SANCTION";
+  }
 }

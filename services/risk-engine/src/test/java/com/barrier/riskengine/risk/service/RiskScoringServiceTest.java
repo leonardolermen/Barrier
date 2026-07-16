@@ -2,6 +2,7 @@ package com.barrier.riskengine.risk.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.identity.domain.IdentityCheck;
@@ -10,11 +11,13 @@ import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
+import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import com.barrier.riskengine.risk.repository.RiskScoreRepository;
 import com.barrier.riskengine.risk.rule.CorporateStructureRiskRule;
 import com.barrier.riskengine.risk.rule.IdentityRiskRule;
 import com.barrier.riskengine.risk.rule.PepRiskRule;
 import com.barrier.riskengine.risk.rule.RiskContext;
+import com.barrier.riskengine.risk.rule.RiskRule;
 import com.barrier.riskengine.risk.rule.SanctionRiskRule;
 import com.barrier.riskengine.screening.domain.MatchType;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
@@ -30,20 +33,22 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RiskScoringServiceTest {
 
   @Mock RiskScoreRepository repository;
+  @Mock RiskRuleRegistryService registryService;
 
   private RiskScoringService service;
+  private List<RiskRule> configuredRules;
 
   @BeforeEach
   void setUp() {
     when(repository.save(any(RiskScore.class))).thenAnswer(inv -> inv.getArgument(0));
-    service =
-        new RiskScoringService(
-            List.of(
-                new IdentityRiskRule(),
-                new SanctionRiskRule(),
-                new PepRiskRule(),
-                new CorporateStructureRiskRule()),
-            repository);
+    when(registryService.isActive(anyString())).thenReturn(true);
+    configuredRules =
+        List.of(
+            new IdentityRiskRule(),
+            new SanctionRiskRule(),
+            new PepRiskRule(),
+            new CorporateStructureRiskRule());
+    service = new RiskScoringService(configuredRules, repository, registryService);
   }
 
   private RiskContext context(IdentityStatus identity, ScreeningHit... hits) {
@@ -96,6 +101,21 @@ class RiskScoringServiceTest {
     assertThat(d.totalScore()).isEqualTo(900);
     assertThat(d.level()).isEqualTo(RiskLevel.CRITICAL);
     assertThat(d.recommendation()).isEqualTo(RiskRecommendation.REJECT);
+  }
+
+  @Test
+  void regraDesabilitadaNoRegistryNaoContribuiParaOScore() {
+    when(registryService.isActive("SANCTION")).thenReturn(false);
+
+    RiskDecision d =
+        service.score(
+            context(
+                IdentityStatus.VERIFIED, new ScreeningHit(MatchType.SANCTION, "OFAC", "X", "sdn")));
+
+    assertThat(d.totalScore()).isZero();
+    assertThat(d.level()).isEqualTo(RiskLevel.LOW);
+    assertThat(d.recommendation()).isEqualTo(RiskRecommendation.APPROVE);
+    assertThat(d.results()).isEmpty();
   }
 
   @Test

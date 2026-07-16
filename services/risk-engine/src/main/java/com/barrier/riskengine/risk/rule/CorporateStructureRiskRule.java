@@ -67,4 +67,9 @@ public class CorporateStructureRiskRule implements RiskRule {
         evidences,
         null);
   }
+
+  @Override
+  public String code() {
+    return "CORPORATE_STRUCTURE";
+  }
 }

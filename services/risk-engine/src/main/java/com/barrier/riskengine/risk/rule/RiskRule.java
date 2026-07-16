@@ -13,4 +13,13 @@ import com.barrier.riskengine.risk.domain.model.RiskResult;
 public interface RiskRule {
 
   RiskResult evaluate(RiskContext context);
+
+  /**
+   * Código estável da família de regra (ex.: {@code NEW_COMPANY}), usado pelo registry de
+   * regras ({@code RiskRuleRegistryService}) para habilitar/desabilitar e definir vigência sem
+   * deploy — independente do {@code ruleCode} granular que a regra pode variar em
+   * {@link RiskResult} (ex.: {@code IdentityRiskRule} devolve códigos diferentes por desfecho,
+   * mas pertence à família {@code IDENTITY}).
+   */
+  String code();
 }
