@@ -41,4 +41,9 @@ public class NegativeMediaRiskRule implements RiskRule {
         evidences,
         RiskRecommendation.REVIEW);
   }
+
+  @Override
+  public String code() {
+    return "NEGATIVE_MEDIA";
+  }
 }

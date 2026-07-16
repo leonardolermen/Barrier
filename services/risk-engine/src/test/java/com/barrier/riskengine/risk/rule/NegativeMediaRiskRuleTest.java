@@ -17,6 +17,7 @@ class NegativeMediaRiskRuleTest {
   private RiskContext context(ScreeningHit... hits) {
     return new RiskContext(
         "aid",
+        "default",
         IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"),
         ScreeningResult.of("aid", List.of(hits)),
         null);

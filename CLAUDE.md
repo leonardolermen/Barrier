@@ -126,7 +126,7 @@ para MISMATCH ainda não mapeado — campo exato não confirmado
 Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
 (`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode
 variar por desfecho (ex.: `IdentityRiskRule` devolve `IDENTITY_NOT_FOUND`/`IDENTITY_MISMATCH`/
-`IDENTITY_UNAVAILABLE`, mas a família é `IDENTITY`). `risk_rule_registry` (migration V015)
+`IDENTITY_UNAVAILABLE`, mas a família é `IDENTITY`). `risk_rule_registry` (migration V016)
 guarda o estado operacional de cada família — `enabled`, vigência (`valid_from`/`valid_until`)
 e `criticality` (INFO/ALERT/REVIEW/BLOCK, informativa) — editável sem deploy via
 `PUT`/`GET /v1/risk-rules` (`RiskRuleRegistryController`). `RiskRuleRegistryService.isActive`
