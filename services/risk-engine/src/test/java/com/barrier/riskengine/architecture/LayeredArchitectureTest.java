@@ -54,4 +54,29 @@ class LayeredArchitectureTest {
           .matching("com.barrier.riskengine.(*)..")
           .should()
           .beFreeOfCycles();
+
+  /**
+   * Regras de risco/screening regulatórias fixas (bandas de score, identidade, PEP, sanção) não
+   * podem virar configuráveis por tenant por engano — só regras de apetite de risco (ex.:
+   * {@code NewCompanyRiskRule}, {@code SensitiveCnaeRiskRule}) podem depender do serviço de
+   * config por tenant.
+   */
+  @ArchTest
+  static final ArchRule regras_fixas_nao_dependem_de_config_por_tenant =
+      com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses()
+          .that()
+          .haveSimpleName("IdentityRiskRule")
+          .or()
+          .haveSimpleName("PepRiskRule")
+          .or()
+          .haveSimpleName("SanctionRiskRule")
+          .or()
+          .haveSimpleName("PepMatchRule")
+          .or()
+          .haveSimpleName("SanctionMatchRule")
+          .or()
+          .haveSimpleName("RiskScoringService")
+          .should()
+          .dependOnClassesThat()
+          .haveSimpleName("TenantRiskConfigService");
 }

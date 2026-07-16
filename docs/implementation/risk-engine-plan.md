@@ -17,6 +17,7 @@ sozinha.
 | — | **Webhook API** (deployable separado: HMAC, retry, idempotência) | ✅ |
 | 5 | Hardening (OpenAPI, idempotency-key no intake, mascaramento) | ⏳ |
 | 6 | Conformidade Bacen — cadastro (CMN 4.753) e screening pronto para produção | ✅ |
+| 7 | Regras de risco configuráveis por tenant (`tenant_risk_config`, API de gestão) | ✅ |
 
 Detalhe do que ficou diferente do plano original: o motor de risco (Fase 4) adotou o contrato
 padronizado `RiskResult` (score/severidade/motivo/evidências/recomendação), escala **0–1000**
