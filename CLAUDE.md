@@ -154,6 +154,16 @@ o risco que a validação existe para evitar (sem gate de admin-auth dedicado ai
 pré-auth por header do resto da API). Decisão de não separar isso (nem o cadastro PF/PJ já
 existente) em serviço novo: ADR-0009 (monólito modular, split incremental por gatilho real).
 
+Mídia negativa: `MatchType.ADVERSE_MEDIA` (já existia, sem uso) ganhou a cadeia completa —
+`NegativeMediaProvider` (marca de `WatchlistProvider`, mesma interface de busca) +
+`StubNegativeMediaProvider` (casa nome contra CSV `barrier.negative-media.flagged-names`, vazio
+por padrão — sem falso positivo em dev; troca por BigBoost/LexisNexis/Dow Jones é só nova
+implementação da interface) + `AdverseMediaMatchRule` (screening, filtra o apontamento, mesmo
+padrão de `PepMatchRule`/`SanctionMatchRule`) + `NegativeMediaRiskRule` (risco, força REVIEW
+como PEP — apontamento de mídia pode ser homônimo/desatualizado, exige julgamento de analista
+antes de reprovar). Nenhuma mudança em `ScreeningService`/`RiskScoringService`: os dois já
+agregam qualquer bean das interfaces `WatchlistProvider`/`RiskRule`.
+
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
