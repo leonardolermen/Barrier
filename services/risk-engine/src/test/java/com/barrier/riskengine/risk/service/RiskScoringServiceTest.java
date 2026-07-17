@@ -60,6 +60,7 @@ class RiskScoringServiceTest {
         null,
         null,
         null,
+        0,
         0);
   }
 

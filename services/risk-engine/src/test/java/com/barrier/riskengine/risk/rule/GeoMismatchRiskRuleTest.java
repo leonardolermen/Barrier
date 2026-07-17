@@ -37,6 +37,7 @@ class GeoMismatchRiskRuleTest {
         null,
         profile,
         ip,
+        0,
         0);
   }
 

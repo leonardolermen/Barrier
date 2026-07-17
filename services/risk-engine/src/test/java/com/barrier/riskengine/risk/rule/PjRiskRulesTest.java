@@ -46,6 +46,7 @@ class PjRiskRulesTest {
         company,
         null,
         null,
+        0,
         0);
   }
 
@@ -127,6 +128,7 @@ class PjRiskRulesTest {
             company(LocalDate.of(2010, 1, 1), "6619302", List.of()),
             null,
             null,
+            0,
             0);
 
     RiskResult r = rule.evaluate(acmeContext);
@@ -165,6 +167,7 @@ class PjRiskRulesTest {
             company(LocalDate.of(2010, 1, 1), "9999999", List.of()),
             null,
             null,
+            0,
             0);
 
     // CNAE do default ("6619302") continua funcionando para outros tenants
