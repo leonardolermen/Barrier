@@ -4,6 +4,7 @@ import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.device.service.DeviceSeenService;
+import com.barrier.riskengine.history.service.SubjectHistoryService;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.service.IdentityResult;
 import com.barrier.riskengine.identity.service.IdentityService;
@@ -48,6 +49,7 @@ public class AssessmentProcessor {
   private final RiskScoringService riskScoringService;
   private final SubjectProfileService subjectProfileService;
   private final DeviceSeenService deviceSeenService;
+  private final SubjectHistoryService subjectHistoryService;
   private final AssessmentEventPublisher eventPublisher;
 
   public AssessmentProcessor(
@@ -57,6 +59,7 @@ public class AssessmentProcessor {
       RiskScoringService riskScoringService,
       SubjectProfileService subjectProfileService,
       DeviceSeenService deviceSeenService,
+      SubjectHistoryService subjectHistoryService,
       AssessmentEventPublisher eventPublisher) {
     this.repository = repository;
     this.identityService = identityService;
@@ -64,6 +67,7 @@ public class AssessmentProcessor {
     this.riskScoringService = riskScoringService;
     this.subjectProfileService = subjectProfileService;
     this.deviceSeenService = deviceSeenService;
+    this.subjectHistoryService = subjectHistoryService;
     this.eventPublisher = eventPublisher;
   }
 
@@ -110,6 +114,10 @@ public class AssessmentProcessor {
         profile.email() == null
             ? 0
             : subjectProfileService.countOtherSubjectsWithEmail(subjectId, profile.email());
+    List<String> historyEventTypes =
+        subjectHistoryService.findBySubjectId(subjectId).stream()
+            .map(event -> event.eventType().name())
+            .toList();
 
     RiskDecision decision =
         riskScoringService.score(
@@ -122,7 +130,10 @@ public class AssessmentProcessor {
                 profile,
                 assessment.ip(),
                 deviceReuseCount,
-                emailReuseCount));
+                emailReuseCount,
+                assessment.documentType().name(),
+                assessment.documentDigits(),
+                historyEventTypes));
 
     AssessmentStatus finalStatus = toStatus(decision.recommendation());
     List<String> factors = new ArrayList<>(decision.explanations());
