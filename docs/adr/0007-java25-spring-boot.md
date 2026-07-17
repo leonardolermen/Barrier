@@ -3,6 +3,11 @@
 - **Status:** Aceito
 - **Data:** 2026-07-04
 
+> **Nota:** o projeto atualizou para **Spring Boot 4.0** (Spring Framework 7) durante a
+> implementação, antes de qualquer código de produto ser escrito sobre o 3.x. A decisão de
+> framework abaixo (Spring Boot vs. alternativas) continua válida; só a versão mudou. Ver
+> `pom.xml` para a versão vigente.
+
 ## Contexto
 
 Precisamos escolher linguagem e framework para o core regulatório. O setor financeiro

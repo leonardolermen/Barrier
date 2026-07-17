@@ -13,9 +13,9 @@ e o `CLAUDE.md` apontam para cá.
 | Build       | Maven (Reactor), monorepo multi-módulo              |
 | Banco       | PostgreSQL + Flyway (migrations versionadas)        |
 | Mensageria  | Apache Kafka (Spring for Apache Kafka)              |
-| Mapeamento  | MapStruct (DTO ↔ domínio ↔ entidade)               |
+| Mapeamento  | Mappers escritos à mão (`XyzEntityMapper`/`XyzDtoMapper`, classes `final` com métodos estáticos) — MapStruct está no `pom.xml` mas ainda sem uso real |
 | Testes      | JUnit 5, Mockito, AssertJ, Testcontainers, ArchUnit |
-| API docs    | springdoc-openapi                                   |
+| API docs    | Nenhuma ainda — springdoc-openapi previsto para a Fase 5 (ver [risk-engine-plan.md](risk-engine-plan.md)) |
 | Observ.     | Micrometer + logs estruturados (JSON)               |
 
 ## Regra de camadas (clássica)
@@ -31,7 +31,7 @@ Regras invioláveis (validadas por ArchUnit):
 2. `service` acessa integrações externas **apenas por interface** do pacote `client`,
    nunca por SDK/HTTP direto.
 3. `controller` fala DTO; `service`/`domain` falam objetos de domínio; `repository` fala
-   entidade. Conversão por **MapStruct** nas bordas.
+   entidade. Conversão por mapper dedicado nas bordas (hoje escrito à mão).
 4. Entidades JPA **não** vazam para o `controller`.
 5. Sem regra de negócio em `controller` nem em `repository`.
 
@@ -42,12 +42,12 @@ Regras invioláveis (validadas por ArchUnit):
 | **Layered architecture**    | Estrutura de todo serviço                                  |
 | **Repository**              | Persistência via Spring Data JPA                          |
 | **Transactional Outbox**    | Toda publicação de evento (grava outbox na mesma tx)      |
-| **Gateway / Adapter**       | Integrações externas: `BureauProvider`, `WatchlistProvider` (interface + impl) |
-| **Strategy**                | Regras de score de risco (`RiskRule`) e regras de screening |
-| **Pipeline / Orchestrator** | `AssessmentService` orquestra identity → screening → risk  |
+| **Gateway / Adapter**       | Integrações externas: `BureauProvider`, `WatchlistProvider`, `GeoIpProvider`, `PhoneProvider`, `EmailProvider`, `CreditScoreProvider` (interface + impl, stub em dev) |
+| **Strategy**                | Regras de risco (`RiskRule`) e de screening (`ScreeningRule`) — adicionar fonte = adicionar regra, sem tocar no motor |
+| **Pipeline / Orchestrator** | `AssessmentProcessor` orquestra identity → screening → risk → gate de completude |
 | **Value Object**            | `Cpf`, `Cnpj`, `AssessmentId` (records validados)         |
 | **Factory**                 | Construção de eventos de domínio e agregados              |
-| **DTO + Mapper**            | Fronteiras (MapStruct)                                    |
+| **DTO + Mapper**            | Fronteiras (mapper dedicado por módulo, escrito à mão)     |
 | **Idempotency key**         | Consumidores/entregas: `assessmentId + eventType`         |
 
 Não usamos pattern por pattern — cada um resolve um problema concreto acima. Nada de
@@ -100,8 +100,12 @@ abstração especulativa.
 
 - REST com verbos e status corretos: `POST /assessments` → `202`, `GET /assessments/{id}`
   → `200`/`404`.
-- Contrato documentado em OpenAPI (springdoc). DTO de request validado com Bean Validation.
+- Contrato ainda não documentado em OpenAPI (springdoc é Fase 5) — usar a
+  [collection Postman](../api/README.md) como referência viva. DTO de request validado com
+  Bean Validation.
 - Versionamento por caminho quando quebrar contrato (`/v1/...`).
+- Endpoints internos/admin (config por tenant, registry de regras, histórico) usam a mesma
+  pré-auth por header do resto da API — sem gate de admin-auth dedicado ainda.
 
 ## Segurança e LGPD
 

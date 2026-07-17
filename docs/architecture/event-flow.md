@@ -12,17 +12,27 @@ O núcleo de decisão é **em processo** dentro da Risk Engine (os módulos iden
 2. **assessment** (módulo) persiste em `EM_ANALISE` e responde **`202 { id, status:
    EM_ANALISE }`** na hora.
 3. Um processador assíncrono (`@Scheduled`) pega os pendentes e, para cada um:
-   1. **identity** — valida CPF/CNPJ no bureau (stub) → `IdentityCheck`.
-   2. **screening** — busca PEP/sanções nas listas (stub) e aplica as regras → `ScreeningResult`.
-   3. **risk** — o motor roda as `RiskRule`, soma um **score 0–1000**, deriva o nível
-      (LOW/MEDIUM/HIGH/CRITICAL) e a recomendação (APPROVE/REVIEW/REJECT) → `RiskDecision`.
-   4. A recomendação vira o status (APROVADO/EM_REVISAO/REPROVADO); os fatores explicáveis
-      ficam gravados na avaliação.
+   1. **identity** — valida CPF/CNPJ no bureau (BrasilAPI/BigBoost reais, com fallback em
+      cadeia; stub só em dev/teste) → `IdentityCheck` (+ `CompanyProfile` de PJ).
+   2. **screening** — busca PEP/sanções (CGU/OFAC reais, gated por config) e mídia negativa
+      (stub) e aplica as regras → `ScreeningResult`.
+   3. **risk** — o motor roda as regras ativas (Strategy, filtradas pelo *rule registry*),
+      soma um **score 0–1000**, deriva o nível (LOW/MEDIUM/HIGH/CRITICAL) e a recomendação
+      (APPROVE/REVIEW/REJECT) → `RiskDecision`. As regras consomem identidade, screening,
+      cadastro, sinais de rede (GeoIP/device/telefone/email) e histórico interno.
+   4. A recomendação vira o status (APROVADO/EM_REVISAO/REPROVADO); se o cadastro (CMN
+      4.753) estiver incompleto, `APROVADO` é rebaixado para `EM_REVISAO`. Os fatores
+      explicáveis ficam gravados na avaliação.
 4. Na **mesma transação** da conclusão, grava `barrier.assessment.completed` na `outbox`.
 5. O **relay de outbox** (`@Scheduled`) publica o evento no Kafka.
 6. A **Webhook API** consome o evento, monta o corpo, assina com **HMAC** e faz `POST` no
    endpoint do cliente; registra a entrega em `deliveries` (idempotência por `eventId`,
    retry com backoff). O cliente também pode consultar `GET /v1/assessments/{id}`.
+
+Revisão manual (EDD): uma avaliação em `EM_REVISAO` é decidida por humano via
+`POST /v1/assessments/{id}/decision`, que reemite `barrier.assessment.completed` com o
+desfecho final — o mesmo contrato de evento, só que disparado pela decisão humana em vez do
+processador automático.
 
 ### Sequência
 

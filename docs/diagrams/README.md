@@ -9,3 +9,9 @@
 
 O primeiro diagrama reflete o que existe hoje; os dois seguintes são a visão-alvo. Os SVGs são
 autocontidos (cores embutidas) e renderizam direto no GitHub e na IDE.
+
+> **Nota:** `arquitetura-atual.svg` mostra só os 4 módulos originais (assessment/identity/
+> screening/risk) em detalhe, por espaço — os módulos adicionados depois (subject/profile,
+> tenant risk-config, rule registry, geoip/device/phone/email/credit/history) estão listados
+> em texto no rodapé do diagrama, não desenhados como caixas. Para o inventário completo e
+> atualizado de módulos, ver [domain-contexts.md](../architecture/domain-contexts.md).

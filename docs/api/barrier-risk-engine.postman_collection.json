@@ -210,6 +210,125 @@
             },
             "description": "Retorna o subject (documento mascarado) só se o tenant tem vínculo; senão 404 (não vaza cliente de outro tenant)."
           }
+        },
+        {
+          "name": "Update profile (cadastro CMN 4.753)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Id", "value": "{{clientId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"birthDate\": \"1990-01-01\",\n  \"nationality\": \"Brasileira\",\n  \"occupation\": \"Engenheira\",\n  \"address\": {\n    \"street\": \"Rua A\",\n    \"number\": \"10\",\n    \"complement\": null,\n    \"district\": \"Centro\",\n    \"city\": \"São Paulo\",\n    \"state\": \"SP\",\n    \"zipCode\": \"01000-000\"\n  },\n  \"phone\": \"11912345678\",\n  \"email\": \"fulano@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/subjects/{{document}}/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "subjects", "{{document}}", "profile"]
+            },
+            "description": "Cadastro progressivo (PUT parcial — campo omitido preserva o valor existente). Sem os campos mínimos do tipo de documento, a avaliação cai em EM_REVISAO mesmo com score baixo (RegistrationCompleteness)."
+          }
+        },
+        {
+          "name": "Record history event (chargeback/PIX devolvido/fraude)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Id", "value": "{{clientId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventType\": \"CHARGEBACK\",\n  \"detail\": \"Chargeback em compra de 2026-07-01\",\n  \"occurredAt\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/subjects/{{document}}/history",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "subjects", "{{document}}", "history"]
+            },
+            "description": "Endpoint interno/admin: registra um evento de histórico (CHARGEBACK/PIX_RETURNED/FRAUD_REPORT/ACCOUNT_CLOSED_FRAUD) que alimenta HistoryRiskRule nas próximas avaliações deste subject."
+          }
+        },
+        {
+          "name": "List history events",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Client-Id", "value": "{{clientId}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/subjects/{{document}}/history",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "subjects", "{{document}}", "history"]
+            },
+            "description": "Lista os eventos de histórico interno já registrados para o subject."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenant Risk Config",
+      "item": [
+        {
+          "name": "Upsert override de regra por tenant",
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruleCode\": \"NEW_COMPANY\",\n  \"paramKey\": \"months\",\n  \"paramValue\": \"12\",\n  \"updatedBy\": \"admin@barrier\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/tenants/{{clientId}}/risk-config",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "tenants", "{{clientId}}", "risk-config"]
+            },
+            "description": "Operação interna/admin — só regras de apetite de risco na allowlist (`NEW_COMPANY`, `SENSITIVE_CNAE`) aceitam override; regras regulatórias fixas (sanção/PEP/identidade/bandas) respondem 400."
+          }
+        },
+        {
+          "name": "Get config efetiva do tenant",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/tenants/{{clientId}}/risk-config",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "tenants", "{{clientId}}", "risk-config"]
+            },
+            "description": "Merge default global + overrides do tenant, um item por (rule_code, param_key) configurável."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rule Registry",
+      "item": [
+        {
+          "name": "List regras (enabled/vigência/criticidade)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1/risk-rules", "host": ["{{baseUrl}}"], "path": ["v1", "risk-rules"] },
+            "description": "Estado operacional de cada família de regra — kill switch global (todos os tenants), diferente do override por parceiro em Tenant Risk Config."
+          }
+        },
+        {
+          "name": "Desabilitar/reconfigurar uma regra",
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"CNAE sensível a PLD-FT\",\n  \"criticality\": \"ALERT\",\n  \"enabled\": false,\n  \"validFrom\": null,\n  \"validUntil\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/risk-rules/SENSITIVE_CNAE",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "risk-rules", "SENSITIVE_CNAE"]
+            },
+            "description": "Liga/desliga uma família de regra ou limita sua vigência, sem deploy — ajuste operacional de emergência."
+          }
         }
       ]
     }

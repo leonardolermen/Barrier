@@ -55,8 +55,12 @@ docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api spring-boot:run
 ```
 
-- Risk Engine: <http://localhost:8080/actuator/health> · `POST /v1/assessments` (202) · `GET /v1/assessments/{id}` · `PUT /v1/subjects/{document}/profile` (cadastro CMN 4.753)
+- Risk Engine: <http://localhost:8080/actuator/health>
+  - `POST /v1/assessments` (202) · `GET /v1/assessments/{id}` · `POST /v1/assessments/{id}/decision` (EDD)
+  - `GET /v1/subjects/{document}` · `PUT /v1/subjects/{document}/profile` (cadastro CMN 4.753) · `POST`/`GET /v1/subjects/{document}/history` (histórico interno)
+  - `PUT`/`GET /v1/tenants/{tenantId}/risk-config` (override de regra por parceiro) · `PUT`/`GET /v1/risk-rules` (liga/desliga regra sem deploy)
   - toda chamada exige o header **`X-Client-Id`** (tenant); em dev use `X-Client-Id: default`
+  - contrato completo e exemplos: [collection Postman](docs/api/README.md) (ainda sem OpenAPI/springdoc — Fase 5)
 - Webhook API: <http://localhost:8082/actuator/health> (consome `assessment.completed` → callback assinado)
 - Kafka UI: <http://localhost:8081>
 
@@ -73,12 +77,14 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 
 ## Status
 
-🏗️ **Fluxo ponta a ponta funcionando** (build verde, 45 testes). Fases 0–4 da Risk Engine
-concluídas + Webhook API:
+🏗️ **Fluxo ponta a ponta funcionando** (build verde, 144 testes em `main`). Fases 0–7 da
+Risk Engine concluídas + Webhook API:
 
 - **Fase 0–1** — scaffolding, intake `202`/`GET`, transactional outbox.
-- **Fase 2** — módulo Identity (`BureauProvider` atrás de interface, `identity_checks`).
-- **Fase 3** — módulo Screening (`WatchlistProvider` + regras Strategy, `screening_results`).
+- **Fase 2** — módulo Identity: cadeia de bureaus com fallback — CNPJ real (BrasilAPI), CPF
+  real (BigBoost, `ADR-0014`, desligado por padrão), stub como último fallback.
+- **Fase 3** — módulo Screening: watchlists **ingeridas** (`ADR-0010`) — CGU/CEIS/CNEP e OFAC
+  reais (gated por config), match fuzzy por nome, mais mídia negativa (stub).
 - **Fase 4** — motor de risco: cada `RiskRule` devolve um `RiskResult` padronizado (score,
   severidade, motivo, evidências, recomendação); score **0–1000** em bandas
   **LOW/MEDIUM/HIGH/CRITICAL**, com override (sanção→bloqueio, PEP→revisão), fatores
@@ -88,8 +94,19 @@ concluídas + Webhook API:
   de completude antes da aprovação automática — [ADR-0012](docs/adr/0012-subject-registration-profile.md))
   e `WatchlistReadinessGuard` (falha a subida em produção com watchlist incompleta —
   [ADR-0013](docs/adr/0013-watchlist-fontes-producao.md)).
+- **Fase 7** — regras de risco configuráveis: override de parâmetro **por tenant**
+  (`tenant_risk_config`, allowlist de regras de apetite — nunca as regulatórias fixas) e um
+  **registry global de regras** (liga/desliga uma família de regra e define vigência sem
+  deploy, kill switch operacional independente do override por parceiro).
 
-**Próximo:** Fase 5 (hardening: OpenAPI, idempotency-key no intake, mascaramento de CPF/CNPJ) e
-o backlog de compliance que ainda falta (COAF/SISCOAF, retenção de 10 anos, criptografia em
-repouso, UBO além do 1º grau, bureau real de CPF) — listado em detalhe na
-[Fase 6 do plano de implementação](docs/implementation/risk-engine-plan.md#fase-6--conformidade-bacen-cadastro-e-screening-pronto-para-produção).
+**Em revisão (branches empilhadas, ainda não mergeadas em `main`):** Fase 8 — motor de risco
+ampliado com mais sinais explicáveis: consistência telefone×endereço, GeoIP, reuso de
+device/email, VoIP, email descartável, histórico interno (chargeback/PIX devolvido/fraude) e
+gancho pronto para score de crédito externo (Serasa/Boa Vista/SCR). Detalhe completo e ordem
+das PRs em [risk-engine-plan.md](docs/implementation/risk-engine-plan.md#fase-8--motor-de-risco-ampliado-fila-de-prs-em-andamento).
+
+**Próximo:** Fase 5 (hardening: OpenAPI, idempotency-key no intake, mascaramento de CPF/CNPJ),
+monitoramento transacional contínuo pós-onboarding (PIX em rajada, layering — maior mudança
+estrutural da fila, motor hoje só roda no onboarding) e o backlog de compliance que ainda
+falta (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do 1º grau) —
+listado em detalhe no [plano de implementação](docs/implementation/risk-engine-plan.md).

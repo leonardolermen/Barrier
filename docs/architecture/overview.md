@@ -18,9 +18,10 @@
 Dois deployables no monorepo — ver [ADR-0009](../adr/0009-risk-engine-modular-monolith-first.md):
 
 1. **Risk Engine API** (`services/risk-engine`, `:8080`): um único deployable que encapsula
-   **assessment, identity, screening e risk** como módulos internos em camadas clássicas,
-   conversando por chamada de método em processo. Publica `barrier.assessment.completed` no
-   Kafka via outbox.
+   **assessment, identity, screening, risk, subject/profile (cadastro CMN 4.753), tenant
+   (config de risco por parceiro) e device/geoip/phone/email/credit/history** (sinais de
+   risco adicionais) como módulos internos em camadas clássicas, conversando por chamada de
+   método em processo. Publica `barrier.assessment.completed` no Kafka via outbox.
 2. **Webhook API** (`services/webhook-api`, `:8082`): consome `assessment.completed` e entrega
    o resultado no endpoint do cliente, com HMAC, retry/backoff e idempotência.
 
@@ -72,11 +73,13 @@ da Risk Engine API; os demais entram nas fases seguintes.
 | Serviço / módulo     | Papel                                                            | Estado                     |
 |----------------------|------------------------------------------------------------------|----------------------------|
 | **Assessment**       | Borda. Intake, resposta 202, consulta de status, agregação final | ✅ módulo da Risk Engine    |
-| **Identity**         | Validação CPF/CNPJ, cruzamento com bureaus (stub)               | ✅ módulo da Risk Engine    |
-| **Screening**        | Match PEP, sanções (ONU/OFAC/CGU) (stub)                        | ✅ módulo da Risk Engine    |
-| **Risk scoring**     | Motor de regras: score 0–1000, nível e recomendação             | ✅ módulo da Risk Engine    |
+| **Identity**         | Validação CPF/CNPJ, cruzamento com bureaus (BrasilAPI/BigBoost reais + stub) | ✅ módulo da Risk Engine |
+| **Screening**        | Match PEP, sanções (ONU/OFAC/CGU real) e mídia negativa (stub)   | ✅ módulo da Risk Engine    |
+| **Subject / Profile** | Identidade mínima do cliente (dedup) + cadastro CMN 4.753 progressivo | ✅ módulo da Risk Engine |
+| **Risk scoring**     | Motor de regras (Strategy): score 0–1000, nível e recomendação; registry liga/desliga regra sem deploy | ✅ módulo da Risk Engine |
+| **Tenant / Config**  | Resolução de tenant + overrides de parâmetro de risco por parceiro | ✅ módulo da Risk Engine |
 | **Webhook API**      | Callback assíncrono ao cliente com HMAC, retry e idempotência   | ✅ deployable próprio       |
-| **Case management**  | Análise manual / EDD, fila de analistas                          | ⏳ fase 2                   |
+| **Case management**  | Revisão manual (EDD) via `POST /decision`; fila de analistas dedicada segue fase 2 | 🟡 parcial |
 | **Audit & compliance** | Trilha imutável, retenção, evidência regulatória              | ⏳ fase 2                   |
 
 ## Estilo interno de cada serviço (camadas clássicas)

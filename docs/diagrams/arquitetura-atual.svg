@@ -1,6 +1,6 @@
 <svg width="100%" viewBox="0 0 680 545" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
   <title>Arquitetura implementada do Barrier</title>
-  <desc>Risk Engine API com os módulos assessment, identity, screening e risk; publica assessment.completed no Kafka via outbox; a Webhook API consome e entrega o callback assinado ao endpoint do cliente. Cada serviço tem seu schema no PostgreSQL.</desc>
+  <desc>Risk Engine API com os módulos assessment, identity, screening, risk e outros módulos internos (subject/profile, tenant risk-config, rule registry, sinais de rede/telefone/email/histórico — omitidos aqui por espaço, ver domain-contexts.md); publica assessment.completed no Kafka via outbox; a Webhook API consome e entrega o callback assinado ao endpoint do cliente. Cada serviço tem seu schema no PostgreSQL.</desc>
   <style>
     .tp{fill:#1a1a1a;} .tm{fill:#8a8f98;} .ts{fill:#334155;}
     .blue rect{fill:#dbeafe;stroke:#93c5fd;} .blue text{fill:#1e3a8a;}
@@ -32,12 +32,12 @@
   <g class="mod">
     <rect x="370" y="106" width="150" height="36" rx="6"/>
     <text x="380" y="122" font-size="11" font-weight="500">identity</text>
-    <text x="380" y="135" font-size="9">bureau (stub)</text>
+    <text x="380" y="135" font-size="9">bureau real (CNPJ/CPF)</text>
   </g>
   <g class="mod">
     <rect x="212" y="150" width="150" height="36" rx="6"/>
     <text x="222" y="166" font-size="11" font-weight="500">screening</text>
-    <text x="222" y="179" font-size="9">PEP · sanções (lista local)</text>
+    <text x="222" y="179" font-size="9">PEP · sanções · mídia negativa</text>
   </g>
   <g class="mod">
     <rect x="370" y="150" width="150" height="36" rx="6"/>
@@ -96,8 +96,8 @@
   <line x1="198" y1="400" x2="162" y2="400" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#a)"/>
   <text x="180" y="392" text-anchor="middle" class="lbl">callback</text>
 
-  <text x="20" y="486" font-size="11" class="tm">Fase 2: Case management · Audit &amp; compliance · monitoramento contínuo · reavaliação periódica · reporting COAF</text>
-  <text x="20" y="506" font-size="11" class="tm">Fase KYB: estrutura societária (quadro até 3º grau) · registro multi-tenant de endpoints de webhook</text>
+  <text x="20" y="486" font-size="11" class="tm">Não mostrado (mesmo monólito): subject/profile · tenant risk-config · rule registry · geoip/device/phone/email/credit/history</text>
+  <text x="20" y="506" font-size="11" class="tm">Fase 2: Case management dedicado · Audit &amp; compliance · monitoramento transacional contínuo · reporting COAF</text>
 
   <defs>
     <marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
