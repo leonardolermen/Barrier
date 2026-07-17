@@ -24,7 +24,10 @@ class ConsistencyRiskRuleTest {
         profile,
         null,
         0,
-        0);
+        0,
+        "CPF",
+        "11144477735",
+        List.of());
   }
 
   private SubjectProfile profileWith(String phone, String state) {

@@ -21,7 +21,10 @@ class DeviceReuseRiskRuleTest {
         null,
         null,
         reuseCount,
-        0);
+        0,
+        "CPF",
+        "11144477735",
+        List.of());
   }
 
   @Test

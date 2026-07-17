@@ -21,7 +21,10 @@ class EmailReuseRiskRuleTest {
         null,
         null,
         0,
-        emailReuseCount);
+        emailReuseCount,
+        "CPF",
+        "11144477735",
+        List.of());
   }
 
   @Test

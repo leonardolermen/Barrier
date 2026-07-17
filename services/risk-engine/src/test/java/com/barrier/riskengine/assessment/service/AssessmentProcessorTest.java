@@ -13,6 +13,7 @@ import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.DocumentType;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.device.service.DeviceSeenService;
+import com.barrier.riskengine.history.service.SubjectHistoryService;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.service.IdentityResult;
@@ -46,6 +47,7 @@ class AssessmentProcessorTest {
   @Mock RiskScoringService riskScoringService;
   @Mock SubjectProfileService subjectProfileService;
   @Mock DeviceSeenService deviceSeenService;
+  @Mock SubjectHistoryService subjectHistoryService;
   @Mock AssessmentEventPublisher eventPublisher;
 
   private AssessmentProcessor newProcessor() {
@@ -56,6 +58,7 @@ class AssessmentProcessorTest {
         riskScoringService,
         subjectProfileService,
         deviceSeenService,
+        subjectHistoryService,
         eventPublisher);
   }
 

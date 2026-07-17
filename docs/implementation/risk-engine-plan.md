@@ -248,9 +248,11 @@ anterior mergeado):
    email em vários `subject_profiles`). DDD/operadora incompatível já coberto por
    `ConsistencyRiskRule` (item 3); idade do domínio (WHOIS) não entrou — precisa de provedor
    real, mesmo motivo do VPN/proxy do item 4.
-6. **Histórico interno e score externo** — tabela `subject_history` (chargeback, PIX devolvido,
-   denúncia, conta encerrada por fraude) + `HistoryRiskRule`; `CreditScoreProvider` (Strategy)
-   para Serasa/Boa Vista/SCR, stub em dev.
+6. ✅ **Histórico interno e score externo** — `subject_history` + `HistoryRiskRule` (peso por
+   tipo de evento); eventos registrados via API interna `POST /v1/subjects/{document}/history`
+   (sem pipeline automático de transação/PIX ainda — ver item 7). `CreditScoreProvider`
+   (Strategy) + `StubCreditScoreProvider` sempre "sem score" — `CreditScoreRiskRule` fica
+   inerte até uma integração real (Serasa/Boa Vista/SCR) substituir o stub.
 7. **Monitoramento transacional contínuo (PLD/FT pós-onboarding)** — maior mudança estrutural:
    hoje o motor só roda no onboarding. Precisa de um novo fluxo consumindo eventos de transação
    via Kafka; **aqui sim vale reavaliar um serviço separado** (ciclo de vida e escala diferentes

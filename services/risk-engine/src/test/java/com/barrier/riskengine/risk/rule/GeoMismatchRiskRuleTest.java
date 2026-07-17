@@ -38,7 +38,10 @@ class GeoMismatchRiskRuleTest {
         profile,
         ip,
         0,
-        0);
+        0,
+        "CPF",
+        "11144477735",
+        List.of());
   }
 
   @Test

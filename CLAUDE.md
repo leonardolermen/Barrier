@@ -196,6 +196,18 @@ query) — mesmo padrão do `DeviceReuseRiskRule`, calculado em `AssessmentProce
 `ConsistencyRiskRule`; idade do domínio (WHOIS) fica pro backlog, junto de VPN/proxy — precisa
 de provedor externo real.
 
+Histórico interno e score externo: `subject_history` (migration V023) guarda eventos
+(CHARGEBACK/PIX_RETURNED/FRAUD_REPORT/ACCOUNT_CLOSED_FRAUD) registrados via API interna
+`POST /v1/subjects/{document}/history` (`SubjectHistoryController`, mesma pré-auth por header) —
+hoje não há pipeline automático de transação/PIX alimentando isso (fica pra Fase 8 item 7,
+monitoramento contínuo). `HistoryRiskRule` soma o peso por tipo de evento (score/severidade
+configuráveis por tipo). `CreditScoreRiskRule` usa `CreditScoreProvider` (Strategy) — hoje só
+`StubCreditScoreProvider`, que sempre devolve "sem score" (nenhuma integração real ainda com
+Serasa/Boa Vista/SCR), então a regra fica inerte até um provider real substituir o stub.
+`RiskContext` ganhou `documentType`/`documentDigits` (a regra de score consulta por documento,
+igual GeoIP/telefone/email consultam por IP/telefone/email) e `historyEventTypes` (calculado em
+`AssessmentProcessor` antes do motor rodar).
+
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.

@@ -47,7 +47,10 @@ class PjRiskRulesTest {
         null,
         null,
         0,
-        0);
+        0,
+        "CNPJ",
+        "11222333000181",
+        List.of());
   }
 
   private CompanyProfile company(LocalDate opening, String cnae, List<Partner> partners) {
@@ -129,7 +132,10 @@ class PjRiskRulesTest {
             null,
             null,
             0,
-            0);
+            0,
+            "CNPJ",
+            "11222333000181",
+            List.of());
 
     RiskResult r = rule.evaluate(acmeContext);
 
@@ -168,7 +174,10 @@ class PjRiskRulesTest {
             null,
             null,
             0,
-            0);
+            0,
+            "CNPJ",
+            "11222333000181",
+            List.of());
 
     // CNAE do default ("6619302") continua funcionando para outros tenants
     assertThat(
