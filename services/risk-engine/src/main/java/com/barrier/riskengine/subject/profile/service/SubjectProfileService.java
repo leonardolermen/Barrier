@@ -33,8 +33,12 @@ public class SubjectProfileService {
   /** Verifica se o cadastro do subject cobre o checklist mínimo do tipo de documento. */
   @Transactional(readOnly = true)
   public RegistrationCompleteness completeness(UUID subjectId, String documentType) {
-    SubjectProfile profile =
-        repository.findBySubjectId(subjectId).orElseGet(() -> SubjectProfile.blank(subjectId));
-    return RegistrationCompleteness.evaluate(documentType, profile);
+    return RegistrationCompleteness.evaluate(documentType, find(subjectId));
+  }
+
+  /** Cadastro do subject, em branco se ainda não houver nenhum dado preenchido. */
+  @Transactional(readOnly = true)
+  public SubjectProfile find(UUID subjectId) {
+    return repository.findBySubjectId(subjectId).orElseGet(() -> SubjectProfile.blank(subjectId));
   }
 }

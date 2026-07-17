@@ -25,8 +25,10 @@ import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.service.ScreeningCommand;
 import com.barrier.riskengine.screening.service.ScreeningService;
-import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
+import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -66,10 +68,31 @@ class AssessmentProcessorTest {
                 IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"), null));
     when(screeningService.screen(any(ScreeningCommand.class)))
         .thenReturn(ScreeningResult.of("aid", List.of()));
-    lenient()
-        .when(subjectProfileService.completeness(any(UUID.class), any(String.class)))
-        .thenReturn(new RegistrationCompleteness(true, List.of()));
+    lenient().when(subjectProfileService.find(any(UUID.class))).thenReturn(completeCpfProfile());
     return a;
+  }
+
+  /** Cadastro que cobre o checklist mínimo de PF (ver {@code RegistrationCompleteness}). */
+  private static SubjectProfile completeCpfProfile() {
+    return new SubjectProfile(
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        LocalDate.of(1990, 1, 1),
+        null,
+        "brasileira",
+        "engenheiro",
+        null,
+        new SubjectProfile.Address("Rua X", "1", null, "Centro", "Cidade", "SP", "00000-000"),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        Instant.now(),
+        Instant.now());
   }
 
   private void stubRisk(RiskLevel level, RiskRecommendation recommendation, int score) {
@@ -121,8 +144,8 @@ class AssessmentProcessorTest {
     var processor = newProcessor();
     Assessment pending = pendingAssessment();
     stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
-    when(subjectProfileService.completeness(any(UUID.class), any(String.class)))
-        .thenReturn(new RegistrationCompleteness(false, List.of("endereço")));
+    when(subjectProfileService.find(any(UUID.class)))
+        .thenReturn(SubjectProfile.blank(UUID.randomUUID()));
 
     processor.process();
 
