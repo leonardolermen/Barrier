@@ -38,7 +38,13 @@ class AssessmentServiceTest {
   private Assessment emRevisao(String tenantId) {
     Assessment a =
         Assessment.submit(
-            tenantId, UUID.randomUUID().toString(), DocumentType.CPF, "111.444.777-35", "Fulano");
+            tenantId,
+            UUID.randomUUID().toString(),
+            DocumentType.CPF,
+            "111.444.777-35",
+            "Fulano",
+            null,
+            null);
     a.complete(RiskLevel.MEDIUM, AssessmentStatus.EM_REVISAO, "revisar", List.of());
     return a;
   }
@@ -52,7 +58,8 @@ class AssessmentServiceTest {
     Assessment result =
         service()
             .submit(
-                new SubmitAssessmentCommand("default", DocumentType.CPF, "111.444.777-35", "Fulano"));
+                new SubmitAssessmentCommand(
+                    "default", DocumentType.CPF, "111.444.777-35", "Fulano", null, null));
 
     assertThat(result.status()).isEqualTo(AssessmentStatus.EM_ANALISE);
     assertThat(result.tenantId()).isEqualTo("default");
@@ -66,7 +73,7 @@ class AssessmentServiceTest {
                 service()
                     .submit(
                         new SubmitAssessmentCommand(
-                            "default", DocumentType.CPF, "00000000000", "Fulano")))
+                            "default", DocumentType.CPF, "00000000000", "Fulano", null, null)))
         .isInstanceOf(InvalidDocumentException.class);
   }
 
@@ -83,7 +90,13 @@ class AssessmentServiceTest {
   void getDeOutroTenantNaoEncontra() {
     var assessment =
         Assessment.submit(
-            "acme", UUID.randomUUID().toString(), DocumentType.CPF, "111.444.777-35", "Fulano");
+            "acme",
+            UUID.randomUUID().toString(),
+            DocumentType.CPF,
+            "111.444.777-35",
+            "Fulano",
+            null,
+            null);
     when(repository.findById(assessment.id())).thenReturn(Optional.of(assessment));
 
     assertThatThrownBy(() -> service().get(assessment.id(), "outro-tenant"))
@@ -116,7 +129,13 @@ class AssessmentServiceTest {
   void decideDeAvaliacaoNaoEmRevisaoConflita() {
     var a =
         Assessment.submit(
-            "default", UUID.randomUUID().toString(), DocumentType.CPF, "111.444.777-35", "Fulano");
+            "default",
+            UUID.randomUUID().toString(),
+            DocumentType.CPF,
+            "111.444.777-35",
+            "Fulano",
+            null,
+            null);
     when(repository.findById(a.id())).thenReturn(Optional.of(a));
 
     assertThatThrownBy(() -> service().decide(a.id(), "default", true, "x", null))

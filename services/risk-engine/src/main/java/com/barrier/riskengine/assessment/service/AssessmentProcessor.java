@@ -3,6 +3,7 @@ package com.barrier.riskengine.assessment.service;
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.device.service.DeviceSeenService;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.service.IdentityResult;
 import com.barrier.riskengine.identity.service.IdentityService;
@@ -46,6 +47,7 @@ public class AssessmentProcessor {
   private final ScreeningService screeningService;
   private final RiskScoringService riskScoringService;
   private final SubjectProfileService subjectProfileService;
+  private final DeviceSeenService deviceSeenService;
   private final AssessmentEventPublisher eventPublisher;
 
   public AssessmentProcessor(
@@ -54,12 +56,14 @@ public class AssessmentProcessor {
       ScreeningService screeningService,
       RiskScoringService riskScoringService,
       SubjectProfileService subjectProfileService,
+      DeviceSeenService deviceSeenService,
       AssessmentEventPublisher eventPublisher) {
     this.repository = repository;
     this.identityService = identityService;
     this.screeningService = screeningService;
     this.riskScoringService = riskScoringService;
     this.subjectProfileService = subjectProfileService;
+    this.deviceSeenService = deviceSeenService;
     this.eventPublisher = eventPublisher;
   }
 
@@ -97,6 +101,11 @@ public class AssessmentProcessor {
       persistCompanyProfile(subjectId, identity.company());
     }
     SubjectProfile profile = subjectProfileService.find(subjectId);
+    long deviceReuseCount =
+        assessment.deviceId() == null
+            ? 0
+            : deviceSeenService.recordAndCountDistinctSubjects(
+                assessment.tenantId(), assessment.deviceId(), subjectId);
 
     RiskDecision decision =
         riskScoringService.score(
@@ -106,7 +115,9 @@ public class AssessmentProcessor {
                 identity.check(),
                 screening,
                 identity.company(),
-                profile));
+                profile,
+                assessment.ip(),
+                deviceReuseCount));
 
     AssessmentStatus finalStatus = toStatus(decision.recommendation());
     List<String> factors = new ArrayList<>(decision.explanations());

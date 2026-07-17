@@ -17,6 +17,8 @@ public class Assessment {
   private final DocumentType documentType;
   private final String documentDigits;
   private final String name;
+  private final String ip;
+  private final String deviceId;
   private AssessmentStatus status;
   private RiskLevel riskLevel;
   private String decision;
@@ -34,6 +36,8 @@ public class Assessment {
       DocumentType documentType,
       String documentDigits,
       String name,
+      String ip,
+      String deviceId,
       Instant createdAt) {
     this.id = id;
     this.tenantId = tenantId;
@@ -41,17 +45,26 @@ public class Assessment {
     this.documentType = documentType;
     this.documentDigits = documentDigits;
     this.name = name;
+    this.ip = ip;
+    this.deviceId = deviceId;
     this.status = AssessmentStatus.EM_ANALISE;
     this.createdAt = createdAt;
   }
 
   /**
    * Cria uma avaliação nova em {@link AssessmentStatus#EM_ANALISE}, validando o documento.
+   * {@code ip}/{@code deviceId} são opcionais (sinais de rede para o motor de risco).
    *
    * @throws InvalidDocumentException se o CPF/CNPJ for inválido
    */
   public static Assessment submit(
-      String tenantId, String subjectId, DocumentType documentType, String rawDocument, String name) {
+      String tenantId,
+      String subjectId,
+      DocumentType documentType,
+      String rawDocument,
+      String name,
+      String ip,
+      String deviceId) {
     Objects.requireNonNull(tenantId, "tenantId");
     Objects.requireNonNull(subjectId, "subjectId");
     Objects.requireNonNull(documentType, "documentType");
@@ -60,7 +73,8 @@ public class Assessment {
     }
     String digits = Documents.normalize(documentType, rawDocument);
     return new Assessment(
-        AssessmentId.newId(), tenantId, subjectId, documentType, digits, name, Instant.now());
+        AssessmentId.newId(), tenantId, subjectId, documentType, digits, name, ip, deviceId,
+        Instant.now());
   }
 
   /** Reconstrói o agregado a partir da persistência. */
@@ -71,6 +85,8 @@ public class Assessment {
       DocumentType documentType,
       String documentDigits,
       String name,
+      String ip,
+      String deviceId,
       AssessmentStatus status,
       RiskLevel riskLevel,
       String decision,
@@ -81,7 +97,8 @@ public class Assessment {
       String reviewReason,
       Instant reviewedAt) {
     Assessment a =
-        new Assessment(id, tenantId, subjectId, documentType, documentDigits, name, createdAt);
+        new Assessment(
+            id, tenantId, subjectId, documentType, documentDigits, name, ip, deviceId, createdAt);
     a.status = status;
     a.riskLevel = riskLevel;
     a.decision = decision;
@@ -162,6 +179,14 @@ public class Assessment {
 
   public String name() {
     return name;
+  }
+
+  public String ip() {
+    return ip;
+  }
+
+  public String deviceId() {
+    return deviceId;
   }
 
   public AssessmentStatus status() {

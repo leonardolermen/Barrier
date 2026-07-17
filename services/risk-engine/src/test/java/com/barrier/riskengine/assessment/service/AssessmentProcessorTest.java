@@ -12,6 +12,7 @@ import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.DocumentType;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.device.service.DeviceSeenService;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.service.IdentityResult;
@@ -44,6 +45,7 @@ class AssessmentProcessorTest {
   @Mock ScreeningService screeningService;
   @Mock RiskScoringService riskScoringService;
   @Mock SubjectProfileService subjectProfileService;
+  @Mock DeviceSeenService deviceSeenService;
   @Mock AssessmentEventPublisher eventPublisher;
 
   private AssessmentProcessor newProcessor() {
@@ -53,14 +55,20 @@ class AssessmentProcessorTest {
         screeningService,
         riskScoringService,
         subjectProfileService,
+        deviceSeenService,
         eventPublisher);
   }
 
   private Assessment pendingAssessment() {
     Assessment a =
         Assessment.submit(
-            "default", "11111111-1111-1111-1111-111111111111", DocumentType.CPF, "11144477735",
-            "Fulano");
+            "default",
+            "11111111-1111-1111-1111-111111111111",
+            DocumentType.CPF,
+            "11144477735",
+            "Fulano",
+            null,
+            null);
     when(repository.findPending(anyInt())).thenReturn(List.of(a));
     when(identityService.verify(any(VerifyIdentityCommand.class)))
         .thenReturn(

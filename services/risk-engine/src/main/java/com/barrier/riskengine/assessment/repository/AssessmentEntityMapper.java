@@ -18,6 +18,8 @@ final class AssessmentEntityMapper {
     e.setDocumentType(a.documentType());
     e.setDocumentValue(a.documentDigits());
     e.setName(a.name());
+    e.setIp(a.ip());
+    e.setDeviceId(a.deviceId());
     e.setStatus(a.status());
     e.setRiskLevel(a.riskLevel());
     e.setDecision(a.decision());
@@ -38,6 +40,8 @@ final class AssessmentEntityMapper {
         e.getDocumentType(),
         e.getDocumentValue(),
         e.getName(),
+        e.getIp(),
+        e.getDeviceId(),
         e.getStatus(),
         e.getRiskLevel(),
         e.getDecision(),

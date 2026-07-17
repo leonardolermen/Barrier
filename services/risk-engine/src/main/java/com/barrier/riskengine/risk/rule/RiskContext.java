@@ -16,6 +16,9 @@ import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
  * @param screening resultado do screening em listas restritivas
  * @param company perfil da PJ; {@code null} para CPF ou quando o bureau não o forneceu
  * @param profile cadastro do subject (endereço/telefone/etc.); pode estar em branco
+ * @param ip IP de origem da submissão; {@code null} quando o cliente não o informou
+ * @param deviceReuseCount quantos subjects distintos usaram o mesmo device recentemente
+ *     (0 quando não há {@code deviceId} ou é a primeira vez); calculado antes do motor rodar
  */
 public record RiskContext(
     String assessmentId,
@@ -23,4 +26,6 @@ public record RiskContext(
     IdentityCheck identity,
     ScreeningResult screening,
     CompanyProfile company,
-    SubjectProfile profile) {}
+    SubjectProfile profile,
+    String ip,
+    long deviceReuseCount) {}

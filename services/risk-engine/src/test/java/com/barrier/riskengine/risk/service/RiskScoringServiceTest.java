@@ -58,7 +58,9 @@ class RiskScoringServiceTest {
         IdentityCheck.create("aid", identity, "stub", "d"),
         ScreeningResult.of("aid", List.of(hits)),
         null,
-        null);
+        null,
+        null,
+        0);
   }
 
   @Test
