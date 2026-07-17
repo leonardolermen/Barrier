@@ -44,7 +44,9 @@ class PjRiskRulesTest {
         IdentityCheck.create("aid", IdentityStatus.VERIFIED, "brasilapi", "ok"),
         ScreeningResult.of("aid", List.of()),
         company,
-        null);
+        null,
+        null,
+        0);
   }
 
   private CompanyProfile company(LocalDate opening, String cnae, List<Partner> partners) {
@@ -123,7 +125,9 @@ class PjRiskRulesTest {
             IdentityCheck.create("aid", IdentityStatus.VERIFIED, "brasilapi", "ok"),
             ScreeningResult.of("aid", List.of()),
             company(LocalDate.of(2010, 1, 1), "6619302", List.of()),
-            null);
+            null,
+            null,
+            0);
 
     RiskResult r = rule.evaluate(acmeContext);
 
@@ -159,7 +163,9 @@ class PjRiskRulesTest {
             IdentityCheck.create("aid", IdentityStatus.VERIFIED, "brasilapi", "ok"),
             ScreeningResult.of("aid", List.of()),
             company(LocalDate.of(2010, 1, 1), "9999999", List.of()),
-            null);
+            null,
+            null,
+            0);
 
     // CNAE do default ("6619302") continua funcionando para outros tenants
     assertThat(

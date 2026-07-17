@@ -70,7 +70,8 @@ class AssessmentFlowIntegrationTest {
 
   @Test
   void submeteProcessaEPublicaEvento() {
-    var request = new SubmitAssessmentRequest(DocumentType.CPF, "111.444.777-35", "Fulano de Tal");
+    var request =
+        new SubmitAssessmentRequest(DocumentType.CPF, "111.444.777-35", "Fulano de Tal", null, null);
 
     ResponseEntity<AssessmentResponse> created =
         client()
@@ -159,7 +160,7 @@ class AssessmentFlowIntegrationTest {
 
   @Test
   void documentoInvalidoRetorna400() {
-    var request = new SubmitAssessmentRequest(DocumentType.CPF, "00000000000", "Fulano");
+    var request = new SubmitAssessmentRequest(DocumentType.CPF, "00000000000", "Fulano", null, null);
 
     assertThatThrownBy(
             () ->

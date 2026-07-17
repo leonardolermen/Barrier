@@ -45,7 +45,9 @@ public class AssessmentService {
             subject.id().toString(),
             command.documentType(),
             command.document(),
-            command.name());
+            command.name(),
+            command.ip(),
+            command.deviceId());
     return repository.save(assessment);
   }
 

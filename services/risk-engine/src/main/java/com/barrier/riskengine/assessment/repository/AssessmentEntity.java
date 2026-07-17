@@ -37,6 +37,12 @@ class AssessmentEntity {
   @Column(name = "name", nullable = false, length = 200)
   private String name;
 
+  @Column(name = "ip", length = 45)
+  private String ip;
+
+  @Column(name = "device_id", length = 200)
+  private String deviceId;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 20)
   private AssessmentStatus status;
@@ -116,6 +122,22 @@ class AssessmentEntity {
 
   void setName(String name) {
     this.name = name;
+  }
+
+  String getIp() {
+    return ip;
+  }
+
+  void setIp(String ip) {
+    this.ip = ip;
+  }
+
+  String getDeviceId() {
+    return deviceId;
+  }
+
+  void setDeviceId(String deviceId) {
+    this.deviceId = deviceId;
   }
 
   AssessmentStatus getStatus() {

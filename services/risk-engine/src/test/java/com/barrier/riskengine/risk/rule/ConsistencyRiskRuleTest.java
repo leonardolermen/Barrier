@@ -21,7 +21,9 @@ class ConsistencyRiskRuleTest {
         IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"),
         ScreeningResult.of("aid", List.of()),
         null,
-        profile);
+        profile,
+        null,
+        0);
   }
 
   private SubjectProfile profileWith(String phone, String state) {

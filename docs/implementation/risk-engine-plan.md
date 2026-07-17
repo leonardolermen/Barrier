@@ -238,10 +238,11 @@ anterior mergeado):
 3. **Consistência cadastral** — `ConsistencyRiskRule`: nome divergente do bureau, CPF de titular
    diferente do informado, DDD do telefone incompatível com o estado do endereço. Usa dados já
    existentes (`SubjectProfile`/`CompanyProfile`/`IdentityCheck`), sem provider novo.
-4. **Sinais de rede** — módulo `device`: intake aceita `ip`/`deviceId`/`fingerprint` opcionais;
-   `GeoIpProvider` (Strategy) + `DeviceRiskRule` (GeoIP divergente do endereço, VPN/proxy, mesmo
-   device em N cadastros recentes — nova tabela `device_seen`). Maior escopo; dividir em
-   sub-PRs se necessário.
+4. ✅ **Sinais de rede** — intake aceita `ip`/`deviceId` opcionais; `GeoMismatchRiskRule`
+   (`GeoIpProvider`/`StubGeoIpProvider`) compara UF do IP com o endereço; `DeviceReuseRiskRule` +
+   módulo `device` (`device_seen`) pontua reuso do mesmo device em N cadastros recentes.
+   VPN/proxy **não entrou** — depende de um provedor real de IP intelligence (o stub não tem
+   essa informação); revisitar quando houver um.
 5. **Telefone e email** — `PhoneRiskRule` (VoIP, descartável, DDD/operadora incompatível) e
    `EmailRiskRule` (domínio descartável/temporário, idade do domínio, reuso do mesmo email em
    vários cadastros). Providers atrás de interface, stub em dev.

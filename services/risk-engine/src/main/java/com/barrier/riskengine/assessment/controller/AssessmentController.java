@@ -41,7 +41,12 @@ public class AssessmentController {
     Assessment created =
         service.submit(
             new SubmitAssessmentCommand(
-                tenant.id(), req.documentType(), req.document(), req.name()));
+                tenant.id(),
+                req.documentType(),
+                req.document(),
+                req.name(),
+                req.ip(),
+                req.deviceId()));
     return ResponseEntity.accepted()
         .location(URI.create("/v1/assessments/" + created.id().asString()))
         .body(AssessmentDtoMapper.toResponse(created));

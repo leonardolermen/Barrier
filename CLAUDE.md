@@ -173,6 +173,18 @@ de completude (`RegistrationCompleteness.evaluate` direto, sem outra query). `Co
 não força recomendação (mudança/portabilidade é comum), só soma ao score. Nome divergente/CPF de
 outro titular já eram cobertos por `IdentityRiskRule` (`IDENTITY_MISMATCH`), não duplicado aqui.
 
+Sinais de rede: intake (`POST /v1/assessments`) ganhou `ip`/`deviceId` opcionais, persistidos em
+`assessments` (migration V019). `GeoMismatchRiskRule` compara o estado geolocalizado do IP
+(`GeoIpProvider`/`StubGeoIpProvider`, CSV `barrier.geoip.mappings` de prefixo→UF, vazio por
+padrão) com `profile.address().state()` — mesmo espírito do `ConsistencyRiskRule`, mas por IP em
+vez de DDD. `DeviceReuseRiskRule` pontua quando o mesmo `deviceId` aparece em N subjects
+distintos numa janela (`barrier.risk.device-reuse-threshold`/`-window-days`); o novo módulo
+`device` (`device_seen`, migration V020) grava cada avaliação e conta reuso, calculado em
+`AssessmentProcessor` antes do motor rodar e injetado no `RiskContext` (`ip`/
+`deviceReuseCount`) — as regras não acessam repositório diretamente, mantendo o Strategy puro.
+VPN/proxy fica para quando houver um provedor real de IP intelligence (o stub não tem essa
+informação); ver backlog em `risk-engine-plan.md`.
+
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.

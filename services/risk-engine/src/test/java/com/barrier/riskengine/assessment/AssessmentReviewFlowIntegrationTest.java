@@ -72,7 +72,8 @@ class AssessmentReviewFlowIntegrationTest {
   void pepCaiEmRevisaoEDecisaoManualAprova() {
     // documento com apontamento PEP (seed) → EDD → EM_REVISAO
     var request =
-        new SubmitAssessmentRequest(DocumentType.CPF, "529.982.247-25", "Fulano Pep Exemplo");
+        new SubmitAssessmentRequest(
+            DocumentType.CPF, "529.982.247-25", "Fulano Pep Exemplo", null, null);
     String id =
         client()
             .post()
