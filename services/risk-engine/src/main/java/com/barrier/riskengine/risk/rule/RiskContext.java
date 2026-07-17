@@ -19,6 +19,8 @@ import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
  * @param ip IP de origem da submissão; {@code null} quando o cliente não o informou
  * @param deviceReuseCount quantos subjects distintos usaram o mesmo device recentemente
  *     (0 quando não há {@code deviceId} ou é a primeira vez); calculado antes do motor rodar
+ * @param emailReuseCount quantos outros subjects já usaram o mesmo email cadastrado (0 se
+ *     nenhum); calculado antes do motor rodar
  */
 public record RiskContext(
     String assessmentId,
@@ -28,4 +30,5 @@ public record RiskContext(
     CompanyProfile company,
     SubjectProfile profile,
     String ip,
-    long deviceReuseCount) {}
+    long deviceReuseCount,
+    long emailReuseCount) {}

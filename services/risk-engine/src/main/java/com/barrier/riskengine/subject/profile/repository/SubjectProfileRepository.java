@@ -10,4 +10,7 @@ public interface SubjectProfileRepository {
   SubjectProfile save(SubjectProfile profile);
 
   Optional<SubjectProfile> findBySubjectId(UUID subjectId);
+
+  /** Quantos outros subjects (excluindo {@code subjectId}) já usaram este email. */
+  long countOtherSubjectsWithEmail(UUID subjectId, String email);
 }

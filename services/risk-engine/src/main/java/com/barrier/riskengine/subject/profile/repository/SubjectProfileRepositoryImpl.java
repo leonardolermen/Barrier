@@ -64,6 +64,14 @@ class SubjectProfileRepositoryImpl implements SubjectProfileRepository {
     return jpa.findBySubjectId(subjectId).map(this::toDomain);
   }
 
+  @Override
+  public long countOtherSubjectsWithEmail(UUID subjectId, String email) {
+    if (email == null || email.isBlank()) {
+      return 0;
+    }
+    return jpa.countBySubjectIdNotAndEmailIgnoreCase(subjectId, email);
+  }
+
   private SubjectProfile toDomain(SubjectProfileEntity e) {
     SubjectProfile.Address address =
         e.getAddressStreet() == null

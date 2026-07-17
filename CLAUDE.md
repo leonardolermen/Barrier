@@ -185,6 +185,17 @@ distintos numa janela (`barrier.risk.device-reuse-threshold`/`-window-days`); o 
 VPN/proxy fica para quando houver um provedor real de IP intelligence (o stub não tem essa
 informação); ver backlog em `risk-engine-plan.md`.
 
+Telefone e email: `PhoneVoipRiskRule` (`PhoneProvider`/`StubPhoneProvider`, CSV de números/
+prefixos VoIP, vazio por padrão) e `EmailDisposableRiskRule` (`EmailProvider`/
+`StubEmailProvider`, lista de domínios descartáveis conhecidos — essa vem com default populado,
+diferente dos outros stubs, por ser conhecimento público de baixo falso-positivo, mesmo espírito
+do default de `SensitiveCnaeRiskRule`). `EmailReuseRiskRule` pontua quando o mesmo email aparece
+em N *subject_profiles* distintos (`SubjectProfileRepository.countOtherSubjectsWithEmail`, nova
+query) — mesmo padrão do `DeviceReuseRiskRule`, calculado em `AssessmentProcessor` e injetado no
+`RiskContext` (`emailReuseCount`). Operadora/DDD incompatível já é coberto por
+`ConsistencyRiskRule`; idade do domínio (WHOIS) fica pro backlog, junto de VPN/proxy — precisa
+de provedor externo real.
+
 Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.

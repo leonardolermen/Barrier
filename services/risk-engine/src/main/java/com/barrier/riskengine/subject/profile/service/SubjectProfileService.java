@@ -41,4 +41,10 @@ public class SubjectProfileService {
   public SubjectProfile find(UUID subjectId) {
     return repository.findBySubjectId(subjectId).orElseGet(() -> SubjectProfile.blank(subjectId));
   }
+
+  /** Quantos outros subjects já usaram este email (sinal de reuso/fraude por múltiplas contas). */
+  @Transactional(readOnly = true)
+  public long countOtherSubjectsWithEmail(UUID subjectId, String email) {
+    return repository.countOtherSubjectsWithEmail(subjectId, email);
+  }
 }

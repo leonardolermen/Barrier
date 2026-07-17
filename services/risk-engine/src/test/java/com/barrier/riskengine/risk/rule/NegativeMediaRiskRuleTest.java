@@ -23,6 +23,7 @@ class NegativeMediaRiskRuleTest {
         null,
         null,
         null,
+        0,
         0);
   }
 

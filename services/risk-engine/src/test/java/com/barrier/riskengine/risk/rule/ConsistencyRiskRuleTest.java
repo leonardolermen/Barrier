@@ -23,6 +23,7 @@ class ConsistencyRiskRuleTest {
         null,
         profile,
         null,
+        0,
         0);
   }
 

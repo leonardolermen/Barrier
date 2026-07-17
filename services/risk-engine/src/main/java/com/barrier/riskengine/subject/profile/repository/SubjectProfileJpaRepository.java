@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 interface SubjectProfileJpaRepository extends JpaRepository<SubjectProfileEntity, UUID> {
 
   Optional<SubjectProfileEntity> findBySubjectId(UUID subjectId);
+
+  long countBySubjectIdNotAndEmailIgnoreCase(UUID subjectId, String email);
 }

@@ -243,9 +243,11 @@ anterior mergeado):
    módulo `device` (`device_seen`) pontua reuso do mesmo device em N cadastros recentes.
    VPN/proxy **não entrou** — depende de um provedor real de IP intelligence (o stub não tem
    essa informação); revisitar quando houver um.
-5. **Telefone e email** — `PhoneRiskRule` (VoIP, descartável, DDD/operadora incompatível) e
-   `EmailRiskRule` (domínio descartável/temporário, idade do domínio, reuso do mesmo email em
-   vários cadastros). Providers atrás de interface, stub em dev.
+5. ✅ **Telefone e email** — `PhoneVoipRiskRule` (`PhoneProvider`), `EmailDisposableRiskRule`
+   (`EmailProvider`, default com domínios descartáveis conhecidos) e `EmailReuseRiskRule` (mesmo
+   email em vários `subject_profiles`). DDD/operadora incompatível já coberto por
+   `ConsistencyRiskRule` (item 3); idade do domínio (WHOIS) não entrou — precisa de provedor
+   real, mesmo motivo do VPN/proxy do item 4.
 6. **Histórico interno e score externo** — tabela `subject_history` (chargeback, PIX devolvido,
    denúncia, conta encerrada por fraude) + `HistoryRiskRule`; `CreditScoreProvider` (Strategy)
    para Serasa/Boa Vista/SCR, stub em dev.

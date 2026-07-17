@@ -9,9 +9,9 @@ import com.barrier.riskengine.screening.domain.ScreeningResult;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-class DeviceReuseRiskRuleTest {
+class EmailReuseRiskRuleTest {
 
-  private RiskContext context(long reuseCount) {
+  private RiskContext context(long emailReuseCount) {
     return new RiskContext(
         "aid",
         "default",
@@ -20,32 +20,25 @@ class DeviceReuseRiskRuleTest {
         null,
         null,
         null,
-        reuseCount,
-        0);
+        0,
+        emailReuseCount);
   }
 
   @Test
   void abaixoDoLimiarNaoAplica() {
-    var rule = new DeviceReuseRiskRule(3, 120);
+    var rule = new EmailReuseRiskRule(2, 100);
 
-    assertThat(rule.evaluate(context(2)).triggered()).isFalse();
+    assertThat(rule.evaluate(context(1)).triggered()).isFalse();
   }
 
   @Test
   void noLimiarPontua() {
-    var rule = new DeviceReuseRiskRule(3, 120);
+    var rule = new EmailReuseRiskRule(2, 100);
 
-    RiskResult r = rule.evaluate(context(3));
+    RiskResult r = rule.evaluate(context(2));
 
     assertThat(r.triggered()).isTrue();
-    assertThat(r.score()).isEqualTo(120);
-    assertThat(r.evidences()).anyMatch(e -> e.contains("device_reuse_count:3"));
-  }
-
-  @Test
-  void acimaDoLimiarPontua() {
-    var rule = new DeviceReuseRiskRule(3, 120);
-
-    assertThat(rule.evaluate(context(10)).triggered()).isTrue();
+    assertThat(r.score()).isEqualTo(100);
+    assertThat(r.evidences()).anyMatch(e -> e.contains("email_reuse_count:2"));
   }
 }

@@ -106,6 +106,10 @@ public class AssessmentProcessor {
             ? 0
             : deviceSeenService.recordAndCountDistinctSubjects(
                 assessment.tenantId(), assessment.deviceId(), subjectId);
+    long emailReuseCount =
+        profile.email() == null
+            ? 0
+            : subjectProfileService.countOtherSubjectsWithEmail(subjectId, profile.email());
 
     RiskDecision decision =
         riskScoringService.score(
@@ -117,7 +121,8 @@ public class AssessmentProcessor {
                 identity.company(),
                 profile,
                 assessment.ip(),
-                deviceReuseCount));
+                deviceReuseCount,
+                emailReuseCount));
 
     AssessmentStatus finalStatus = toStatus(decision.recommendation());
     List<String> factors = new ArrayList<>(decision.explanations());
