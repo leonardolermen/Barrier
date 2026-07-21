@@ -68,6 +68,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 
 - [Visão geral da arquitetura](docs/architecture/overview.md)
 - [Bounded contexts](docs/architecture/domain-contexts.md)
+- [Fluxo completo de KYC (PF e PJ)](docs/architecture/kyc-flow.md)
 - [Fluxo de eventos e saga](docs/architecture/event-flow.md)
 - [Requisitos regulatórios](docs/architecture/compliance.md)
 - [Padrões de código e design patterns](docs/implementation/coding-standards.md)

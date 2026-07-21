@@ -36,7 +36,8 @@ a Webhook API).
 (**identity → screening → risk**) → o motor consolida um **score 0–1000**, nível
 (LOW/MEDIUM/HIGH/CRITICAL) e recomendação, que vira o status (APROVADO/EM_REVISAO/REPROVADO)
 → evento na outbox → **Webhook API** faz o callback assinado. O cliente também pode consultar
-`GET /v1/assessments/{id}`. Detalhes em [event-flow.md](event-flow.md).
+`GET /v1/assessments/{id}`. Detalhes do contrato de evento em [event-flow.md](event-flow.md);
+passo a passo completo (PF e PJ, todas as regras) em [kyc-flow.md](kyc-flow.md).
 
 ## Topologia-alvo (visão de longo prazo — microserviços)
 
