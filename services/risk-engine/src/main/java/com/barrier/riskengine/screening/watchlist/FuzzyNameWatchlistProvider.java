@@ -52,7 +52,11 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
 
     List<WatchlistRecord> candidates = repository.findNameEntries();
     List<WatchlistEntry> matches =
-        candidates.stream().map(record -> scored(normalizedQuery, record)).filter(m -> m != null).toList();
+        candidates.stream()
+            .filter(record -> partialDocumentAllows(query, record))
+            .map(record -> scored(normalizedQuery, record))
+            .filter(m -> m != null)
+            .toList();
     // Sem o nome consultado: é dado pessoal e sairia em toda avaliação. O que interessa para
     // operar é o volume comparado e quantos casaram.
     log.debug(
@@ -63,16 +67,43 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
     return matches;
   }
 
+  /**
+   * Descarta candidatos cujo CPF parcial publicado é incompatível com o documento consultado.
+   *
+   * <p>Vale para listas que mascaram o documento (PEP da CGU): o nome sozinho casaria com todo
+   * homônimo do cadastro, e cada acerto viraria revisão manual. Os 6 dígitos centrais reduzem o
+   * espaço de colisão em ~10⁶.
+   *
+   * <p>Entrada sem documento parcial passa direto — a decisão fica só com o nome, como antes.
+   * Consulta de CNPJ contra entrada com CPF parcial nunca é a mesma entidade.
+   */
+  private boolean partialDocumentAllows(WatchlistQuery query, WatchlistRecord record) {
+    if (record.documentPartial() == null) {
+      return true;
+    }
+    String central = MaskedCpf.centralDigitsOf(query.documentDigits());
+    return central != null && central.equals(record.documentPartial());
+  }
+
   private WatchlistEntry scored(String normalizedQuery, WatchlistRecord record) {
     double score = JaroWinkler.similarity(normalizedQuery, NameNormalizer.normalize(record.name()));
     if (score < threshold) {
       return null;
     }
+    boolean partialConfirmed = record.documentPartial() != null;
     log.info(
-        "Fuzzy match {}@{}: '{}' ({}%)",
-        record.type(), record.source(), record.name(), Math.round(score * 100));
+        "Fuzzy match {}@{}: '{}' ({}%){}",
+        record.type(),
+        record.source(),
+        record.name(),
+        Math.round(score * 100),
+        partialConfirmed ? " [CPF parcial confere]" : "");
     String detail =
-        String.format("match por nome %.0f%% — %s", score * 100, nullSafe(record.detail()));
+        String.format(
+            "match por nome %.0f%%%s — %s",
+            score * 100,
+            partialConfirmed ? " com CPF parcial confirmado" : "",
+            nullSafe(record.detail()));
     return new WatchlistEntry(record.type(), MatchBasis.NAME, record.source(), record.name(), detail);
   }
 

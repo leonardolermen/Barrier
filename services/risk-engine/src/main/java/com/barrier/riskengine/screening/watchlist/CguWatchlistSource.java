@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -43,11 +44,46 @@ abstract class CguWatchlistSource implements WatchlistSource {
     this.client = client;
   }
 
-  /** Segmento do caminho no portal (ex.: {@code ceis}, {@code cnep}). */
+  /** Segmento do caminho no portal (ex.: {@code ceis}, {@code cnep}, {@code pep}). */
   protected abstract String pathSegment();
 
   /** Data de referência do pacote, no formato {@code yyyyMMdd}. */
   protected abstract String referenceDate();
+
+  /** Categoria dos registros desta lista. As de sanção diferem da de PEP no desfecho de risco. */
+  protected MatchType matchType() {
+    return MatchType.SANCTION;
+  }
+
+  @Override
+  public Set<MatchType> provides() {
+    return Set.of(matchType());
+  }
+
+  /** Rótulos aceitos para a coluna de documento, em ordem de preferência. */
+  @SuppressWarnings("unchecked")
+  protected Predicate<String>[] documentColumns() {
+    return new Predicate[] {(Predicate<String>) h -> h.contains("CPF OU CNPJ")};
+  }
+
+  /** Rótulos aceitos para a coluna de nome, em ordem de preferência. */
+  @SuppressWarnings("unchecked")
+  protected Predicate<String>[] nameColumns() {
+    return new Predicate[] {
+      (Predicate<String>) h -> h.contains("NOME INFORMADO"),
+      (Predicate<String>) h -> h.contains("RAZAO SOCIAL"),
+      (Predicate<String>) h -> h.contains("NOME DO SANCIONADO"),
+      (Predicate<String>) h -> h.contains("NOME")
+    };
+  }
+
+  /** Rótulos aceitos para a coluna de detalhe, em ordem de preferência. */
+  @SuppressWarnings("unchecked")
+  protected Predicate<String>[] detailColumns() {
+    return new Predicate[] {
+      (Predicate<String>) h -> h.contains("SANCAO"), (Predicate<String>) h -> h.contains("CATEGORIA")
+    };
+  }
 
   @Override
   public WatchlistBatch fetch() {
@@ -107,15 +143,9 @@ abstract class CguWatchlistSource implements WatchlistSource {
       return List.of();
     }
     List<String> header = CsvSupport.split(lines[0], ';');
-    int docCol = column(header, h -> h.contains("CPF OU CNPJ"));
-    int nameCol =
-        firstColumn(
-            header,
-            h -> h.contains("NOME INFORMADO"),
-            h -> h.contains("RAZAO SOCIAL"),
-            h -> h.contains("NOME DO SANCIONADO"),
-            h -> h.contains("NOME"));
-    int detailCol = firstColumn(header, h -> h.contains("SANCAO"), h -> h.contains("CATEGORIA"));
+    int docCol = firstColumn(header, documentColumns());
+    int nameCol = firstColumn(header, nameColumns());
+    int detailCol = firstColumn(header, detailColumns());
 
     if (docCol < 0 || nameCol < 0) {
       throw new IllegalStateException("Cabeçalho inesperado no CSV da " + source());
@@ -127,13 +157,19 @@ abstract class CguWatchlistSource implements WatchlistSource {
         continue;
       }
       List<String> f = CsvSupport.split(lines[i], ';');
-      String document = CsvSupport.digitsOnly(at(f, docCol));
       String name = at(f, nameCol);
       if (name == null || name.isBlank()) {
         continue;
       }
+      String published = at(f, docCol);
+      // Documento completo vira chave de match exato; mascarado vira só discriminador do match
+      // por nome. Guardar um documento parcial em `document` faria o LocalWatchlistProvider
+      // casar contra o CPF errado.
+      String document = MaskedCpf.isComplete(published) ? CsvSupport.digitsOnly(published) : null;
+      String documentPartial = document == null ? MaskedCpf.parsePublished(published) : null;
       String detail = detailCol >= 0 ? at(f, detailCol) : source();
-      records.add(new WatchlistRecord(source(), MatchType.SANCTION, document, name, detail));
+      records.add(
+          new WatchlistRecord(source(), matchType(), document, documentPartial, name, detail));
     }
     return records;
   }
@@ -142,8 +178,7 @@ abstract class CguWatchlistSource implements WatchlistSource {
     return index >= 0 && index < fields.size() ? fields.get(index) : null;
   }
 
-  @SafeVarargs
-  private static int firstColumn(List<String> header, Predicate<String>... matchers) {
+  private static int firstColumn(List<String> header, Predicate<String>[] matchers) {
     for (Predicate<String> matcher : matchers) {
       int idx = column(header, matcher);
       if (idx >= 0) {

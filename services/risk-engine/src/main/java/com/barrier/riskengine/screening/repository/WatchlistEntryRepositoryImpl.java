@@ -20,8 +20,9 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
    */
   private static final String INSERT =
       "INSERT INTO watchlist_entries"
-          + " (id, source, entry_type, document, name, detail, list_version, imported_at)"
-          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+          + " (id, source, entry_type, document, document_partial, name, detail, list_version,"
+          + " imported_at)"
+          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
   private static final int BATCH_SIZE = 1000;
 
   private final WatchlistEntryJpaRepository jpa;
@@ -46,10 +47,11 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
           ps.setString(2, r.source());
           ps.setString(3, r.type().name());
           ps.setString(4, r.document());
-          ps.setString(5, r.name());
-          ps.setString(6, r.detail());
-          ps.setString(7, version);
-          ps.setObject(8, importedAt);
+          ps.setString(5, r.documentPartial());
+          ps.setString(6, r.name());
+          ps.setString(7, r.detail());
+          ps.setString(8, version);
+          ps.setObject(9, importedAt);
         });
   }
 
@@ -68,6 +70,11 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
 
   private static WatchlistRecord toRecord(WatchlistEntryEntity e) {
     return new WatchlistRecord(
-        e.getSource(), e.getEntryType(), e.getDocument(), e.getName(), e.getDetail());
+        e.getSource(),
+        e.getEntryType(),
+        e.getDocument(),
+        e.getDocumentPartial(),
+        e.getName(),
+        e.getDetail());
   }
 }

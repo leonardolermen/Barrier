@@ -8,6 +8,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,12 @@ public class SeedFileWatchlistSource implements WatchlistSource {
   @Override
   public String source() {
     return "SEED";
+  }
+
+  /** O CSV-semente tem coluna {@code type} e traz exemplos das duas categorias. */
+  @Override
+  public Set<MatchType> provides() {
+    return Set.of(MatchType.SANCTION, MatchType.PEP);
   }
 
   @Override

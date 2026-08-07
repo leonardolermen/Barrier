@@ -65,6 +65,11 @@ class OfacWatchlistSource implements WatchlistSource {
   }
 
   @Override
+  public java.util.Set<MatchType> provides() {
+    return java.util.Set.of(MatchType.SANCTION);
+  }
+
+  @Override
   public WatchlistBatch fetch() {
     log.info("OFAC: baixando lista SDN ({}) e apelidos ({})", sdnPath, altPath);
     List<WatchlistRecord> sdn = parseSdn(download(sdnPath));
