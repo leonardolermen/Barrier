@@ -1,6 +1,7 @@
 package com.barrier.riskengine.identity.client;
 
 import com.barrier.commons.mask.Documents;
+import com.barrier.commons.name.NameSimilarity;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -8,6 +9,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -28,9 +30,22 @@ public class BrasilApiBureauProvider implements BureauProvider {
   private static final Logger log = LoggerFactory.getLogger(BrasilApiBureauProvider.class);
 
   private final RestClient restClient;
+  private final double nameThreshold;
 
-  public BrasilApiBureauProvider(@Qualifier("brasilApiRestClient") RestClient restClient) {
+  public BrasilApiBureauProvider(
+      @Qualifier("brasilApiRestClient") RestClient restClient,
+      @Value("${barrier.identity.name-match.threshold:0.85}") double nameThreshold) {
     this.restClient = restClient;
+    this.nameThreshold = nameThreshold;
+  }
+
+  /**
+   * Casa contra razão social <b>ou</b> nome fantasia: o cliente informa com frequência o nome pelo
+   * qual a empresa opera, que é o fantasia, e reprovar isso seria falso positivo em massa.
+   */
+  private boolean nameMatches(String informed, BrasilApiCnpj cnpj) {
+    return NameSimilarity.matches(informed, cnpj.razaoSocial(), nameThreshold)
+        || NameSimilarity.matches(informed, cnpj.nomeFantasia(), nameThreshold);
   }
 
   @Override
@@ -60,13 +75,26 @@ public class BrasilApiBureauProvider implements BureauProvider {
           cnpj.cnae(),
           cnpj.dataInicioAtividade(),
           cnpj.qsa() == null ? 0 : cnpj.qsa().size());
-      String detail = cnpj.razaoSocial() + " — " + situacao;
       // O perfil objetivo (abertura/CNAE/QSA) alimenta as regras de risco de PJ; sempre que a
       // empresa existe (ativa ou não) ele é preenchido.
       CompanyProfile profile = toProfile(cnpj);
-      return "ATIVA".equalsIgnoreCase(situacao)
-          ? new BureauResult(BureauResult.Outcome.MATCH, detail, profile)
-          : new BureauResult(BureauResult.Outcome.MISMATCH, "Situação: " + situacao, profile);
+      if (!"ATIVA".equalsIgnoreCase(situacao)) {
+        return new BureauResult(BureauResult.Outcome.MISMATCH, "Situação: " + situacao, profile);
+      }
+      // A empresa existir e estar ativa não diz que é a empresa que o cliente informou. Sem esta
+      // comparação, qualquer CNPJ ativo casava com qualquer razão social enviada.
+      if (!nameMatches(query.name(), cnpj)) {
+        return new BureauResult(
+            BureauResult.Outcome.MISMATCH,
+            "Nome informado diverge do registro na Receita ("
+                + cnpj.razaoSocial()
+                + "; similaridade "
+                + Math.round(NameSimilarity.similarity(query.name(), cnpj.razaoSocial()) * 100)
+                + "%)",
+            profile);
+      }
+      return new BureauResult(
+          BureauResult.Outcome.MATCH, cnpj.razaoSocial() + " — " + situacao, profile);
     } catch (HttpClientErrorException.NotFound e) {
       return new BureauResult(BureauResult.Outcome.NOT_FOUND, "CNPJ não encontrado");
     } catch (RestClientException e) {

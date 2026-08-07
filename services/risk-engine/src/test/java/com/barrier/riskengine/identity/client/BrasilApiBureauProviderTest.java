@@ -22,11 +22,22 @@ class BrasilApiBureauProviderTest {
   void setUp() {
     RestClient.Builder builder = RestClient.builder();
     server = MockRestServiceServer.bindTo(builder).build();
-    provider = new BrasilApiBureauProvider(builder.build());
+    provider = new BrasilApiBureauProvider(builder.build(), 0.85);
   }
 
+  /** Nome informado coerente com a razão social devolvida pelo mock. */
   private BureauQuery cnpj() {
-    return new BureauQuery("CNPJ", "11222333000181", "Empresa X");
+    return cnpjComNome("ACME LTDA");
+  }
+
+  private BureauQuery cnpjComNome(String nome) {
+    return new BureauQuery("CNPJ", "11222333000181", nome);
+  }
+
+  private void respondeAtiva(String corpo) {
+    server
+        .expect(requestTo("/api/cnpj/v1/11222333000181"))
+        .andRespond(withSuccess(corpo, MediaType.APPLICATION_JSON));
   }
 
   @Test
@@ -84,6 +95,43 @@ class BrasilApiBureauProviderTest {
                 MediaType.APPLICATION_JSON));
 
     assertThat(provider.check(cnpj()).outcome()).isEqualTo(BureauResult.Outcome.MISMATCH);
+  }
+
+  /**
+   * Regressão do achado central da auditoria: antes, "empresa existe e está ATIVA" bastava para
+   * MATCH — o nome informado sequer era lido, então qualquer CNPJ ativo casava com qualquer razão
+   * social.
+   */
+  @Test
+  void nomeInformadoDivergenteDaRazaoSocialViraMismatch() {
+    respondeAtiva("{\"razao_social\":\"ACME LTDA\",\"descricao_situacao_cadastral\":\"ATIVA\"}");
+
+    BureauResult result = provider.check(cnpjComNome("TRANSPORTADORA BETA"));
+
+    assertThat(result.outcome()).isEqualTo(BureauResult.Outcome.MISMATCH);
+    assertThat(result.detail()).contains("diverge");
+  }
+
+  /** O cliente costuma informar o nome pelo qual a empresa opera, não a razão social. */
+  @Test
+  void nomeFantasiaTambemCasa() {
+    respondeAtiva(
+        "{\"razao_social\":\"ACME COMERCIO DE ALIMENTOS LTDA\",\"nome_fantasia\":\"PADARIA DO ZE\","
+            + "\"descricao_situacao_cadastral\":\"ATIVA\"}");
+
+    assertThat(provider.check(cnpjComNome("Padaria do Zé")).outcome())
+        .isEqualTo(BureauResult.Outcome.MATCH);
+  }
+
+  /** Informar menos que o oficial é normal; informar um termo que o oficial não tem, não. */
+  @Test
+  void nomeParcialCasaPorSubconjunto() {
+    respondeAtiva(
+        "{\"razao_social\":\"ACME COMERCIO DE ALIMENTOS LTDA\","
+            + "\"descricao_situacao_cadastral\":\"ATIVA\"}");
+
+    assertThat(provider.check(cnpjComNome("Acme Comercio")).outcome())
+        .isEqualTo(BureauResult.Outcome.MATCH);
   }
 
   @Test

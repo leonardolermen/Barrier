@@ -1,6 +1,7 @@
 package com.barrier.riskengine.risk.registry.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.risk.registry.domain.RiskRuleCriticality;
@@ -54,5 +55,41 @@ class RiskRuleRegistryServiceImplTest {
                     "NEW_COMPANY", "desc", RiskRuleCriticality.ALERT, true, null, null, NOW)));
 
     assertThat(service().isActive("NEW_COMPANY")).isTrue();
+  }
+
+  @Test
+  void regraRegulatoriaEAtivaMesmoComLinhaDesabilitadaNoBanco() {
+    assertThat(service().isActive("SANCTION")).isTrue();
+    assertThat(service().isActive("IDENTITY")).isTrue();
+    assertThat(service().isActive("PEP")).isTrue();
+    assertThat(service().isActive("NEGATIVE_MEDIA")).isTrue();
+  }
+
+  @Test
+  void naoPermiteDesabilitarRegraRegulatoria() {
+    assertThatThrownBy(
+            () -> service().upsert("SANCTION", "desc", "BLOCK", false, null, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("SANCTION");
+  }
+
+  /** Vigência limitada é desligar com data marcada — bloqueado pelo mesmo motivo. */
+  @Test
+  void naoPermiteLimitarVigenciaDeRegraRegulatoria() {
+    assertThatThrownBy(
+            () -> service().upsert("PEP", "desc", "REVIEW", true, null, NOW.plusSeconds(60)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("vigência");
+  }
+
+  @Test
+  void permiteDesabilitarRegraDeApetite() {
+    when(repository.upsert("NEW_COMPANY", "desc", "ALERT", false, null, null))
+        .thenReturn(
+            new RiskRuleRegistryEntry(
+                "NEW_COMPANY", "desc", RiskRuleCriticality.ALERT, false, null, null, NOW));
+
+    assertThat(service().upsert("NEW_COMPANY", "desc", "ALERT", false, null, null).enabled())
+        .isFalse();
   }
 }

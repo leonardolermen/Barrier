@@ -5,6 +5,7 @@ import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
+import com.barrier.riskengine.risk.registry.domain.RegulatoryRiskRules;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import com.barrier.riskengine.risk.repository.RiskScoreRepository;
 import com.barrier.riskengine.risk.rule.RiskContext;
@@ -35,7 +36,9 @@ public class RiskScoringService {
 
   private static final Logger log = LoggerFactory.getLogger(RiskScoringService.class);
 
-  static final String ENGINE_VERSION = "barrier-risk-rules/1.1.0";
+  // 1.2.0: IDENTITY_UNAVAILABLE passou a forçar REVIEW (era fail-open para APPROVE) e SANCTION
+  // separou match por documento (REJECT) de match por nome (REVIEW).
+  static final String ENGINE_VERSION = "barrier-risk-rules/1.2.0";
   private static final int MAX_SCORE = 1000;
 
   private final List<RiskRule> rules;
@@ -74,7 +77,21 @@ public class RiskScoringService {
     return decision;
   }
 
+  /**
+   * Regra regulatória ({@link RegulatoryRiskRules}) roda sempre — o registry não é consultado. Se
+   * algum caminho tiver gravado essa regra como inativa, é incidente de segurança, não configuração
+   * legítima: loga em WARN e executa a regra mesmo assim.
+   */
   private boolean activeOrLogSuppressed(RiskRule rule) {
+    if (RegulatoryRiskRules.isRegulatory(rule.code())) {
+      if (!registryService.isActive(rule.code())) {
+        log.warn(
+            "Regra regulatória {} consta como inativa no registry — ignorando e executando mesmo "
+                + "assim. Investigar quem gravou esse estado.",
+            rule.code());
+      }
+      return true;
+    }
     boolean active = registryService.isActive(rule.code());
     if (!active) {
       log.debug("Regra {} suprimida pelo registry (desabilitada ou fora de vigência)", rule.code());

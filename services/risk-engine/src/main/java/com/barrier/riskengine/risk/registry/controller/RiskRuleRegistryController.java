@@ -13,8 +13,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Gestão do registry de regras de risco — kill switch/vigência global (todos os tenants), não
- * self-service do parceiro. Operação interna/admin, sem gate de admin-auth dedicado ainda (mesma
- * pré-auth por header do resto da API).
+ * self-service do parceiro.
+ *
+ * <p>Protegido por {@code X-Admin-Key}
+ * ({@link com.barrier.riskengine.web.AdminApiKeyFilter}); sem a chave em produção a aplicação nem
+ * sobe. Além disso, as famílias regulatórias
+ * ({@link com.barrier.riskengine.risk.registry.domain.RegulatoryRiskRules}) não podem ser
+ * desabilitadas nem ter vigência limitada por esta API — nem com a chave correta.
  */
 @RestController
 @RequestMapping("/v1/risk-rules")

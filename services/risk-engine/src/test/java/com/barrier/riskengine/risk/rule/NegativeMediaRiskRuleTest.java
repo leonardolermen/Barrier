@@ -6,6 +6,7 @@ import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.screening.domain.MatchBasis;
 import com.barrier.riskengine.screening.domain.MatchType;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
@@ -30,7 +31,7 @@ class NegativeMediaRiskRuleTest {
 
     RiskResult r =
         rule.evaluate(
-            context(new ScreeningHit(MatchType.ADVERSE_MEDIA, "stub-negative-media", "F", "fraude")));
+            context(new ScreeningHit(MatchType.ADVERSE_MEDIA, MatchBasis.NAME, "stub-negative-media", "F", "fraude")));
 
     assertThat(r.triggered()).isTrue();
     assertThat(r.score()).isEqualTo(250);
@@ -48,7 +49,7 @@ class NegativeMediaRiskRuleTest {
   void ignoraApontamentosDeOutrosTipos() {
     var rule = new NegativeMediaRiskRule(250);
 
-    RiskResult r = rule.evaluate(context(new ScreeningHit(MatchType.PEP, "base", "F", "cargo")));
+    RiskResult r = rule.evaluate(context(new ScreeningHit(MatchType.PEP, MatchBasis.NAME, "base", "F", "cargo")));
 
     assertThat(r.triggered()).isFalse();
   }

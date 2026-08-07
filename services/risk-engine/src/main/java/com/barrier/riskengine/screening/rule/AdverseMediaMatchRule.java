@@ -13,7 +13,10 @@ public class AdverseMediaMatchRule implements ScreeningRule {
   public List<ScreeningHit> evaluate(ScreeningContext context) {
     return context.entries().stream()
         .filter(e -> e.type() == MatchType.ADVERSE_MEDIA)
-        .map(e -> new ScreeningHit(MatchType.ADVERSE_MEDIA, e.source(), e.matchedName(), e.detail()))
+        .map(
+            e ->
+                new ScreeningHit(
+                    MatchType.ADVERSE_MEDIA, e.basis(), e.source(), e.matchedName(), e.detail()))
         .toList();
   }
 }

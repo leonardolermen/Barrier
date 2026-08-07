@@ -13,7 +13,7 @@ public class PepMatchRule implements ScreeningRule {
   public List<ScreeningHit> evaluate(ScreeningContext context) {
     return context.entries().stream()
         .filter(e -> e.type() == MatchType.PEP)
-        .map(e -> new ScreeningHit(MatchType.PEP, e.source(), e.matchedName(), e.detail()))
+        .map(e -> new ScreeningHit(MatchType.PEP, e.basis(), e.source(), e.matchedName(), e.detail()))
         .toList();
   }
 }

@@ -6,6 +6,7 @@ import java.util.List;
 /** Subconjunto da resposta de CNPJ da BrasilAPI (dados da Receita Federal). */
 record BrasilApiCnpj(
     @JsonProperty("razao_social") String razaoSocial,
+    @JsonProperty("nome_fantasia") String nomeFantasia,
     @JsonProperty("descricao_situacao_cadastral") String situacaoCadastral,
     @JsonProperty("cnae_fiscal") Integer cnaeFiscal,
     @JsonProperty("cnae_fiscal_descricao") String cnae,

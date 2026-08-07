@@ -3,6 +3,7 @@ package com.barrier.riskengine.screening.watchlist;
 import com.barrier.riskengine.screening.client.WatchlistEntry;
 import com.barrier.riskengine.screening.client.WatchlistProvider;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
+import com.barrier.riskengine.screening.domain.MatchBasis;
 import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -23,7 +24,7 @@ public class LocalWatchlistProvider implements WatchlistProvider {
   @Override
   public List<WatchlistEntry> search(WatchlistQuery query) {
     return repository.findByDocument(query.documentDigits()).stream()
-        .map(r -> new WatchlistEntry(r.type(), r.source(), r.name(), r.detail()))
+        .map(r -> new WatchlistEntry(r.type(), MatchBasis.DOCUMENT, r.source(), r.name(), r.detail()))
         .toList();
   }
 

@@ -13,7 +13,10 @@ public class SanctionMatchRule implements ScreeningRule {
   public List<ScreeningHit> evaluate(ScreeningContext context) {
     return context.entries().stream()
         .filter(e -> e.type() == MatchType.SANCTION)
-        .map(e -> new ScreeningHit(MatchType.SANCTION, e.source(), e.matchedName(), e.detail()))
+        .map(
+            e ->
+                new ScreeningHit(
+                    MatchType.SANCTION, e.basis(), e.source(), e.matchedName(), e.detail()))
         .toList();
   }
 }
