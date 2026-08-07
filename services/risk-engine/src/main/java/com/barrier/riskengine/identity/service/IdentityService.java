@@ -60,14 +60,17 @@ public class IdentityService {
         BureauResult result = provider.check(query);
         IdentityCheck check =
             save(command, toStatus(result.outcome()), provider.name(), result.detail());
+        // O detail traz nome/razão social vindos do bureau (dado pessoal). Fica persistido em
+        // identity_checks.detail, que é a evidência da decisão e tem controle de acesso — mas não
+        // vai para o log, que é agregado e amplamente legível.
         log.info(
-            "Bureau '{}' respondeu {} para {} {} — {}{}",
+            "Bureau '{}' respondeu {} para {} {}{}",
             provider.name(),
             result.outcome(),
             command.documentType(),
             maskedDoc,
-            result.detail(),
             result.company() != null ? " [perfil PJ obtido]" : "");
+        log.debug("Detalhe do bureau '{}': {}", provider.name(), result.detail());
         return new IdentityResult(check, result.company());
       } catch (BureauUnavailableException e) {
         lastError = provider.name() + ": " + e.getMessage();

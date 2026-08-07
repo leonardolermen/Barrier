@@ -1,4 +1,4 @@
-package com.barrier.riskengine.screening.watchlist;
+package com.barrier.commons.name;
 
 import java.text.Normalizer;
 import java.util.Locale;

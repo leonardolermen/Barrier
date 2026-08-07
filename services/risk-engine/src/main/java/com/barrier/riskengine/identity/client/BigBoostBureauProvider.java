@@ -1,10 +1,12 @@
 package com.barrier.riskengine.identity.client;
 
 import com.barrier.commons.mask.Documents;
+import com.barrier.commons.name.NameSimilarity;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
@@ -32,9 +34,13 @@ public class BigBoostBureauProvider implements BureauProvider {
   private static final Logger log = LoggerFactory.getLogger(BigBoostBureauProvider.class);
 
   private final RestClient restClient;
+  private final double nameThreshold;
 
-  public BigBoostBureauProvider(@Qualifier("bigBoostRestClient") RestClient restClient) {
+  public BigBoostBureauProvider(
+      @Qualifier("bigBoostRestClient") RestClient restClient,
+      @Value("${barrier.identity.name-match.threshold:0.85}") double nameThreshold) {
     this.restClient = restClient;
+    this.nameThreshold = nameThreshold;
   }
 
   @Override
@@ -61,6 +67,15 @@ public class BigBoostBureauProvider implements BureauProvider {
       }
       BigBoostBasicDataResponse.BasicData data = results.get(0).basicData();
       log.debug("BigBoost CPF {}: nome={}", Documents.mask(query.documentDigits()), data.name());
+      // O CPF existir não diz que pertence a quem o informou. Sem esta comparação, um CPF real de
+      // terceiro somado a qualquer nome resultava em identidade "verificada".
+      if (!NameSimilarity.matches(query.name(), data.name(), nameThreshold)) {
+        return new BureauResult(
+            BureauResult.Outcome.MISMATCH,
+            "Nome informado diverge do titular do CPF (similaridade "
+                + Math.round(NameSimilarity.similarity(query.name(), data.name()) * 100)
+                + "%)");
+      }
       return new BureauResult(BureauResult.Outcome.MATCH, data.name() + " — confirmado na BigBoost");
     } catch (RestClientException e) {
       throw new BureauUnavailableException("BigBoost indisponível: " + e.getMessage(), e);

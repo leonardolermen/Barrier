@@ -1,5 +1,6 @@
 package com.barrier.riskengine.screening.watchlist;
 
+import com.barrier.commons.name.NameNormalizer;
 import com.barrier.riskengine.screening.domain.MatchType;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.io.ByteArrayInputStream;

@@ -1,8 +1,11 @@
 package com.barrier.riskengine.screening.watchlist;
 
+import com.barrier.commons.name.JaroWinkler;
+import com.barrier.commons.name.NameNormalizer;
 import com.barrier.riskengine.screening.client.WatchlistEntry;
 import com.barrier.riskengine.screening.client.WatchlistProvider;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
+import com.barrier.riskengine.screening.domain.MatchBasis;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
 import java.util.List;
@@ -50,9 +53,10 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
     List<WatchlistRecord> candidates = repository.findNameEntries();
     List<WatchlistEntry> matches =
         candidates.stream().map(record -> scored(normalizedQuery, record)).filter(m -> m != null).toList();
+    // Sem o nome consultado: é dado pessoal e sairia em toda avaliação. O que interessa para
+    // operar é o volume comparado e quantos casaram.
     log.debug(
-        "Fuzzy: '{}' comparado a {} entrada(s) por nome (limiar {}) -> {} match(es)",
-        query.name(),
+        "Fuzzy: {} entrada(s) comparada(s) por nome (limiar {}) -> {} match(es)",
         candidates.size(),
         threshold,
         matches.size());
@@ -69,7 +73,7 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
         record.type(), record.source(), record.name(), Math.round(score * 100));
     String detail =
         String.format("match por nome %.0f%% — %s", score * 100, nullSafe(record.detail()));
-    return new WatchlistEntry(record.type(), record.source(), record.name(), detail);
+    return new WatchlistEntry(record.type(), MatchBasis.NAME, record.source(), record.name(), detail);
   }
 
   private static String nullSafe(String value) {

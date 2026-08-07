@@ -3,6 +3,7 @@ package com.barrier.riskengine.screening.media;
 import com.barrier.riskengine.screening.client.NegativeMediaProvider;
 import com.barrier.riskengine.screening.client.WatchlistEntry;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
+import com.barrier.riskengine.screening.domain.MatchBasis;
 import com.barrier.riskengine.screening.domain.MatchType;
 import java.util.List;
 import java.util.Set;
@@ -39,6 +40,7 @@ public class StubNegativeMediaProvider implements NegativeMediaProvider {
     return List.of(
         new WatchlistEntry(
             MatchType.ADVERSE_MEDIA,
+            MatchBasis.NAME,
             name(),
             query.name(),
             "Nome associado a termos de mídia negativa (lavagem/corrupção/fraude/tráfico/"

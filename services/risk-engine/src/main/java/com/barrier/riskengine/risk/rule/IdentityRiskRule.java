@@ -12,9 +12,16 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>NOT_FOUND → bloqueio (documento inexistente no bureau)
  *   <li>MISMATCH → revisão (dados divergentes)
- *   <li>UNAVAILABLE → pontua (não foi possível confirmar), sem bloquear
+ *   <li>UNAVAILABLE → <b>revisão</b> (não foi possível confirmar a identidade)
  *   <li>VERIFIED → não aplicável
  * </ul>
+ *
+ * <p><b>Por que UNAVAILABLE força REVIEW:</b> antes esta regra só pontuava (150), o que caía na
+ * banda LOW e resultava em APROVADO — ou seja, uma indisponibilidade do bureau virava aprovação
+ * automática sem verificação alguma. Como a cadeia de bureaus só chega a UNAVAILABLE quando
+ * <i>todos</i> os providers falharam ({@code IdentityService}), o motor estaria decidindo com a
+ * informação mais importante ausente. Decidir sem insumo é fail-open; a decisão correta é
+ * escalar para humano.
  */
 @Component
 public class IdentityRiskRule implements RiskRule {
@@ -44,9 +51,9 @@ public class IdentityRiskRule implements RiskRule {
               "IDENTITY_UNAVAILABLE",
               150,
               Severity.MEDIUM,
-              "Bureau indisponível na verificação",
+              "Identidade não confirmada: bureau indisponível na verificação",
               evidence,
-              null);
+              RiskRecommendation.REVIEW);
       case VERIFIED -> RiskResult.notApplicable("IDENTITY_OK");
     };
   }

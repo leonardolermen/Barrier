@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.barrier.riskengine.screening.client.WatchlistEntry;
 import com.barrier.riskengine.screening.client.WatchlistProvider;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
+import com.barrier.riskengine.screening.domain.MatchBasis;
 import com.barrier.riskengine.screening.domain.MatchType;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.domain.ScreeningStatus;
@@ -54,7 +55,7 @@ class ScreeningServiceTest {
   void registroDeSancaoResultaHit() {
     when(provider.search(any(WatchlistQuery.class)))
         .thenReturn(
-            List.of(new WatchlistEntry(MatchType.SANCTION, "OFAC", "Empresa X", "SDN")));
+            List.of(new WatchlistEntry(MatchType.SANCTION, MatchBasis.DOCUMENT, "OFAC", "Empresa X", "SDN")));
 
     ScreeningResult result = service.screen(command());
 
@@ -68,8 +69,8 @@ class ScreeningServiceTest {
     when(provider.search(any(WatchlistQuery.class)))
         .thenReturn(
             List.of(
-                new WatchlistEntry(MatchType.PEP, "base-pep", "Fulano", "cargo"),
-                new WatchlistEntry(MatchType.SANCTION, "ONU", "Fulano", "lista")));
+                new WatchlistEntry(MatchType.PEP, MatchBasis.NAME, "base-pep", "Fulano", "cargo"),
+                new WatchlistEntry(MatchType.SANCTION, MatchBasis.DOCUMENT, "ONU", "Fulano", "lista")));
 
     ScreeningResult result = service.screen(command());
 

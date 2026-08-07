@@ -20,9 +20,12 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Gestão de overrides de risco por tenant — operação interna/administrativa (não é self-service
  * do parceiro): permitir que o próprio tenant relaxe seus controles de risco é o risco que a
- * allowlist de {@link TenantRiskConfigValidator} existe para evitar. Sem gate de admin-auth
- * dedicado ainda (pré-auth do projeto todo — ver {@link TenantService}); restringir por rede/
- * ambiente até existir autenticação de admin formal.
+ * allowlist de {@link TenantRiskConfigValidator} existe para evitar.
+ *
+ * <p>Protegido por {@code X-Admin-Key} ({@link com.barrier.riskengine.web.AdminApiKeyFilter}).
+ * O tenant alvo vem do <b>path</b>, e não do {@code X-Client-Id}, de propósito: é o admin operando
+ * sobre a configuração de um parceiro. Isso só é seguro porque o filtro prova que quem chama é o
+ * admin — antes dele, qualquer chamador editava a calibragem de qualquer tenant.
  */
 @RestController
 @RequestMapping("/v1/tenants/{tenantId}/risk-config")

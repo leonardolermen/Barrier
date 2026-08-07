@@ -1,5 +1,15 @@
 # Profile de produção: habilita as fontes reais de watchlist (ver ADR-0013 e
 # WatchlistReadinessGuard, que falha a subida se estas flags ficarem desligadas aqui).
+
+# DEBUG em identity/screening imprime nome do cliente e razão social a cada avaliação — dado
+# pessoal indo para o agregador de logs sem base legal nem controle de acesso. Em produção o
+# essencial (desfecho, provider, documento mascarado) já sai em INFO.
+logging:
+  level:
+    com.barrier: INFO
+    com.barrier.riskengine.identity: INFO
+    com.barrier.riskengine.screening: INFO
+
 barrier:
   watchlist:
     cgu:

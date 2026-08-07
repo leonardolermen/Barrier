@@ -1,4 +1,4 @@
-package com.barrier.riskengine.screening.watchlist;
+package com.barrier.commons.name;
 
 /**
  * Similaridade Jaro-Winkler entre duas strings (0.0 a 1.0). Boa para nomes próprios: tolera

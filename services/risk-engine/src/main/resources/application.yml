@@ -35,8 +35,8 @@ server:
 
 logging:
   level:
-    # Visibilidade de bureau (resposta/perfil) e screening (listas/apontamentos, incl. OFAC/CGU).
-    # Baixar para INFO em produção se o volume incomodar (o essencial já sai em INFO).
+    # DEBUG de bureau/screening expõe dado pessoal (nome do cliente, razão social) — vale só em
+    # dev. O profile prod sobrescreve para INFO; ver application-prod.yml.
     com.barrier.riskengine.identity: DEBUG
     com.barrier.riskengine.screening: DEBUG
     # Silencia os dumps verbosos de startup (info do banco e configs completas do Kafka).
@@ -44,6 +44,10 @@ logging:
     org.apache.kafka.common.config.AbstractConfig: WARN
 
 barrier:
+  admin:
+    # Protege /v1/risk-rules e /v1/tenants/*/risk-config (header X-Admin-Key). Vazia por padrão:
+    # em dev o filtro fica inerte; em prod a aplicação não sobe sem ela (AdminApiKeyReadinessGuard).
+    api-key: ${ADMIN_API_KEY:}
   assessment:
     processor-delay-ms: 2000
   outbox:
