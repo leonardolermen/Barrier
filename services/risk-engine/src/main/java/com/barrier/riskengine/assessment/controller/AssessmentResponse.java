@@ -13,5 +13,6 @@ public record AssessmentResponse(
     Instant createdAt,
     Instant completedAt,
     String reviewedBy,
+    String reviewedByKey,
     String reviewReason,
     Instant reviewedAt) {}

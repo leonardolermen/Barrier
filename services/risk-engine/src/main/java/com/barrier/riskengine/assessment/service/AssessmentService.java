@@ -64,9 +64,14 @@ public class AssessmentService {
    */
   @Transactional
   public Assessment decide(
-      AssessmentId id, String tenantId, boolean approve, String reviewedBy, String reason) {
+      AssessmentId id,
+      String tenantId,
+      boolean approve,
+      String reviewedBy,
+      String reviewedByKey,
+      String reason) {
     Assessment assessment = get(id, tenantId);
-    assessment.decide(approve, reviewedBy, reason);
+    assessment.decide(approve, reviewedBy, reviewedByKey, reason);
     Assessment saved = repository.save(assessment);
     eventPublisher.publishCompleted(saved);
     return saved;

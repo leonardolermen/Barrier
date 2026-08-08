@@ -57,6 +57,9 @@ class AssessmentEntity {
   @Column(name = "completed_at")
   private Instant completedAt;
 
+  @Column(name = "reviewed_by_key", length = 120)
+  private String reviewedByKey;
+
   @Column(name = "reviewed_by", length = 200)
   private String reviewedBy;
 
@@ -164,6 +167,14 @@ class AssessmentEntity {
 
   void setCompletedAt(Instant completedAt) {
     this.completedAt = completedAt;
+  }
+
+  String getReviewedByKey() {
+    return reviewedByKey;
+  }
+
+  void setReviewedByKey(String reviewedByKey) {
+    this.reviewedByKey = reviewedByKey;
   }
 
   String getReviewedBy() {

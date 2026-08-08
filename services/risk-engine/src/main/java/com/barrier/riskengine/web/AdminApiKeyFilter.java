@@ -41,9 +41,14 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
 
   private static final Logger log = LoggerFactory.getLogger(AdminApiKeyFilter.class);
 
-  /** {@code /v1/risk-rules[/...]} e {@code /v1/tenants/{id}/risk-config}. */
+  /**
+   * {@code /v1/risk-rules[/...]}, {@code /v1/tenants/{id}/risk-config} e
+   * {@code /v1/tenants/{id}/api-keys}. A emissão de credencial entra aqui pelo motivo mais óbvio:
+   * se fosse self-service, qualquer um emitiria a chave de qualquer tenant e a autenticação não
+   * valeria nada.
+   */
   private static final Pattern ADMIN_PATHS =
-      Pattern.compile("^/v1/(risk-rules(/.*)?|tenants/[^/]+/risk-config)$");
+      Pattern.compile("^/v1/(risk-rules(/.*)?|tenants/[^/]+/(risk-config|api-keys))$");
 
   private final String configuredKey;
 

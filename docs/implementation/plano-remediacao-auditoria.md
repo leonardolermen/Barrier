@@ -19,9 +19,9 @@ essas duas coisas antes de ser considerado pronto.
 
 | | Auditoria inicial | Agora | Δ |
 |---|---|---|---|
-| Testes | 141 (+2 erros) | **225** (0 falhas) | +84 |
-| Achados 🔴 Critical | 27 | **17** | −10 |
-| Nota geral | 3,2 | **≈4,3** | +1,1 |
+| Testes | 141 (+2 erros) | **238** (0 falhas) | +97 |
+| Achados 🔴 Critical | 27 | **15** | −12 |
+| Nota geral | 3,2 | **≈4,7** | +1,5 |
 
 Ramos entregues:
 
@@ -29,13 +29,14 @@ Ramos entregues:
 |---|---|---|
 | `fix/hardening-go-live` | `bdecade` | Fail-open de decisão, gate de admin, segredos, PII em log, comparação de nome |
 | `feat/pep-watchlist-cgu` | `d671e72` | Fonte de PEP da CGU, cobertura de listas verificável e fail-closed |
+| `feat/tenant-api-key` | — | Autenticação por API key; tenant derivado da credencial |
 
 Notas por dimensão (0–10):
 
 | Dimensão | Antes | Agora | Comentário |
 |---|---|---|---|
 | Arquitetura | 5,5 | 5,5 | Nada estrutural mudou ainda |
-| Segurança | 1,5 | 3,5 | Admin e segredos fechados; **auth de tenant e cripto seguem ausentes** |
+| Segurança | 1,5 | 5,0 | Auth de tenant, admin e segredos fechados; **cripto em repouso segue ausente** |
 | KYC | 2,0 | 4,0 | Nome comparado; **PF ainda sem bureau** |
 | Antifraude | 1,0 | 1,0 | Intocado |
 | AML/Compliance | 2,5 | 4,0 | PEP existe; CSNU, CEIS e rescreening abertos |
@@ -83,17 +84,19 @@ Notas por dimensão (0–10):
 Sem isto, nenhum controle acima é confiável: dá para contornar todos assumindo a identidade
 de outro tenant.
 
-- [ ] **Autenticação por tenant (API key ou mTLS)**
-  `X-Client-Id` é um header autodeclarado — hoje qualquer um lê e **aprova** avaliação alheia.
-  O tenant passa a ser derivado da credencial e o header é **ignorado**, não confiado.
-  *Pronto quando:* requisição sem credencial válida responde 401; teste prova que forjar
-  `X-Client-Id` não dá acesso a assessment de outro tenant.
+- [x] **Autenticação por tenant (API key)** — `feat/tenant-api-key`
+  Tenant derivado da credencial (`Authorization: Bearer brr_<keyId>_<secret>`); `X-Client-Id`
+  deixou de ser lido. Segredo guardado só como hash; emissão por endpoint de admin.
+  *Verificado:* `TenantIsolationIntegrationTest` — sem credencial, credencial forjada, `keyId`
+  sem segredo e header `X-Client-Id` forjado respondem todos 401; credencial de tenant não abre
+  endpoint administrativo e vice-versa.
 
-- [ ] **`reviewedBy` derivado do token, não do corpo**
-  A revisão manual (EDD) é o controle compensatório de todo PEP, mídia negativa e cadastro
-  incompleto — e hoje é autoatestada: o chamador escreve o nome do analista numa string livre.
-  *Pronto quando:* `ReviewDecisionRequest` não aceita mais `reviewedBy`; a trilha grava a
-  identidade autenticada. Segregação de funções (quem submete ≠ quem decide) é item da Onda 2.
+- [ ] **Identidade do operador humano na revisão (EDD)**
+  *Parcialmente endereçado:* a trilha agora grava `reviewed_by_key` — qual credencial decidiu,
+  garantido pelo sistema e revogável — separado de `reviewed_by`, que continua sendo texto
+  autodeclarado. Falta o que a API key não resolve: a credencial identifica o **sistema cliente**,
+  não a pessoa. Identidade por operador exige autenticação de usuário (OIDC/SSO).
+  *Pronto quando:* a decisão registra um operador autenticado, e não um texto livre.
 
 - [ ] **`Idempotency-Key` no intake**
   Retry do cliente cria duas avaliações, dois custos de bureau, dois webhooks — e as decisões

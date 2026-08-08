@@ -25,6 +25,7 @@ final class AssessmentEntityMapper {
     e.setCreatedAt(a.createdAt());
     e.setCompletedAt(a.completedAt());
     e.setReviewedBy(a.reviewedBy());
+    e.setReviewedByKey(a.reviewedByKey());
     e.setReviewReason(a.reviewReason());
     e.setReviewedAt(a.reviewedAt());
     return e;
@@ -45,6 +46,7 @@ final class AssessmentEntityMapper {
         e.getCreatedAt(),
         e.getCompletedAt(),
         e.getReviewedBy(),
+        e.getReviewedByKey(),
         e.getReviewReason(),
         e.getReviewedAt());
   }

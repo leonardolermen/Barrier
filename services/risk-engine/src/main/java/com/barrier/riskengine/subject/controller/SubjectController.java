@@ -3,12 +3,10 @@ package com.barrier.riskengine.subject.controller;
 import com.barrier.commons.mask.Documents;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
-import com.barrier.riskengine.tenant.domain.Tenant;
-import com.barrier.riskengine.tenant.service.TenantService;
+import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,22 +18,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/subjects")
 public class SubjectController {
 
-  private static final String CLIENT_HEADER = "X-Client-Id";
-
   private final SubjectService subjectService;
-  private final TenantService tenantService;
 
-  public SubjectController(SubjectService subjectService, TenantService tenantService) {
+  public SubjectController(SubjectService subjectService) {
     this.subjectService = subjectService;
-    this.tenantService = tenantService;
   }
 
   /** Busca um subject pelo documento (CPF de 11 ou CNPJ de 14 dígitos). */
   @GetMapping("/{document}")
   public ResponseEntity<SubjectResponse> get(
-      @RequestHeader(name = CLIENT_HEADER, required = false) String clientId,
-      @PathVariable String document) {
-    Tenant tenant = tenantService.resolve(clientId);
+      AuthenticatedTenant tenant, @PathVariable String document) {
     String digits = document.replaceAll("\\D", "");
     String documentType =
         switch (digits.length()) {

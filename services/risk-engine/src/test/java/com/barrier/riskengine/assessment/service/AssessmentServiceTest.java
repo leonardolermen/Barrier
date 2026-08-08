@@ -96,10 +96,11 @@ class AssessmentServiceTest {
     when(repository.findById(a.id())).thenReturn(Optional.of(a));
     when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-    Assessment result = service().decide(a.id(), "default", true, "analista@empresa", "ok");
+    Assessment result = service().decide(a.id(), "default", true, "analista@empresa", "chave-teste", "ok");
 
     assertThat(result.status()).isEqualTo(AssessmentStatus.APROVADO);
     assertThat(result.reviewedBy()).isEqualTo("analista@empresa");
+    assertThat(result.reviewedByKey()).isEqualTo("chave-teste");
     verify(eventPublisher).publishCompleted(result);
   }
 
@@ -108,7 +109,7 @@ class AssessmentServiceTest {
     Assessment a = emRevisao("empresa-1");
     when(repository.findById(a.id())).thenReturn(Optional.of(a));
 
-    assertThatThrownBy(() -> service().decide(a.id(), "empresa-2", true, "x", null))
+    assertThatThrownBy(() -> service().decide(a.id(), "empresa-2", true, "x", "chave-teste", null))
         .isInstanceOf(AssessmentNotFoundException.class);
   }
 
@@ -119,7 +120,7 @@ class AssessmentServiceTest {
             "default", UUID.randomUUID().toString(), DocumentType.CPF, "111.444.777-35", "Fulano");
     when(repository.findById(a.id())).thenReturn(Optional.of(a));
 
-    assertThatThrownBy(() -> service().decide(a.id(), "default", true, "x", null))
+    assertThatThrownBy(() -> service().decide(a.id(), "default", true, "x", "chave-teste", null))
         .isInstanceOf(IllegalStateException.class);
   }
 }

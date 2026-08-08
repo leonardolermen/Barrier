@@ -8,6 +8,7 @@ import com.barrier.riskengine.assessment.controller.ReviewDecisionRequest;
 import com.barrier.riskengine.assessment.controller.SubmitAssessmentRequest;
 import com.barrier.riskengine.assessment.domain.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentProcessor;
+import com.barrier.riskengine.tenant.service.ApiKeyService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,11 +51,22 @@ class AssessmentReviewFlowIntegrationTest {
   int port;
 
   @Autowired AssessmentProcessor processor;
+  @Autowired ApiKeyService apiKeyService;
+
+  private String apiKey;
+
+  /** Emite a credencial do tenant de teste: a migration não semeia chave conhecida. */
+  private String apiKey() {
+    if (apiKey == null) {
+      apiKey = apiKeyService.issue("default", "teste-integracao").presentedValue();
+    }
+    return apiKey;
+  }
 
   private RestClient client() {
     return RestClient.builder()
         .baseUrl("http://localhost:" + port)
-        .defaultHeader("X-Client-Id", "default")
+        .defaultHeader("Authorization", "Bearer " + apiKey())
         .build();
   }
 
