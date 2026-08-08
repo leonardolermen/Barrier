@@ -19,9 +19,9 @@ essas duas coisas antes de ser considerado pronto.
 
 | | Auditoria inicial | Agora | Δ |
 |---|---|---|---|
-| Testes | 141 (+2 erros) | **238** (0 falhas) | +97 |
-| Achados 🔴 Critical | 27 | **15** | −12 |
-| Nota geral | 3,2 | **≈4,7** | +1,5 |
+| Testes | 141 (+2 erros) | **244** (0 falhas) | +103 |
+| Achados 🔴 Critical | 27 | **12** | −15 |
+| Nota geral | 3,2 | **≈5,2** | +2,0 |
 
 Ramos entregues:
 
@@ -29,19 +29,20 @@ Ramos entregues:
 |---|---|---|
 | `fix/hardening-go-live` | `bdecade` | Fail-open de decisão, gate de admin, segredos, PII em log, comparação de nome |
 | `feat/pep-watchlist-cgu` | `d671e72` | Fonte de PEP da CGU, cobertura de listas verificável e fail-closed |
-| `feat/tenant-api-key` | — | Autenticação por API key; tenant derivado da credencial |
+| `feat/tenant-api-key` | `e1792cd` | Autenticação por API key; tenant derivado da credencial |
+| `fix/processing-integrity` | — | Reivindicação exclusiva, transação por avaliação, estado de falha |
 
 Notas por dimensão (0–10):
 
 | Dimensão | Antes | Agora | Comentário |
 |---|---|---|---|
-| Arquitetura | 5,5 | 5,5 | Nada estrutural mudou ainda |
+| Arquitetura | 5,5 | 7,0 | Transação por item, posse com lease, falha isolada |
 | Segurança | 1,5 | 5,0 | Auth de tenant, admin e segredos fechados; **cripto em repouso segue ausente** |
 | KYC | 2,0 | 4,0 | Nome comparado; **PF ainda sem bureau** |
 | Antifraude | 1,0 | 1,0 | Intocado |
 | AML/Compliance | 2,5 | 4,0 | PEP existe; CSNU, CEIS e rescreening abertos |
 | Escalabilidade | 2,0 | 2,0 | Intocado — ainda ~1–3 TPS/instância |
-| Resiliência | 3,5 | 5,0 | Fail-closed nos três caminhos de aprovação indevida |
+| Resiliência | 3,5 | 6,5 | Fail-closed + poison pill e duplicação resolvidos |
 | Observabilidade | 2,0 | 2,5 | Só o health de cobertura |
 | Auditoria | 4,0 | 4,5 | Evidência mais rica; reprodutibilidade ainda não |
 | Explicabilidade | 6,0 | 6,5 | `MatchBasis` e motivo de cobertura na trilha |
@@ -103,23 +104,29 @@ de outro tenant.
   podem divergir, o que torna o retry um oráculo: tentar até o bureau falhar.
   *Pronto quando:* mesmo `POST` com a mesma chave em janela definida retorna a mesma avaliação.
 
-- [ ] **`FOR UPDATE SKIP LOCKED` + `@Version` nos dois pollers**
-  Escalar horizontalmente hoje produz **decisões divergentes**: duas instâncias processam a
-  mesma avaliação e ambas emitem evento, com `eventId` diferente (a idempotência do webhook não
-  pega). O cliente recebe dois callbacks contraditórios sem critério de desempate.
-  *Pronto quando:* teste com duas instâncias concorrentes produz uma decisão e um evento.
+- [x] **`FOR UPDATE SKIP LOCKED` + `@Version` nos dois pollers** — `fix/processing-integrity`
+  Reivindicação com lease (`claimed_at`) nas avaliações, `SKIP LOCKED` na outbox, `@Version` no
+  agregado. Antes, duas instâncias processavam a mesma avaliação e ambas emitiam evento com
+  `eventId` diferente — a idempotência do webhook não pegava, e o cliente recebia dois callbacks
+  possivelmente contraditórios.
+  *Verificado:* `ConcurrentClaimIntegrationTest` contra Postgres real — reivindicações
+  concorrentes devolvem conjuntos disjuntos; lease expirada devolve a avaliação à fila.
 
-- [ ] **Transação por avaliação; I/O externo fora da transação**
-  `process()` é `@Transactional` sobre lote de 50 com chamadas HTTP dentro: prende conexão por
-  minutos e um bureau lento esgota o pool, derrubando a API inteira.
-  *Pronto quando:* falha de uma avaliação não desfaz as outras do lote; conexão não fica presa
-  durante chamada externa.
+- [x] **Transação por avaliação; I/O externo fora da transação** — `fix/processing-integrity`
+  Era `@Transactional` sobre lote de 50 com chamadas HTTP dentro: prendia conexão por minutos, e
+  um bureau lento esgotava o pool derrubando a API inteira. Agora só a gravação do desfecho +
+  evento é transacional.
+  *Verificado:* `AssessmentProcessorTest` — falha de uma avaliação não impede as demais.
 
-- [ ] **Estado de falha + DLQ no processamento**
-  Hoje uma exceção vira poison pill infinita: a avaliação volta ao topo da fila a cada 2s, sem
-  limite, sem status de erro, sem alerta. Nada sai de `EM_ANALISE`.
-  *Pronto quando:* existe `attempts`/`last_error`; após N tentativas vai para quarentena; há
-  alerta por idade de `EM_ANALISE`.
+- [x] **Estado de falha + backoff no processamento** — `fix/processing-integrity`
+  `attempts`/`last_error`/`next_attempt_at` com backoff exponencial e status
+  `FALHA_PROCESSAMENTO` ao esgotar as tentativas. Antes, uma exceção virava poison pill infinita:
+  a avaliação voltava ao topo da fila a cada 2s, sem limite e sem estado de erro, indistinguível
+  de uma que ainda ia concluir.
+  *Verificado:* `AssessmentProcessorTest` — tentativa contabilizada sem publicar evento; após N
+  tentativas vai para `FALHA_PROCESSAMENTO`.
+  ⚠️ **Falta o alerta por idade de `EM_ANALISE`** — sem ele a falha é registrada mas ninguém é
+  avisado. Fica no item de observabilidade.
 
 - [ ] **`TaskScheduler` dedicado por job**
   Pool default é **1 thread** compartilhada por processador, relay e importação diária. O import
