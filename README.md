@@ -73,6 +73,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 - [Requisitos regulatórios](docs/architecture/compliance.md)
 - [Padrões de código e design patterns](docs/implementation/coding-standards.md)
 - [Plano de implementação e progresso](docs/implementation/risk-engine-plan.md)
+- [**Plano de remediação da auditoria**](docs/implementation/plano-remediacao-auditoria.md) — o que falta para produção, com critérios de pronto
 - [Diagramas](docs/diagrams/README.md)
 - [Registros de decisão (ADRs)](docs/adr/README.md)
 

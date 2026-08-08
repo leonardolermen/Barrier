@@ -5,6 +5,9 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
 
 ## Ao implementar código, siga SEMPRE
 
+- **O que falta para produção:** [docs/implementation/plano-remediacao-auditoria.md](docs/implementation/plano-remediacao-auditoria.md)
+  — plano vivo da auditoria de KYC/PLD-FT, com critérios de pronto. Consulte antes de propor
+  trabalho novo: o que está lá é o que reduz risco de verdade.
 - **Padrões de código:** [docs/implementation/coding-standards.md](docs/implementation/coding-standards.md)
 - **Plano da Risk Engine:** [docs/implementation/risk-engine-plan.md](docs/implementation/risk-engine-plan.md)
 - **Decisões de arquitetura:** [docs/adr/](docs/adr/) (ADR-0009 define o corte atual)
