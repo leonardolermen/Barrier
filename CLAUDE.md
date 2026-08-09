@@ -5,6 +5,9 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
 
 ## Ao implementar código, siga SEMPRE
 
+- **O que falta para produção:** [docs/implementation/plano-remediacao-auditoria.md](docs/implementation/plano-remediacao-auditoria.md)
+  — plano vivo da auditoria de KYC/PLD-FT, com critérios de pronto. Consulte antes de propor
+  trabalho novo: o que está lá é o que reduz risco de verdade.
 - **Padrões de código:** [docs/implementation/coding-standards.md](docs/implementation/coding-standards.md)
 - **Plano da Risk Engine:** [docs/implementation/risk-engine-plan.md](docs/implementation/risk-engine-plan.md)
 - **Decisões de arquitetura:** [docs/adr/](docs/adr/) (ADR-0009 define o corte atual)
@@ -163,6 +166,25 @@ padrão de `PepMatchRule`/`SanctionMatchRule`) + `NegativeMediaRiskRule` (risco,
 como PEP — apontamento de mídia pode ser homônimo/desatualizado, exige julgamento de analista
 antes de reprovar). Nenhuma mudança em `ScreeningService`/`RiskScoringService`: os dois já
 agregam qualquer bean das interfaces `WatchlistProvider`/`RiskRule`.
+
+PEP e cobertura de listas (branch `feat/pep-watchlist-cgu`): `PepWatchlistSource` (segmento `pep`
+do Portal da Transparência) é a **primeira fonte a produzir `MatchType.PEP`** — antes CEIS/CNEP/OFAC
+eram todas `SANCTION` e a `PepRiskRule` nunca disparava em produção, apesar do Javadoc citar a
+Circular 3.978. A CGU publica o CPF **mascarado** (`***.123.456-**`), então: `document` fica nulo
+(match exato erraria o titular) e os 6 dígitos centrais vão para `document_partial` (migration
+V019), que o `FuzzyNameWatchlistProvider` usa como **discriminador** do match por nome — sem ele,
+todo homônimo da lista viraria revisão manual. ⚠️ O formato do CSV **não foi verificado contra o
+portal real** (403 do ambiente de dev, inclusive para `ceis`); os rótulos de coluna são resolvidos
+por alternativas, mas validar antes de produção.
+
+Cobertura de screening: `WatchlistImportStatus` guarda o resultado da última importação por fonte
+(em memória — o que importa é se *esta* instância tem cobertura utilizável); `WatchlistImporter`
+recusa substituir a base por uma importação **vazia** (CSV com layout novo apagaria a lista inteira);
+`WatchlistHealthIndicator` derruba `/actuator/health`; `ScreeningCoverageRiskRule` força REVIEW
+quando falta cobertura de SANCTION ou PEP. Junto, fecham o modo de falha em que importação falha →
+tabela vazia → screening CLEAR → todos aprovados, com health verde. `WatchlistReadinessGuard` agora
+exige cobertura das duas categorias em prod (via `WatchlistSource.provides()`), não só "alguma fonte
+além da SEED".
 
 Consistência cadastral: `RiskContext` ganhou `profile` (o `SubjectProfile` do subject, buscado
 por `SubjectProfileService.find` — novo método, cadastro em branco se não houver nenhum dado

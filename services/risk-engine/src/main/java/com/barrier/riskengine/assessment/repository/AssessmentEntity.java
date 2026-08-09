@@ -9,6 +9,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -56,6 +57,25 @@ class AssessmentEntity {
 
   @Column(name = "completed_at")
   private Instant completedAt;
+
+  @Version
+  @Column(name = "version", nullable = false)
+  private long version;
+
+  @Column(name = "claimed_at")
+  private Instant claimedAt;
+
+  @Column(name = "attempts", nullable = false)
+  private int attempts;
+
+  @Column(name = "last_error", length = 500)
+  private String lastError;
+
+  @Column(name = "next_attempt_at")
+  private Instant nextAttemptAt;
+
+  @Column(name = "reviewed_by_key", length = 120)
+  private String reviewedByKey;
 
   @Column(name = "reviewed_by", length = 200)
   private String reviewedBy;
@@ -164,6 +184,38 @@ class AssessmentEntity {
 
   void setCompletedAt(Instant completedAt) {
     this.completedAt = completedAt;
+  }
+
+  int getAttempts() {
+    return attempts;
+  }
+
+  void setAttempts(int attempts) {
+    this.attempts = attempts;
+  }
+
+  String getLastError() {
+    return lastError;
+  }
+
+  void setLastError(String lastError) {
+    this.lastError = lastError;
+  }
+
+  Instant getNextAttemptAt() {
+    return nextAttemptAt;
+  }
+
+  void setNextAttemptAt(Instant nextAttemptAt) {
+    this.nextAttemptAt = nextAttemptAt;
+  }
+
+  String getReviewedByKey() {
+    return reviewedByKey;
+  }
+
+  void setReviewedByKey(String reviewedByKey) {
+    this.reviewedByKey = reviewedByKey;
   }
 
   String getReviewedBy() {

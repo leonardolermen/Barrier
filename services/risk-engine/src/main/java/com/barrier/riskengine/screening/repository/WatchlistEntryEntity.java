@@ -29,6 +29,10 @@ class WatchlistEntryEntity {
   @Column(name = "document", length = 20)
   private String document;
 
+  /** Dígitos centrais do CPF quando a fonte publica o documento mascarado (ex.: PEP da CGU). */
+  @Column(name = "document_partial", length = 20)
+  private String documentPartial;
+
   @Column(name = "name", nullable = false, length = 300)
   private String name;
 
@@ -50,6 +54,7 @@ class WatchlistEntryEntity {
       String source,
       MatchType entryType,
       String document,
+      String documentPartial,
       String name,
       String detail,
       String listVersion,
@@ -58,6 +63,7 @@ class WatchlistEntryEntity {
     this.source = source;
     this.entryType = entryType;
     this.document = document;
+    this.documentPartial = documentPartial;
     this.name = name;
     this.detail = detail;
     this.listVersion = listVersion;
@@ -74,6 +80,10 @@ class WatchlistEntryEntity {
 
   String getDocument() {
     return document;
+  }
+
+  String getDocumentPartial() {
+    return documentPartial;
   }
 
   String getName() {

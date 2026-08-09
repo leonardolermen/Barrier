@@ -20,6 +20,7 @@ final class AssessmentDtoMapper {
         a.createdAt(),
         a.completedAt(),
         a.reviewedBy(),
+        a.reviewedByKey(),
         a.reviewReason(),
         a.reviewedAt());
   }

@@ -59,7 +59,11 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
   - `POST /v1/assessments` (202) · `GET /v1/assessments/{id}` · `POST /v1/assessments/{id}/decision` (EDD)
   - `GET /v1/subjects/{document}` · `PUT /v1/subjects/{document}/profile` (cadastro CMN 4.753) · `POST`/`GET /v1/subjects/{document}/history` (histórico interno)
   - `PUT`/`GET /v1/tenants/{tenantId}/risk-config` (override de regra por parceiro) · `PUT`/`GET /v1/risk-rules` (liga/desliga regra sem deploy)
-  - toda chamada exige o header **`X-Client-Id`** (tenant); em dev use `X-Client-Id: default`
+  - toda chamada de negócio exige **`Authorization: Bearer <api-key>`**; em dev a chave é emitida
+    na subida e impressa no log (`API key de DESENVOLVIMENTO emitida...`). Em produção sai por
+    `POST /v1/tenants/{tenantId}/api-keys`, protegido por `X-Admin-Key`
+  - endpoints administrativos (`/v1/risk-rules`, `/v1/tenants/*/risk-config`, `/v1/tenants/*/api-keys`)
+    exigem **`X-Admin-Key`**
   - contrato completo e exemplos: [collection Postman](docs/api/README.md) (ainda sem OpenAPI/springdoc — Fase 5)
 - Webhook API: <http://localhost:8082/actuator/health> (consome `assessment.completed` → callback assinado)
 - Kafka UI: <http://localhost:8081>
@@ -73,6 +77,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 - [Requisitos regulatórios](docs/architecture/compliance.md)
 - [Padrões de código e design patterns](docs/implementation/coding-standards.md)
 - [Plano de implementação e progresso](docs/implementation/risk-engine-plan.md)
+- [**Plano de remediação da auditoria**](docs/implementation/plano-remediacao-auditoria.md) — o que falta para produção, com critérios de pronto
 - [Diagramas](docs/diagrams/README.md)
 - [Registros de decisão (ADRs)](docs/adr/README.md)
 

@@ -22,12 +22,19 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
 
 ## Requisitos que a arquitetura já endereça
 
-1. **Trilha de auditoria imutável** — serviço de Audit consome todos os eventos; eventos
-   são *append-only* e versionados.
-2. **Reprocessamento** — como o fluxo é orientado a eventos, decisões podem ser reavaliadas
-   por replay sem reescrever a lógica.
-3. **Rastreabilidade** — `assessmentId` como *correlation id* liga todas as etapas de uma
-   decisão, de ponta a ponta.
+1. **Evidência da decisão persistida** — `risk_scores` guarda score, nível, fatores e a
+   versão do motor (`engine_version`); `identity_checks` e `screening_results` guardam o
+   insumo. *Não* existe serviço de Audit separado, nem eventos intermediários por etapa:
+   há um único evento (`barrier.assessment.completed`).
+2. **Rastreabilidade** — `assessmentId` liga as etapas de uma decisão de ponta a ponta.
+3. **Cobertura de listas verificável** — `WatchlistImportStatus` registra o resultado da
+   última importação por fonte; `WatchlistHealthIndicator` derruba o health quando falta
+   cobertura de sanções ou PEP; `ScreeningCoverageRiskRule` impede aprovação automática de
+   avaliação decidida sem lista. Antes, importação falha = tabela vazia = todos aprovados,
+   com health verde.
+4. **PEP** — `PepWatchlistSource` ingere o cadastro da CGU (`MatchType.PEP`), que é o
+   insumo da `PepRiskRule`. ⚠️ O formato do CSV **não foi verificado contra o portal real**
+   (403 no ambiente de desenvolvimento) — validar antes de confiar em produção.
 4. **Evidência de decisão** — cada `risk.scored` e `case.decided` guarda os fatores que
    levaram à decisão (explicabilidade regulatória).
 5. **Cadastro mínimo (CMN 4.753)** — `SubjectProfile` cobre o checklist por tipo de
@@ -38,6 +45,19 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
    regulatórias fixas — sanção, PEP, identidade — que ficam travadas por ArchUnit); o
    registry de regras permite desligar uma regra com efeito imediato em incidente
    operacional, sem esperar deploy.
+
+## Lacunas conhecidas (não confundir com "endereçado")
+
+- **CSNU/ONU** (Lei 13.810/19 — indisponibilidade imediata de ativos) não implementado.
+- **CEIS/CNEP** são inidoneidade em licitação, não sanção financeira; hoje entram como
+  `MatchType.SANCTION` e bloqueiam. Separar em categoria própria.
+- **Monitoramento contínuo / rescreening**: o motor roda uma vez, no onboarding. Cliente
+  aprovado que entra em lista depois nunca é reavaliado.
+- **KYC de pessoa física**: sem bureau real de CPF, `CpfBureauReadinessGuard` impede a
+  subida em produção.
+- **UBO além do 1º grau**, procuradores e percentual de participação.
+- **Reprodutibilidade da decisão**: `tenant_risk_config` e `risk_rule_registry` são
+  mutáveis sem histórico, e o snapshot da watchlist usada não é preservado.
 
 ## A endereçar explicitamente na fase 2
 

@@ -7,8 +7,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Resolve o tenant a partir do {@code X-Client-Id}. Pré-autenticação, confia no header; quando
- * a auth por API key chegar, o tenant passará a ser derivado da key (o header é ignorado).
+ * Busca um tenant por id e verifica se está ativo.
+ *
+ * <p><b>Isto não é autenticação.</b> Autenticar é papel do {@code ApiKeyService}, a partir da
+ * credencial. Este serviço sobrou para os endpoints <b>administrativos</b>, que operam sobre um
+ * tenant informado no path — legítimo ali porque quem chama já provou ser o operador do Barrier
+ * ({@code AdminApiKeyFilter}). Nenhum endpoint de negócio deve usá-lo para descobrir "quem é o
+ * chamador": era exatamente assim que o {@code X-Client-Id} autodeclarado dava acesso a dados de
+ * outros clientes.
  */
 @Service
 public class TenantService {

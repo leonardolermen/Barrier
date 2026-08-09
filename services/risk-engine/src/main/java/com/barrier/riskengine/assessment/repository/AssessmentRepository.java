@@ -2,6 +2,7 @@ package com.barrier.riskengine.assessment.repository;
 
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentId;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +16,16 @@ public interface AssessmentRepository {
 
   Optional<Assessment> findById(AssessmentId id);
 
-  /** Avaliações pendentes (EM_ANALISE), mais antigas primeiro. */
-  List<Assessment> findPending(int limit);
+  /**
+   * Reivindica avaliações pendentes para processamento exclusivo desta instância, mais antigas
+   * primeiro, e devolve os ids reivindicados.
+   *
+   * <p>Devolve ids e não agregados de propósito: a posse é tomada numa transação curta, e o
+   * processamento — que faz chamadas HTTP e pode levar segundos — acontece fora dela, carregando
+   * cada avaliação quando for a vez. Devolver os agregados convidaria a manter a transação aberta
+   * durante todo o lote, que é exatamente o problema anterior.
+   *
+   * @param lease por quanto tempo a posse vale antes de a avaliação voltar a ser reivindicável
+   */
+  List<AssessmentId> claimPending(int limit, Duration lease);
 }

@@ -27,14 +27,21 @@ import com.barrier.riskengine.screening.service.ScreeningCommand;
 import com.barrier.riskengine.screening.service.ScreeningService;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class AssessmentProcessorTest {
@@ -53,7 +60,32 @@ class AssessmentProcessorTest {
         screeningService,
         riskScoringService,
         subjectProfileService,
-        eventPublisher);
+        eventPublisher,
+        transactionTemplate(),
+        Duration.ofMinutes(5),
+        5,
+        Duration.ofSeconds(30));
+  }
+
+  /**
+   * Executa o callback sem transação de verdade: aqui interessa <b>o que</b> é agrupado
+   * atomicamente (estado + evento), não o comportamento do gerenciador de transação, que é
+   * exercitado nos testes de integração com Postgres real.
+   */
+  private static TransactionTemplate transactionTemplate() {
+    return new TransactionTemplate(
+        new PlatformTransactionManager() {
+          @Override
+          public TransactionStatus getTransaction(TransactionDefinition definition) {
+            return new SimpleTransactionStatus();
+          }
+
+          @Override
+          public void commit(TransactionStatus status) {}
+
+          @Override
+          public void rollback(TransactionStatus status) {}
+        });
   }
 
   private Assessment pendingAssessment() {
@@ -61,7 +93,8 @@ class AssessmentProcessorTest {
         Assessment.submit(
             "default", "11111111-1111-1111-1111-111111111111", DocumentType.CPF, "11144477735",
             "Fulano");
-    when(repository.findPending(anyInt())).thenReturn(List.of(a));
+    when(repository.claimPending(anyInt(), any(Duration.class))).thenReturn(List.of(a.id()));
+    when(repository.findById(a.id())).thenReturn(Optional.of(a));
     when(identityService.verify(any(VerifyIdentityCommand.class)))
         .thenReturn(
             new IdentityResult(
@@ -156,7 +189,59 @@ class AssessmentProcessorTest {
   @Test
   void semPendentesNaoFazNada() {
     var processor = newProcessor();
-    when(repository.findPending(anyInt())).thenReturn(List.of());
+    when(repository.claimPending(anyInt(), any(Duration.class))).thenReturn(List.of());
+
+    assertThat(processor.process()).isZero();
+    verify(eventPublisher, never()).publishCompleted(any());
+  }
+
+  /**
+   * Regressão do poison pill: antes, uma exceção aqui desfazia o lote inteiro e a avaliação
+   * voltava ao topo da fila a cada 2 segundos, indefinidamente.
+   */
+  @Test
+  void falhaDeUmaAvaliacaoViraTentativaContabilizadaSemPublicarEvento() {
+    var processor = newProcessor();
+    Assessment pending = pendingAssessment();
+    when(riskScoringService.score(any(RiskContext.class)))
+        .thenThrow(new IllegalStateException("provider quebrado"));
+
+    assertThat(processor.process()).isZero();
+
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.EM_ANALISE);
+    assertThat(pending.attempts()).isEqualTo(1);
+    assertThat(pending.lastError()).contains("provider quebrado");
+    assertThat(pending.nextAttemptAt()).isNotNull();
+    verify(eventPublisher, never()).publishCompleted(any());
+  }
+
+  /** Esgotadas as tentativas, a avaliação sai do limbo em vez de ser reprocessada para sempre. */
+  @Test
+  void aposEsgotarTentativasVaiParaFalhaDeProcessamento() {
+    var processor = newProcessor();
+    Assessment pending = pendingAssessment();
+    when(riskScoringService.score(any(RiskContext.class)))
+        .thenThrow(new IllegalStateException("provider quebrado"));
+
+    for (int i = 0; i < 5; i++) {
+      processor.process();
+    }
+
+    assertThat(pending.attempts()).isEqualTo(5);
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.FALHA_PROCESSAMENTO);
+    assertThat(pending.nextAttemptAt()).isNull();
+  }
+
+  /** Reivindicada mas já concluída por outro caminho: não reprocessa. */
+  @Test
+  void avaliacaoJaConcluidaEIgnorada() {
+    var processor = newProcessor();
+    Assessment a =
+        Assessment.submit(
+            "default", UUID.randomUUID().toString(), DocumentType.CPF, "11144477735", "Fulano");
+    a.complete(RiskLevel.LOW, AssessmentStatus.APROVADO, "ok", List.of());
+    when(repository.claimPending(anyInt(), any(Duration.class))).thenReturn(List.of(a.id()));
+    when(repository.findById(a.id())).thenReturn(Optional.of(a));
 
     assertThat(processor.process()).isZero();
     verify(eventPublisher, never()).publishCompleted(any());

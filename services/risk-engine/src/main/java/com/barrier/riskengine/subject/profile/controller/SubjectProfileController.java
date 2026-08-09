@@ -5,13 +5,11 @@ import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import com.barrier.riskengine.subject.service.SubjectService;
-import com.barrier.riskengine.tenant.domain.Tenant;
-import com.barrier.riskengine.tenant.service.TenantService;
+import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,28 +21,21 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/subjects")
 public class SubjectProfileController {
 
-  private static final String CLIENT_HEADER = "X-Client-Id";
-
   private final SubjectService subjectService;
   private final SubjectProfileService profileService;
-  private final TenantService tenantService;
 
   public SubjectProfileController(
-      SubjectService subjectService,
-      SubjectProfileService profileService,
-      TenantService tenantService) {
+      SubjectService subjectService, SubjectProfileService profileService) {
     this.subjectService = subjectService;
     this.profileService = profileService;
-    this.tenantService = tenantService;
   }
 
   /** Cria ou atualiza (parcialmente) o cadastro do subject. Cadastro é progressivo. */
   @PutMapping("/{document}/profile")
   public ResponseEntity<ProfileResponse> update(
-      @RequestHeader(name = CLIENT_HEADER, required = false) String clientId,
+      AuthenticatedTenant tenant,
       @PathVariable String document,
       @RequestBody UpdateProfileRequest request) {
-    Tenant tenant = tenantService.resolve(clientId);
     String digits = document.replaceAll("\\D", "");
     String documentType =
         switch (digits.length()) {

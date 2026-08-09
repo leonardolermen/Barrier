@@ -50,6 +50,12 @@ barrier:
     api-key: ${ADMIN_API_KEY:}
   assessment:
     processor-delay-ms: 2000
+    # Posse de uma avaliação reivindicada. Precisa ser maior que o pior caso de processamento
+    # (cadeia de bureaus + screening); curta demais faz outra réplica reprocessar em paralelo.
+    lease: PT5M
+    # Tentativas antes de marcar FALHA_PROCESSAMENTO, com backoff exponencial entre elas.
+    max-attempts: 5
+    base-backoff: PT30S
   outbox:
     relay-delay-ms: 2000
   identity:

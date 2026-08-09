@@ -4,7 +4,6 @@ import com.barrier.commons.event.EventEnvelope;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Limit;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class OutboxRelay {
 
   private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
-  private static final Limit BATCH = Limit.of(100);
+  private static final int BATCH = 100;
 
   private final OutboxRepository repository;
   private final EventPublisher publisher;
@@ -33,8 +32,7 @@ public class OutboxRelay {
   @Scheduled(fixedDelayString = "${barrier.outbox.relay-delay-ms:2000}")
   @Transactional
   public int publishPending() {
-    List<OutboxEvent> pending =
-        repository.findByStatusOrderByOccurredAtAsc(OutboxStatus.PENDING, BATCH);
+    List<OutboxEvent> pending = repository.lockPending(BATCH);
     int sent = 0;
     for (OutboxEvent event : pending) {
       try {

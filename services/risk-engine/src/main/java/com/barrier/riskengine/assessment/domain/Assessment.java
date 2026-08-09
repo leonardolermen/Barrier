@@ -24,6 +24,10 @@ public class Assessment {
   private final Instant createdAt;
   private Instant completedAt;
   private String reviewedBy;
+  private String reviewedByKey;
+  private int attempts;
+  private String lastError;
+  private Instant nextAttemptAt;
   private String reviewReason;
   private Instant reviewedAt;
 
@@ -78,10 +82,18 @@ public class Assessment {
       Instant createdAt,
       Instant completedAt,
       String reviewedBy,
+      String reviewedByKey,
       String reviewReason,
-      Instant reviewedAt) {
+      Instant reviewedAt,
+      int attempts,
+      String lastError,
+      Instant nextAttemptAt) {
     Assessment a =
         new Assessment(id, tenantId, subjectId, documentType, documentDigits, name, createdAt);
+    a.reviewedByKey = reviewedByKey;
+    a.attempts = attempts;
+    a.lastError = lastError;
+    a.nextAttemptAt = nextAttemptAt;
     a.status = status;
     a.riskLevel = riskLevel;
     a.decision = decision;
@@ -114,7 +126,7 @@ public class Assessment {
    *
    * @param approve true aprova (APROVADO), false reprova (REPROVADO)
    */
-  public void decide(boolean approve, String reviewedBy, String reason) {
+  public void decide(boolean approve, String reviewedBy, String reviewedByKey, String reason) {
     if (this.status != AssessmentStatus.EM_REVISAO) {
       throw new IllegalStateException("Avaliação não está em revisão: " + id.asString());
     }
@@ -124,12 +136,59 @@ public class Assessment {
     this.status = approve ? AssessmentStatus.APROVADO : AssessmentStatus.REPROVADO;
     this.decision = (approve ? "Aprovado" : "Reprovado") + " em revisão por " + reviewedBy;
     this.reviewedBy = reviewedBy;
+    this.reviewedByKey = reviewedByKey;
     this.reviewReason = reason;
     this.reviewedAt = Instant.now();
   }
 
+  /**
+   * Registra uma tentativa de processamento que falhou.
+   *
+   * <p>Mesma forma do {@code Delivery.markFailed} da entrega de webhook — o problema é o mesmo
+   * (tentar de novo com parcimônia e desistir em algum momento), e resolver diferente em cada
+   * lugar só criaria duas maneiras de raciocinar sobre a mesma coisa.
+   *
+   * <p>Esgotadas as tentativas, o status vira {@link AssessmentStatus#FALHA_PROCESSAMENTO}: sem
+   * isso a avaliação ficava EM_ANALISE indefinidamente, reprocessada a cada ciclo, indistinguível
+   * de uma que ainda vai concluir.
+   */
+  public void recordFailure(String error, int maxAttempts, Instant nextAttemptAt) {
+    if (this.status != AssessmentStatus.EM_ANALISE) {
+      throw new IllegalStateException("Só avaliação em análise registra falha: " + id.asString());
+    }
+    this.attempts++;
+    this.lastError = truncate(error);
+    if (this.attempts >= maxAttempts) {
+      this.status = AssessmentStatus.FALHA_PROCESSAMENTO;
+      this.nextAttemptAt = null;
+      this.completedAt = Instant.now();
+    } else {
+      this.nextAttemptAt = nextAttemptAt;
+    }
+  }
+
+  /** A coluna é limitada; um stack trace longo não pode derrubar a gravação da própria falha. */
+  private static String truncate(String error) {
+    if (error == null) {
+      return "erro sem mensagem";
+    }
+    return error.length() <= 500 ? error : error.substring(0, 497) + "...";
+  }
+
   public boolean isPending() {
     return status == AssessmentStatus.EM_ANALISE;
+  }
+
+  public int attempts() {
+    return attempts;
+  }
+
+  public String lastError() {
+    return lastError;
+  }
+
+  public Instant nextAttemptAt() {
+    return nextAttemptAt;
   }
 
   /** Documento mascarado para log/exposição (nunca expor os dígitos completos). */
@@ -190,6 +249,14 @@ public class Assessment {
 
   public String reviewedBy() {
     return reviewedBy;
+  }
+
+  /**
+   * Rótulo da credencial que tomou a decisão. Diferente de {@link #reviewedBy()}, que é texto
+   * autodeclarado: este o sistema garante, e é revogável.
+   */
+  public String reviewedByKey() {
+    return reviewedByKey;
   }
 
   public String reviewReason() {
