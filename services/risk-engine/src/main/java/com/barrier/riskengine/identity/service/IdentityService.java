@@ -37,8 +37,7 @@ public class IdentityService {
   }
 
   public IdentityResult verify(VerifyIdentityCommand command) {
-    List<BureauProvider> chain =
-        providers.stream().filter(p -> p.supports(command.documentType())).toList();
+    List<BureauProvider> chain = chainFor(command.documentType());
 
     String maskedDoc = Documents.mask(command.documentDigits());
     if (chain.isEmpty()) {
@@ -80,6 +79,37 @@ public class IdentityService {
 
     // Toda a cadeia esgotada por indisponibilidade.
     return unavailable(command, "todos", lastError);
+  }
+
+  /**
+   * Providers que atendem o tipo, em ordem de prioridade — <b>excluindo os não-autoritativos
+   * quando existe pelo menos um autoritativo</b> para aquele tipo.
+   *
+   * <p>Sem esse recorte, o {@code StubBureauProvider} ({@code @Order(100)}, último da cadeia)
+   * respondia MATCH sempre que o bureau real lançava {@link BureauUnavailableException}. O efeito
+   * era converter indisponibilidade em identidade verificada — silenciosamente, e sem que o
+   * {@code CpfBureauReadinessGuard} pudesse perceber, porque a configuração estava correta: o
+   * bureau real <i>estava</i> habilitado, só não estava respondendo.
+   *
+   * <p>Com o recorte, o desfecho passa a ser {@link IdentityStatus#UNAVAILABLE}, que a
+   * {@code IdentityRiskRule} converte em revisão humana.
+   */
+  private List<BureauProvider> chainFor(String documentType) {
+    List<BureauProvider> supporting =
+        providers.stream().filter(p -> p.supports(documentType)).toList();
+    List<BureauProvider> authoritative =
+        supporting.stream().filter(BureauProvider::authoritative).toList();
+    if (authoritative.isEmpty() || authoritative.size() == supporting.size()) {
+      return supporting;
+    }
+    log.debug(
+        "Providers não-autoritativos removidos da cadeia de {}: {}",
+        documentType,
+        supporting.stream()
+            .filter(p -> !p.authoritative())
+            .map(BureauProvider::name)
+            .toList());
+    return authoritative;
   }
 
   private IdentityResult unavailable(VerifyIdentityCommand command, String provider, String detail) {

@@ -2,9 +2,11 @@ package com.barrier.riskengine.risk.service;
 
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
+import com.barrier.riskengine.risk.domain.model.EvaluatedRule;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
+import com.barrier.riskengine.risk.domain.model.RuleOutcome;
 import com.barrier.riskengine.risk.registry.domain.RegulatoryRiskRules;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import com.barrier.riskengine.risk.repository.RiskScoreRepository;
@@ -21,8 +23,10 @@ import org.springframework.stereotype.Service;
  * (0–1000) e toma a recomendação mais severa entre a banda e os overrides das regras.
  * Persiste o score com os fatores e a versão do motor (explicabilidade + auditoria).
  *
- * <p>Bandas: ≤199 BAIXO · ≤499 MEDIO · ≤799 ALTO · &gt;799 CRITICO. ALTO/CRITICO sugerem
- * revisão/bloqueio; regras podem forçar overrides (sanção → REJECT; PEP → REVIEW).
+ * <p>Bandas: ≤199 BAIXO · ≤499 MEDIO · ≤799 ALTO · &gt;799 CRITICO. A banda agrava a decisão por
+ * acúmulo <b>até a revisão humana</b>; a reprovação automática exige uma regra que a peça
+ * nominalmente (ver {@link #bandRecommendation}). Regras podem forçar overrides acima da banda
+ * (sanção por documento → REJECT; PEP → REVIEW).
  *
  * <p>Uma regra só é executada se {@link RiskRuleRegistryService#isActive(String)} disser que
  * está habilitada e dentro da vigência — ajuste operacional sem deploy, sobre o
@@ -36,9 +40,25 @@ public class RiskScoringService {
 
   private static final Logger log = LoggerFactory.getLogger(RiskScoringService.class);
 
+  // 1.5.0: o screening passou a consultar sócios do QSA e representante legal, não só o titular —
+  // uma PJ limpa com sócio em lista deixa de sair aprovada automaticamente. Apontamento de parte
+  // relacionada escala para revisão, mas nunca reprova a PJ sozinho (a entidade sancionada é o
+  // sócio, não a empresa).
+  //
+  // 1.4.0: a banda de score deixou de poder reprovar sozinha — agrava até REVIEW, e REJECT exige
+  // uma regra que o peça nominalmente. Antes, duas regras que pediam revisão (PEP 300 +
+  // SANCTION_NAME_MATCH 500) somavam 800, cruzavam o limiar de 799 e viravam recusa automática.
+  //
+  // 1.3.0: o match por nome do screening passou a comparar token a token e nos dois sentidos
+  // (antes: Jaro-Winkler sobre a string inteira, limiar 0.95, que não casava nome em ordem
+  // invertida — o formato em que as listas de sanção publicam). Nenhuma regra ou peso mudou, mas
+  // o insumo mudou: a partir daqui a mesma pessoa pode gerar apontamento onde antes não gerava, e
+  // por isso a versão sobe. E o stub de CPF deixou de ser fallback de bureau real indisponível
+  // (indisponibilidade agora vira IDENTITY_UNAVAILABLE → REVIEW, não identidade verificada).
+  //
   // 1.2.0: IDENTITY_UNAVAILABLE passou a forçar REVIEW (era fail-open para APPROVE) e SANCTION
   // separou match por documento (REJECT) de match por nome (REVIEW).
-  static final String ENGINE_VERSION = "barrier-risk-rules/1.2.0";
+  static final String ENGINE_VERSION = "barrier-risk-rules/1.5.0";
   private static final int MAX_SCORE = 1000;
 
   private final List<RiskRule> rules;
@@ -55,11 +75,27 @@ public class RiskScoringService {
   }
 
   public RiskDecision score(RiskContext context) {
-    List<RiskResult> triggered =
+    // Toda regra do motor entra na trilha, com o que aconteceu com ela. Guardar só as que
+    // dispararam tornava indistinguíveis "rodou e passou", "estava desligada" e "a lista estava
+    // vazia" — três leituras da mesma ausência, e só uma é aceitável.
+    List<EvaluatedRule> evaluated =
         rules.stream()
-            .filter(this::activeOrLogSuppressed)
-            .map(rule -> rule.evaluate(context))
-            .filter(RiskResult::triggered)
+            .map(
+                rule -> {
+                  if (!activeOrLogSuppressed(rule)) {
+                    return EvaluatedRule.suppressed(rule.code());
+                  }
+                  RiskResult result = rule.evaluate(context);
+                  return result.triggered()
+                      ? EvaluatedRule.triggered(rule.code(), result)
+                      : EvaluatedRule.passed(rule.code(), result);
+                })
+            .toList();
+
+    List<RiskResult> triggered =
+        evaluated.stream()
+            .filter(rule -> rule.outcome() == RuleOutcome.TRIGGERED)
+            .map(EvaluatedRule::result)
             .toList();
 
     int total = Math.min(MAX_SCORE, triggered.stream().mapToInt(RiskResult::score).sum());
@@ -69,11 +105,11 @@ public class RiskScoringService {
         triggered.stream()
             .map(RiskResult::recommendation)
             .filter(Objects::nonNull)
-            .reduce(fromLevel(level), RiskRecommendation::strongest);
+            .reduce(bandRecommendation(level), RiskRecommendation::strongest);
 
     RiskDecision decision =
-        new RiskDecision(level, recommendation, total, triggered, ENGINE_VERSION);
-    repository.save(RiskScore.from(context.assessmentId(), decision));
+        new RiskDecision(level, recommendation, total, triggered, evaluated, ENGINE_VERSION);
+    repository.save(RiskScore.from(context, decision));
     return decision;
   }
 
@@ -109,11 +145,37 @@ public class RiskScoringService {
     return score <= 799 ? RiskLevel.HIGH : RiskLevel.CRITICAL;
   }
 
-  private static RiskRecommendation fromLevel(RiskLevel level) {
+  /**
+   * O que a <b>banda</b> recomenda sozinha — e o teto disso é {@code REVIEW}, mesmo em CRITICAL.
+   *
+   * <p>A banda entra no {@code reduce} como valor inicial e disputa o {@code strongest} de igual
+   * para igual com as regras, então antes ela podia agravar a decisão acima de tudo que qualquer
+   * regra pediu. O efeito observado em produção-simulada: {@code PEP} (+300, pede REVIEW) somado a
+   * {@code SANCTION_NAME_MATCH} (+500, pede REVIEW) dá 800, cruza o limiar de 799 por um ponto,
+   * cai em CRITICAL e vira <b>reprovação automática</b>. Duas regras exigindo julgamento humano
+   * produziam, somadas, uma recusa sem humano nenhum.
+   *
+   * <p>Isso anulava as duas decisões mais deliberadas do motor: {@link
+   * com.barrier.riskengine.screening.domain.MatchBasis} existe para que match por nome não reprove
+   * homônimo sem revisão, e PEP não é impedimento de relacionamento — é gatilho de diligência
+   * reforçada (Circular BCB 3.978). Pior: {@code SCREENING_COVERAGE} (+300) também pede REVIEW e
+   * também é somável, então um cliente podia ser reprovado em definitivo em parte porque <i>a nossa
+   * importação de watchlist</i> falhou.
+   *
+   * <p>Somar sinais para agravar {@code APPROVE → REVIEW} é o cerne da abordagem baseada em risco e
+   * continua valendo. O que não vale é somar incertezas até virar certeza: ambiguidade acumulada
+   * segue sendo ambiguidade, e reprovação é terminal — não tem recurso no sistema.
+   *
+   * <p>Nada de reprovação legítima se perde: as únicas regras que pedem REJECT hoje
+   * ({@code IDENTITY_NOT_FOUND}, 900; {@code SANCTION_HIT} por documento, 1000) já ultrapassam 799
+   * sozinhas. A banda CRITICAL nunca foi o que descobre uma recusa correta — só acrescentava as
+   * incorretas. O nível de risco continua sendo reportado como CRITICAL: o que muda é o que se faz
+   * com ele.
+   */
+  private static RiskRecommendation bandRecommendation(RiskLevel level) {
     return switch (level) {
       case LOW, MEDIUM -> RiskRecommendation.APPROVE;
-      case HIGH -> RiskRecommendation.REVIEW;
-      case CRITICAL -> RiskRecommendation.REJECT;
+      case HIGH, CRITICAL -> RiskRecommendation.REVIEW;
     };
   }
 }

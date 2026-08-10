@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import com.barrier.riskengine.screening.client.WatchlistEntry;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
 import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
 import java.util.List;
@@ -55,6 +56,93 @@ class FuzzyNameWatchlistProviderTest {
         .thenReturn(List.of(ofac("USAMA BIN LADIN"))); // aka grafado diferente
 
     assertThat(provider().search(query("Usama Bin Ladin"))).hasSize(1);
+  }
+
+  /**
+   * Regressão do falso negativo mais caro do screening: as listas de sanção publicam o nome como
+   * {@code SOBRENOME, Nome}. Comparando as strings inteiras com Jaro-Winkler (que premia prefixo
+   * igual), a mesma pessoa com a ordem invertida ficava perto de 0.5 e nunca casava — o controle
+   * rodava, registrava que rodou, e não encontrava ninguém.
+   */
+  @Test
+  void nomeNaOrdemInvertidaDaListaCasa() {
+    when(repository.findNameEntries()).thenReturn(List.of(ofac("SILVA, JOSE ANTONIO")));
+
+    assertThat(provider().search(query("Jose Antonio da Silva"))).hasSize(1);
+  }
+
+  /** O cadastro informa o nome completo; a lista publica só parte dele (ou o contrário). */
+  @Test
+  void casaEmQualquerDirecaoQuandoUmNomeTemMaisTokensQueOOutro() {
+    when(repository.findNameEntries()).thenReturn(List.of(ofac("JOSE ANTONIO SILVA SANTOS")));
+
+    assertThat(provider().search(query("Jose Antonio Silva"))).hasSize(1);
+  }
+
+  @Test
+  void casaNomeDeListaMaisCurtoQueOCadastro() {
+    when(repository.findNameEntries()).thenReturn(List.of(ofac("ANTONIO SANTOS")));
+
+    assertThat(provider().search(query("Antonio Santos de Oliveira"))).hasSize(1);
+  }
+
+  /** Erro de digitação dentro de um token ainda casa; sobrenome diferente, não. */
+  @Test
+  void toleraErroDeDigitacaoMasSeparaSobrenomesDiferentes() {
+    when(repository.findNameEntries()).thenReturn(List.of(ofac("ANTONIO CARLOS PEREIRA")));
+
+    assertThat(provider().search(query("Antonio Carlos Pereria"))).hasSize(1);
+    assertThat(provider().search(query("Antonio Carlos Machado"))).isEmpty();
+  }
+
+  /**
+   * O primeiro nome igual não pode bastar — era o falso positivo simétrico do bônus de prefixo do
+   * Jaro-Winkler sobre a string inteira.
+   */
+  @Test
+  void primeiroNomeIgualNaoBastaParaCasar() {
+    when(repository.findNameEntries()).thenReturn(List.of(ofac("CARLOS ROBERTO MENDES")));
+
+    assertThat(provider().search(query("Carlos Eduardo Nunes"))).isEmpty();
+  }
+
+  /**
+   * O sócio é consultado e o apontamento sai atribuído a ele. Sem a atribuição, o analista recebe
+   * "sanção encontrada" sem saber se é a empresa ou um sócio — condutas diferentes.
+   */
+  @Test
+  void socioNaListaGeraApontamentoAtribuidoAoSocio() {
+    when(repository.findNameEntries()).thenReturn(List.of(ofac("SILVA, JOSE ANTONIO")));
+
+    List<WatchlistEntry> hits =
+        provider()
+            .searchAll(
+                List.of(
+                    new WatchlistQuery("CNPJ", "11444777000161", "Acme Comercio Ltda"),
+                    WatchlistQuery.of("CNPJ", ScreenedParty.socio("Jose Antonio da Silva"))));
+
+    assertThat(hits).hasSize(1);
+    assertThat(hits.getFirst().party().role()).isEqualTo(ScreenedParty.Role.SOCIO);
+    assertThat(hits.getFirst().party().name()).isEqualTo("Jose Antonio da Silva");
+  }
+
+  /**
+   * A base é carregada <b>uma vez</b> por screening, não uma por parte: com o {@code findNameEntries}
+   * sendo um {@code findAll} da tabela inteira, uma PJ com 10 sócios faria 11 varreduras completas.
+   */
+  @Test
+  void carregaABaseUmaVezSoParaTodasAsPartes() {
+    when(repository.findNameEntries()).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
+
+    provider()
+        .searchAll(
+            List.of(
+                new WatchlistQuery("CNPJ", "11444777000161", "Acme Comercio Ltda"),
+                WatchlistQuery.of("CNPJ", ScreenedParty.socio("Joao da Silva")),
+                WatchlistQuery.of("CNPJ", ScreenedParty.socio("Maria Souza")),
+                WatchlistQuery.of("CNPJ", ScreenedParty.socio("Pedro Alves"))));
+
+    org.mockito.Mockito.verify(repository, org.mockito.Mockito.times(1)).findNameEntries();
   }
 
   @Test

@@ -14,10 +14,17 @@ import java.util.UUID;
  * nationality}/{@code occupation} são de PF; {@code foundingDate}/{@code cnaeCode}/{@code
  * shareCapital}/{@code legalRepresentative*}/{@code partners} são de PJ. {@code address},
  * {@code phone}, {@code email} e {@code declaredIncome} valem para os dois.
+ *
+ * <p><b>O cadastro pertence ao tenant que o declarou</b>, não ao subject: a chave é
+ * {@code (subjectId, tenantId)}. O {@code Subject} segue global — é o que sustenta a dedup por
+ * documento —, mas o dossiê não, porque compartilhá-lo significava um parceiro ler os dados
+ * cadastrais dos clientes dos outros e, escrevendo neles, induzir aprovação automática alheia
+ * (ver migration V024).
  */
 public record SubjectProfile(
     UUID id,
     UUID subjectId,
+    String tenantId,
     LocalDate birthDate,
     LocalDate foundingDate,
     String nationality,
@@ -39,12 +46,16 @@ public record SubjectProfile(
     partners = partners == null ? List.of() : List.copyOf(partners);
   }
 
-  /** Perfil vazio recém-criado para um subject, pronto para receber dados progressivamente. */
-  public static SubjectProfile blank(UUID subjectId) {
+  /**
+   * Perfil vazio recém-criado para o par subject × tenant, pronto para receber dados
+   * progressivamente.
+   */
+  public static SubjectProfile blank(UUID subjectId, String tenantId) {
     Instant now = Instant.now();
     return new SubjectProfile(
         UUID.randomUUID(),
         subjectId,
+        tenantId,
         null,
         null,
         null,

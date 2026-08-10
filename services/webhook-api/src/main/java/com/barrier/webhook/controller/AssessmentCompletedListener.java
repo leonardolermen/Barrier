@@ -1,6 +1,7 @@
 package com.barrier.webhook.controller;
 
 import com.barrier.commons.event.EventEnvelope;
+import com.barrier.commons.observability.Correlation;
 import com.barrier.webhook.service.WebhookDeliveryService;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -29,7 +30,10 @@ public class AssessmentCompletedListener {
   public void onMessage(String message) {
     try {
       EventEnvelope envelope = objectMapper.readValue(message, EventEnvelope.class);
-      service.onEvent(envelope, extractTenantId(envelope.payload()));
+      // Fecha o fio: o mesmo id que saiu do POST no risk-engine aparece no log da entrega.
+      Correlation.run(
+          envelope.correlationId(),
+          () -> service.onEvent(envelope, extractTenantId(envelope.payload())));
     } catch (RuntimeException e) {
       // Não relança: evita loop de reentrega por mensagem malformada. Fica logado para análise.
       log.error("Falha ao processar evento de avaliação concluída", e);

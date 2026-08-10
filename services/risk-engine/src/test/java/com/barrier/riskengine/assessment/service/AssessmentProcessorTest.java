@@ -3,6 +3,7 @@ package com.barrier.riskengine.assessment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,6 +28,7 @@ import com.barrier.riskengine.screening.service.ScreeningCommand;
 import com.barrier.riskengine.screening.service.ScreeningService;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -37,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
@@ -53,6 +56,8 @@ class AssessmentProcessorTest {
   @Mock SubjectProfileService subjectProfileService;
   @Mock AssessmentEventPublisher eventPublisher;
 
+  private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+
   private AssessmentProcessor newProcessor() {
     return new AssessmentProcessor(
         repository,
@@ -61,6 +66,7 @@ class AssessmentProcessorTest {
         riskScoringService,
         subjectProfileService,
         eventPublisher,
+        new AssessmentMetrics(registry),
         transactionTemplate(),
         Duration.ofMinutes(5),
         5,
@@ -101,7 +107,9 @@ class AssessmentProcessorTest {
                 IdentityCheck.create("aid", IdentityStatus.VERIFIED, "stub", "ok"), null));
     when(screeningService.screen(any(ScreeningCommand.class)))
         .thenReturn(ScreeningResult.of("aid", List.of()));
-    lenient().when(subjectProfileService.find(any(UUID.class))).thenReturn(completeCpfProfile());
+    lenient()
+        .when(subjectProfileService.find(any(UUID.class), anyString()))
+        .thenReturn(completeCpfProfile());
     return a;
   }
 
@@ -110,6 +118,7 @@ class AssessmentProcessorTest {
     return new SubjectProfile(
         UUID.randomUUID(),
         UUID.randomUUID(),
+        "default",
         LocalDate.of(1990, 1, 1),
         null,
         "brasileira",
@@ -177,13 +186,68 @@ class AssessmentProcessorTest {
     var processor = newProcessor();
     Assessment pending = pendingAssessment();
     stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
-    when(subjectProfileService.find(any(UUID.class)))
-        .thenReturn(SubjectProfile.blank(UUID.randomUUID()));
+    when(subjectProfileService.find(any(UUID.class), anyString()))
+        .thenReturn(SubjectProfile.blank(UUID.randomUUID(), "default"));
 
     processor.process();
 
     assertThat(pending.status()).isEqualTo(AssessmentStatus.EM_REVISAO);
     assertThat(pending.factors()).anyMatch(f -> f.contains("Cadastro incompleto"));
+  }
+
+  /**
+   * Regressão: quando a lease expira e outra réplica conclui a avaliação primeiro, o perdedor da
+   * corrida não pode publicar um segundo evento (o cliente receberia dois callbacks, possivelmente
+   * contraditórios) nem contabilizar tentativa — a avaliação foi decidida corretamente, só não por
+   * este processo.
+   */
+  @Test
+  void perdedorDaCorridaNaoPublicaEventoNemContabilizaFalha() {
+    var processor = newProcessor();
+    Assessment pending = pendingAssessment();
+    stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
+    when(repository.save(pending))
+        .thenThrow(new OptimisticLockingFailureException("outra réplica concluiu"));
+
+    int processed = processor.process();
+
+    assertThat(processed).isZero();
+    verify(eventPublisher, never()).publishCompleted(any());
+    assertThat(pending.attempts()).isZero();
+  }
+
+  /**
+   * A distribuição de desfechos é o único sinal que pega, ao mesmo tempo, regra mal calibrada,
+   * provider devolvendo lixo e fraude em escala — e nenhum dos três se anuncia de outro jeito.
+   */
+  @Test
+  void contabilizaODesfechoNaMetrica() {
+    var processor = newProcessor();
+    pendingAssessment();
+    stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
+
+    processor.process();
+
+    assertThat(
+            registry
+                .counter("barrier.assessment.decisions", "status", "APROVADO", "level", "LOW")
+                .count())
+        .isEqualTo(1.0);
+    assertThat(registry.timer("barrier.assessment.processing").count()).isEqualTo(1L);
+  }
+
+  /** Nenhuma tag pode carregar documento, nome ou tenant: métrica não tem controle de acesso. */
+  @Test
+  void metricaDeDecisaoNaoCarregaDadoPessoal() {
+    var processor = newProcessor();
+    pendingAssessment();
+    stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
+
+    processor.process();
+
+    assertThat(registry.find("barrier.assessment.decisions").counter().getId().getTags())
+        .extracting(io.micrometer.core.instrument.Tag::getKey)
+        .containsExactlyInAnyOrder("status", "level");
   }
 
   @Test

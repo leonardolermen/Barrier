@@ -32,6 +32,7 @@ class SubjectProfileRepositoryImpl implements SubjectProfileRepository {
     SubjectProfileEntity e = new SubjectProfileEntity();
     e.setId(profile.id());
     e.setSubjectId(profile.subjectId());
+    e.setTenantId(profile.tenantId());
     e.setBirthDate(profile.birthDate());
     e.setFoundingDate(profile.foundingDate());
     e.setNationality(profile.nationality());
@@ -60,8 +61,8 @@ class SubjectProfileRepositoryImpl implements SubjectProfileRepository {
   }
 
   @Override
-  public Optional<SubjectProfile> findBySubjectId(UUID subjectId) {
-    return jpa.findBySubjectId(subjectId).map(this::toDomain);
+  public Optional<SubjectProfile> findBySubjectIdAndTenantId(UUID subjectId, String tenantId) {
+    return jpa.findBySubjectIdAndTenantId(subjectId, tenantId).map(this::toDomain);
   }
 
   private SubjectProfile toDomain(SubjectProfileEntity e) {
@@ -85,6 +86,7 @@ class SubjectProfileRepositoryImpl implements SubjectProfileRepository {
     return new SubjectProfile(
         e.getId(),
         e.getSubjectId(),
+        e.getTenantId(),
         e.getBirthDate(),
         e.getFoundingDate(),
         e.getNationality(),

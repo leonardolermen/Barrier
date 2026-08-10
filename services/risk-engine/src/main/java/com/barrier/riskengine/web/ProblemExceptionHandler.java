@@ -4,6 +4,7 @@ import com.barrier.riskengine.assessment.domain.AssessmentNotFoundException;
 import com.barrier.riskengine.assessment.domain.InvalidDocumentException;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -32,6 +33,17 @@ class ProblemExceptionHandler {
   @ExceptionHandler(IllegalStateException.class)
   ProblemDetail handleConflict(IllegalStateException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+  }
+
+  /**
+   * Dois revisores decidindo a mesma avaliação ao mesmo tempo: o segundo recebe 409, não 500. O
+   * conflito é uma resposta legítima da API — a decisão do outro já valeu —, e devolver erro de
+   * servidor levaria o cliente a tentar de novo, que é exatamente o que não deve fazer.
+   */
+  @ExceptionHandler(OptimisticLockingFailureException.class)
+  ProblemDetail handleConcurrentModification(OptimisticLockingFailureException e) {
+    return ProblemDetail.forStatusAndDetail(
+        HttpStatus.CONFLICT, "Avaliação alterada por outro processo; recarregue e tente novamente");
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)

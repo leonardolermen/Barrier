@@ -30,6 +30,7 @@ class ConsistencyRiskRuleTest {
     return new SubjectProfile(
         UUID.randomUUID(),
         UUID.randomUUID(),
+        "default",
         null,
         null,
         null,

@@ -12,6 +12,9 @@ import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
 import com.barrier.riskengine.risk.rule.RiskContext;
 import com.barrier.riskengine.risk.service.RiskScoringService;
+import com.barrier.commons.name.NameNormalizer;
+import com.barrier.commons.observability.Correlation;
+import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.service.ScreeningCommand;
 import com.barrier.riskengine.screening.service.ScreeningService;
@@ -22,12 +25,16 @@ import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -67,6 +74,7 @@ public class AssessmentProcessor {
   private final RiskScoringService riskScoringService;
   private final SubjectProfileService subjectProfileService;
   private final AssessmentEventPublisher eventPublisher;
+  private final AssessmentMetrics metrics;
   private final TransactionTemplate transactionTemplate;
   private final Duration lease;
   private final int maxAttempts;
@@ -79,6 +87,7 @@ public class AssessmentProcessor {
       RiskScoringService riskScoringService,
       SubjectProfileService subjectProfileService,
       AssessmentEventPublisher eventPublisher,
+      AssessmentMetrics metrics,
       TransactionTemplate transactionTemplate,
       @Value("${barrier.assessment.lease:PT5M}") Duration lease,
       @Value("${barrier.assessment.max-attempts:5}") int maxAttempts,
@@ -89,6 +98,7 @@ public class AssessmentProcessor {
     this.riskScoringService = riskScoringService;
     this.subjectProfileService = subjectProfileService;
     this.eventPublisher = eventPublisher;
+    this.metrics = metrics;
     this.transactionTemplate = transactionTemplate;
     this.lease = lease;
     this.maxAttempts = maxAttempts;
@@ -119,13 +129,34 @@ public class AssessmentProcessor {
       if (assessment == null || !assessment.isPending()) {
         return false; // concluída por outro caminho entre a reivindicação e agora
       }
-      complete(assessment);
-      return true;
-    } catch (RuntimeException e) {
-      recordFailure(id, e);
-      return false;
+      // Restaura a correlação da requisição original: sem isto, todo log da decisão nasce órfão —
+      // ela roda noutra thread, minutos depois, onde o MDC do servlet já não existe.
+      AtomicBoolean processed = new AtomicBoolean(false);
+      Correlation.run(assessment.correlationId(), () -> processed.set(completeTracked(assessment)));
+      return processed.get();
     } finally {
       MDC.remove("assessmentId");
+    }
+  }
+
+  /** Mede e classifica o desfecho; as exceções continuam sendo tratadas como antes. */
+  private boolean completeTracked(Assessment assessment) {
+    AssessmentId id = assessment.id();
+    try {
+      metrics.timeProcessing(() -> complete(assessment));
+      metrics.recordDecision(assessment);
+      return true;
+    } catch (OptimisticLockingFailureException e) {
+      // Perdemos a corrida: outra réplica concluiu esta avaliação enquanto consultávamos os
+      // provedores. Não é falha desta avaliação — é o controle de concorrência funcionando. A
+      // transação (incluindo o evento na outbox) já foi desfeita; contabilizar tentativa aqui
+      // marcaria como problemática uma avaliação que foi decidida corretamente.
+      log.info("Avaliação {} já foi concluída por outro processo; descartando esta execução", id.asString());
+      return false;
+    } catch (RuntimeException e) {
+      recordFailure(id, e);
+      metrics.recordFailure();
+      return false;
     }
   }
 
@@ -140,19 +171,23 @@ public class AssessmentProcessor {
                 assessment.documentDigits(),
                 assessment.name()));
 
+    UUID subjectId = UUID.fromString(assessment.subjectId());
+    // O cadastro é do par subject × tenant: o enriquecimento pelo bureau alimenta o dossiê deste
+    // tenant, e o gate de completude avalia o que este tenant declarou — não o que outro declarou.
+    if (identity.company() != null) {
+      persistCompanyProfile(subjectId, assessment.tenantId(), identity.company());
+    }
+    // O cadastro é lido ANTES do screening: é dele que sai o representante legal a consultar.
+    SubjectProfile profile = subjectProfileService.find(subjectId, assessment.tenantId());
+
     ScreeningResult screening =
         screeningService.screen(
             new ScreeningCommand(
                 assessment.id().asString(),
                 assessment.documentType().name(),
                 assessment.documentDigits(),
-                assessment.name()));
-
-    UUID subjectId = UUID.fromString(assessment.subjectId());
-    if (identity.company() != null) {
-      persistCompanyProfile(subjectId, identity.company());
-    }
-    SubjectProfile profile = subjectProfileService.find(subjectId);
+                assessment.name(),
+                relatedParties(identity.company(), profile)));
 
     RiskDecision decision =
         riskScoringService.score(
@@ -232,10 +267,39 @@ public class AssessmentProcessor {
   }
 
   /**
+   * Partes relacionadas a consultar nas listas, além do titular: sócios do QSA e representante
+   * legal declarado.
+   *
+   * <p>Deduplica por nome normalizado — o representante legal costuma ser também sócio, e sem isso
+   * o mesmo apontamento apareceria duas vezes na trilha, sugerindo dois problemas onde há um.
+   */
+  private static List<ScreenedParty> relatedParties(CompanyProfile company, SubjectProfile profile) {
+    Map<String, ScreenedParty> byName = new LinkedHashMap<>();
+    if (company != null) {
+      company.partners().stream()
+          .filter(partner -> partner.name() != null && !partner.name().isBlank())
+          .forEach(partner -> byName.putIfAbsent(key(partner.name()), ScreenedParty.socio(partner.name())));
+    }
+    if (profile != null
+        && profile.legalRepresentativeName() != null
+        && !profile.legalRepresentativeName().isBlank()) {
+      byName.putIfAbsent(
+          key(profile.legalRepresentativeName()),
+          ScreenedParty.representanteLegal(
+              profile.legalRepresentativeName(), profile.legalRepresentativeDocument()));
+    }
+    return List.copyOf(byName.values());
+  }
+
+  private static String key(String name) {
+    return NameNormalizer.normalize(name);
+  }
+
+  /**
    * Persiste os dados objetivos de PJ vindos do bureau (fundação, CNAE, QSA) no cadastro do
    * subject — antes esses dados eram descartados depois de alimentar as risk rules.
    */
-  private void persistCompanyProfile(UUID subjectId, CompanyProfile company) {
+  private void persistCompanyProfile(UUID subjectId, String tenantId, CompanyProfile company) {
     List<SubjectProfile.Partner> partners =
         company.partners().stream()
             .map(
@@ -245,6 +309,7 @@ public class AssessmentProcessor {
             .toList();
     subjectProfileService.upsert(
         subjectId,
+        tenantId,
         new SubjectProfilePatch(
             null,
             company.openingDate(),

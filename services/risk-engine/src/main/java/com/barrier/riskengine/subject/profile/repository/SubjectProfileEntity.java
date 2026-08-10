@@ -5,6 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -20,6 +22,10 @@ class SubjectProfileEntity {
 
   @Column(name = "subject_id", nullable = false)
   private UUID subjectId;
+
+  /** Tenant que declarou este cadastro; parte da chave lógica junto com {@code subject_id}. */
+  @Column(name = "tenant_id", nullable = false, length = 40)
+  private String tenantId;
 
   @Column(name = "birth_date")
   private LocalDate birthDate;
@@ -78,7 +84,9 @@ class SubjectProfileEntity {
   @Column(name = "legal_representative_document", length = 20)
   private String legalRepresentativeDocument;
 
-  @Column(name = "partners_json", length = 4000)
+  /** JSONB: o QSA de uma empresa grande passa de 4000 caracteres com folga (ver migration V026). */
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "partners_json")
   private String partnersJson;
 
   @Column(name = "created_at", nullable = false)
@@ -105,6 +113,14 @@ class SubjectProfileEntity {
 
   void setSubjectId(UUID subjectId) {
     this.subjectId = subjectId;
+  }
+
+  String getTenantId() {
+    return tenantId;
+  }
+
+  void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
   }
 
   LocalDate getBirthDate() {

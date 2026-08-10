@@ -47,6 +47,10 @@ class DeliveryEntity {
   @Column(name = "next_attempt_at")
   private Instant nextAttemptAt;
 
+  /** Posse desta entrega por um worker, com expiração. Ver migration V003. */
+  @Column(name = "claimed_at")
+  private Instant claimedAt;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
@@ -135,6 +139,14 @@ class DeliveryEntity {
 
   void setNextAttemptAt(Instant nextAttemptAt) {
     this.nextAttemptAt = nextAttemptAt;
+  }
+
+  Instant getClaimedAt() {
+    return claimedAt;
+  }
+
+  void setClaimedAt(Instant claimedAt) {
+    this.claimedAt = claimedAt;
   }
 
   Instant getCreatedAt() {

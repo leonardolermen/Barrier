@@ -19,7 +19,7 @@ public class PepRiskRule implements RiskRule {
     List<String> evidences =
         context.screening().hits().stream()
             .filter(h -> h.type() == MatchType.PEP)
-            .map(h -> h.source() + ":" + h.matchedName())
+            .map(h -> h.party().label() + " · " + h.source() + ":" + h.matchedName())
             .toList();
 
     if (evidences.isEmpty()) {

@@ -17,11 +17,18 @@ essas duas coisas antes de ser considerado pronto.
 
 ## Onde estamos
 
-| | Auditoria inicial | Agora | Δ |
-|---|---|---|---|
-| Testes | 141 (+2 erros) | **244** (0 falhas) | +103 |
-| Achados 🔴 Critical | 27 | **12** | −15 |
-| Nota geral | 3,2 | **≈5,2** | +2,0 |
+| | Auditoria inicial | 2ª auditoria | Agora | Δ |
+|---|---|---|---|---|
+| Testes | 141 (+2 erros) | 244 | **283** (0 falhas) | +142 |
+| Achados 🔴 Critical | 27 | 20 (12 + 8 novos) | **8** | −19 |
+| Nota geral | 3,2 | 4,0 | **≈6,0** | +2,8 |
+
+> A 2ª auditoria (independente) reavaliou a nota para baixo — 4,0, não 5,2 — por dois motivos:
+> encontrou quatro críticos novos que não estavam precificados (vazamento cross-tenant do cadastro,
+> match por nome inoperante, stub como fallback, `@Version` decorativo), e observou que várias
+> correções recentes eram **estruturalmente incompletas**: o `@Version` foi adicionado mas não
+> protegia; o `CpfBureauReadinessGuard` protegia a subida mas não o runtime; o health de cobertura
+> fechou um fail-open e abriu um risco de indisponibilidade total da frota.
 
 Ramos entregues:
 
@@ -31,6 +38,7 @@ Ramos entregues:
 | `feat/pep-watchlist-cgu` | `d671e72` | Fonte de PEP da CGU, cobertura de listas verificável e fail-closed |
 | `feat/tenant-api-key` | `e1792cd` | Autenticação por API key; tenant derivado da credencial |
 | `fix/processing-integrity` | — | Reivindicação exclusiva, transação por avaliação, estado de falha |
+| `fix/audit-top10` | — | Proveniência do cadastro por tenant, match por nome token a token, stub fora da cadeia, versão real no save, timeouts e scheduler |
 
 Notas por dimensão (0–10):
 
@@ -77,6 +85,85 @@ Notas por dimensão (0–10):
 - [x] Importação vazia não substitui a base
 - [x] `ScreeningCoverageRiskRule` — sem cobertura, não aprova
 - [x] `WatchlistReadinessGuard` exige cobertura de SANCTION **e** PEP
+
+### `fix/audit-top10` — segunda auditoria
+
+Cinco achados novos, quatro deles críticos. Origem: auditoria independente de `main` após
+`fix/processing-integrity`.
+
+- [x] **Vazamento cross-tenant do cadastro** 🔴
+  `PUT /v1/subjects/{doc}/profile` devolvia o `SubjectProfile` depois do merge, e patch vazio não
+  altera nada — com o vínculo criado por um `POST /v1/assessments`, duas chamadas entregavam a
+  qualquer parceiro o dossiê do cliente de outro (endereço, telefone, nascimento, renda declarada,
+  representante legal). Correção estrutural: `subject_profiles` passa a ter chave
+  `(subject_id, tenant_id)` (migration V024, com backfill pelo primeiro tenant vinculado);
+  `SubjectProfileService` não tem mais assinatura que aceite só o `subjectId`; a resposta do `PUT`
+  deixou de carregar o cadastro. Fecha também o vetor de **escrita** (completar cadastro alheio para
+  induzir aprovação automática), que já estava mapeado na Onda 2.
+  *Verificado:* `TenantIsolationIntegrationTest` — cadastro completo de A deixa o checklist de B
+  intacto, e a escrita de B não altera o de A.
+
+- [x] **Match por nome do screening não encontrava quase ninguém** 🔴
+  `FuzzyNameWatchlistProvider` usava Jaro-Winkler sobre a **string inteira** com limiar 0.95. O
+  algoritmo premia prefixo igual e as listas de sanção publicam `SOBRENOME, Nome`: "JOSE ANTONIO DA
+  SILVA" contra "SILVA, JOSE ANTONIO" — a mesma pessoa — ficava perto de 0.5. O controle rodava,
+  registrava que rodou, e não achava ninguém. O comparador correto (`NameSimilarity`, token a
+  token) já existia no repositório, usado pelos bureaus, e não estava ao alcance do screening.
+  Extraído para `NameTokens` (commons) e usado nos dois sentidos; limiar agora é **por token**
+  (0.90) e não é comparável ao 0.95 anterior.
+  *Verificado:* `NameTokensTest` + `FuzzyNameWatchlistProviderTest` — ordem invertida, token a mais,
+  token a menos e erro de digitação casam; primeiro nome igual e sobrenome diferente, não.
+
+- [x] **Stub de CPF era fallback de bureau real indisponível** 🔴
+  `StubBureauProvider` (`@Order(100)`) responde MATCH para qualquer CPF válido e é o último da
+  cadeia — então um bureau real fora do ar convertia **indisponibilidade em identidade
+  verificada**. O `CpfBureauReadinessGuard` não pegava: a configuração estava correta, o bureau
+  *estava* habilitado, só não respondia. `BureauProvider.authoritative()` marca a diferença e
+  `IdentityService` remove os não-autoritativos da cadeia quando existe um autoritativo para o
+  tipo; o desfecho passa a ser `UNAVAILABLE` → REVIEW.
+  *Verificado:* `IdentityServiceTest` — bureau real indisponível não cai para o stub; sem bureau
+  real, o stub segue valendo (é o que sustenta dev/teste).
+
+- [x] **`@Version` era decorativo; a lease expirada gerava duas decisões** 🔴
+  `AssessmentRepositoryImpl.save` **relia** a entidade imediatamente antes de gravar, então o
+  `@Version` era comparado consigo mesmo. O agregado, carregado minutos antes, não trazia versão.
+  Com a lease expirada, duas réplicas concluíam a mesma avaliação, cada uma sobre sua cópia, ambas
+  passando pelo guard de estado, ambas gravando evento com `eventId` distinto — a idempotência do
+  webhook não filtra por isso, e o cliente recebia dois callbacks possivelmente contraditórios.
+  Agora o agregado carrega a versão, a linha é lida com `FOR UPDATE` e o perdedor recebe
+  `OptimisticLockingFailureException` (409 na API; descarte silencioso no processador).
+  *Verificado:* `AssessmentProcessorTest` — perdedor da corrida não publica evento nem contabiliza
+  tentativa.
+
+- [x] **Nenhum client tinha connect timeout** 🔴
+  Só o read timeout estava configurado, e no `HttpClient` da JDK o connect timeout é do cliente,
+  não da requisição — por isso passou despercebido. Um TCP descartado por firewall travava a thread
+  indefinidamente: o serviço parava de decidir sem exceção, sem retry, com health verde.
+  `HttpWebhookClient` não tinha timeout algum e roda na thread do listener Kafka.
+  Connect 2s + read configurável em todos; `max.block.ms`/`request.timeout.ms`/`delivery.timeout.ms`
+  no producer.
+
+- [x] **`TaskScheduler` com 1 thread** (item da Onda 1)
+  `spring.task.scheduling.pool.size=4`. A importação das 03:00 não congela mais o processamento.
+
+- [x] **A banda de score reprovava sozinha** 🔴 *(achado do teste com a API no ar)*
+  `fromLevel(level)` entrava no `reduce` como valor inicial e disputava o `strongest` de igual para
+  igual com as regras, então a banda podia agravar a decisão acima de tudo que qualquer regra
+  pediu. Observado ao exercitar a API real: `PEP` (+300, pede REVIEW) somado a
+  `SANCTION_NAME_MATCH` (+500, pede REVIEW) dá 800, cruza o limiar de 799 **por um ponto**, cai em
+  CRITICAL e virava reprovação automática — duas exigências de julgamento humano produzindo uma
+  recusa sem humano nenhum. Anulava o propósito do `MatchBasis` (homônimo não é reprovado sem
+  revisão) e tratava PEP como impedimento, quando a Circular 3.978 pede diligência reforçada.
+  Também somável: `SCREENING_COVERAGE` (+300), ou seja, o cliente podia ser recusado em parte
+  porque *a nossa* importação de watchlist falhou.
+  Agora a banda agrava até REVIEW e REJECT exige uma regra que o peça nominalmente — o que também
+  garante que toda reprovação tenha, na trilha, um fator que a justifique pelo nome. Nenhuma recusa
+  legítima se perde: `IDENTITY_NOT_FOUND` (900) e `SANCTION_HIT` por documento (1000) já ultrapassam
+  799 sozinhas. O nível segue sendo reportado como CRITICAL; muda o que se faz com ele.
+  *Verificado:* `RiskScoringServiceTest` (acúmulo de dois REVIEW → REVIEW; banda CRITICAL sem regra
+  de recusa → REVIEW; banda HIGH ainda agrava APPROVE → REVIEW) e com a API no ar — o mesmo input
+  que devolvia `REJECT · score 800` passou a devolver `REVIEW · score 800 · risco CRITICAL`,
+  enquanto sanção por documento seguiu em `REJECT · score 1000`.
 
 ---
 
@@ -128,15 +215,41 @@ de outro tenant.
   ⚠️ **Falta o alerta por idade de `EM_ANALISE`** — sem ele a falha é registrada mas ninguém é
   avisado. Fica no item de observabilidade.
 
-- [ ] **`TaskScheduler` dedicado por job**
-  Pool default é **1 thread** compartilhada por processador, relay e importação diária. O import
-  das 03:00 congela o pipeline; Kafka lento (`.join()`) congela tudo.
-  *Pronto quando:* import de watchlist não bloqueia processamento (teste ou medição).
+- [x] **`TaskScheduler` com mais de uma thread** — `fix/audit-top10`
+  `spring.task.scheduling.pool.size=4`. Processador, relay e importação deixam de competir pela
+  mesma thread. *Ainda não é um scheduler dedicado por job* — com pool compartilhado, quatro jobs
+  lentos simultâneos ainda se bloqueiam; suficiente para os três jobs atuais.
 
-- [ ] **Timeouts e circuit breaker em todos os clients**
-  `HttpWebhookClient` usa `RestClient.create()` **sem timeout algum**, na thread do listener
-  Kafka: endpoint lento do cliente para a partição.
-  *Pronto quando:* todo client tem connect+read timeout; provider em falha abre o breaker.
+- [ ] **Circuit breaker nos clients** — *timeouts fechados em `fix/audit-top10`*
+  Connect (2s) + read timeout em todo client, e limites de tempo no producer Kafka. Falta o
+  breaker: hoje um provider degradado continua sendo chamado a cada avaliação, cada uma pagando o
+  timeout inteiro. Não há biblioteca de resiliência no classpath.
+  *Pronto quando:* provider em falha abre o breaker e a avaliação vai direto para `UNAVAILABLE`.
+
+- [x] **`OutboxRelay` publicava dentro da transação** 🔴 — `fix/audit-top10`
+  `publishPending()` era `@Transactional` e chamava `kafkaTemplate.send(...).join()` **dentro**
+  dela, segurando lock em até 100 linhas enquanto esperava o broker — o mesmo anti-padrão que o
+  `AssessmentProcessor` documenta como causa de incidente e que tinha sido corrigido só lá. Agora
+  segue a forma das avaliações: `claimed_at` com lease (V025), claim com `FOR UPDATE SKIP LOCKED`
+  em transação curta, publicação **fora** de transação, marcação em transação própria. Falha libera
+  a posse, para o ciclo seguinte tentar sem esperar a lease.
+  *Verificado com o broker realmente parado:* as avaliações continuaram sendo decididas, a API
+  respondeu em 27ms, `pg_stat_activity` não registrou **nenhuma** conexão `idle in transaction`
+  (transação mais longa: `00:00:00`) e a outbox reteve os eventos como PENDING com as tentativas
+  contando. Religado o Kafka, drenou em ~12s — 59 eventos, zero duplicados.
+
+- [x] **Entrega de webhook sem posse** 🔴 *(achado novo, na revisão do webhook-api)*
+  `findDue` varria as entregas vencidas e saía postando: sem lock, sem lease, sem `@Version`. Com
+  réplicas, todas postavam a mesma entrega e o cliente recebia o veredito de KYC duplicado — a
+  idempotência por `event_id` não cobre isso, ela impede duas *linhas*, não dois *POSTs* da mesma
+  linha. E havia uma corrida **numa instância só**: `Delivery.create` nascia com
+  `next_attempt_at = created_at` (já vencida), o listener gravava e só então postava (até 10s), e o
+  scheduler — a cada 5s — encontrava a linha e postava em paralelo.
+  Agora `claimDue` reivindica com lease em transação curta (V003, JPQL com `SKIP_LOCKED` por hint,
+  porque native query não herda o `default_schema` do schema `webhook`), o POST fica fora da
+  transação, e a entrega **nasce reivindicada** — quem cria é quem tenta em seguida.
+  *Verificado:* `WebhookDeliveryServiceTest` (nasce reivindicada; falha libera a posse; `retryDue`
+  reivindica antes de tentar) e `WebhookDeliveryIntegrationTest` contra Postgres real.
 
 - [ ] **Endpoint de webhook por tenant**
   `barrier.webhook.target-url` é **global**: com dois tenants, um recebe as decisões de KYC do
@@ -149,23 +262,49 @@ de outro tenant.
   *Pronto quando:* falha transitória não commita; existe DLQ e job que reconcilia
   `assessments` concluídos contra `deliveries`.
 
-- [ ] **Observabilidade mínima**
-  MDC só existe na thread do servlet — **os logs da decisão não têm `correlationId` nem
-  `assessmentId`**, porque a decisão acontece no `@Scheduled`. Investigar uma aprovação indevida
-  hoje é `grep` em log texto por documento mascarado.
-  *Pronto quando:* MDC no processador; log JSON; micrometer + Prometheus; e os 5 alertas:
-  watchlist vencida, `EM_ANALISE` > 15min, outbox `PENDING` > 5min, delivery `DEAD`, taxa de
-  aprovação fora da banda.
+- [x] **Observabilidade mínima** — `fix/audit-top10`
+  O MDC só existia na thread do servlet, então os logs da decisão não tinham `correlationId` nem
+  `assessmentId` — ela roda num `@Scheduled`, minutos depois. Investigar uma aprovação indevida era
+  `grep` em log de texto por documento mascarado.
+  Agora a correlação é **persistida** (`assessments.correlation_id`, V027) e restaurada no
+  processamento; propaga pela outbox (`outbox.correlation_id`) até o consumidor do webhook-api. Um
+  único id liga `POST` → decisão → evento → callback, atravessando duas threads e um broker.
+  Métricas de negócio via `micrometer-registry-prometheus` (`/actuator/prometheus`):
+  `barrier.assessment.decisions{status,level}`, `barrier.assessment.processing` (timer),
+  `barrier.assessment.pending.{count,oldest.seconds}`, `barrier.assessment.processing.failures`.
+  **Sem PII em tag** — documento, nome e tenant ficam de fora, com teste que trava isso: métrica vai
+  para um sistema sem o controle de acesso do banco e é retida indefinidamente.
+  Log estruturado (ECS) no profile `prod`; padrão com correlação no console de dev.
+  Regras de alerta em [docs/observability/alerts.yml](../observability/alerts.yml).
+  *Verificado ao vivo:* `X-Correlation-Id` enviado pelo cliente aparece em todo o rastro assíncrono
+  (bureau → screening → match fuzzy → decisão → publicação no Kafka), e as séries de negócio saem no
+  `/actuator/prometheus`.
+  ⚠️ Faltam as métricas de **cobertura de watchlist**, **outbox** e **entregas de webhook** — as três
+  regras correspondentes no `alerts.yml` estão escritas e marcadas como dependentes delas.
 
 - [ ] **`JSONB` nas colunas de evidência**
   `hits_json`, `results_json`, `factors`, `partners_json` são `VARCHAR(4000)`/`(2000)`: estouro
   vira exceção → poison pill, e **o que não cabe é justamente a evidência de auditoria**.
   *Pronto quando:* colunas migradas; QSA grande e múltiplos matches não quebram.
 
-- [ ] **Persistir também as regras que não dispararam**
-  `RiskScoringService` filtra por `triggered()` antes de gravar: não dá para provar que a regra
-  de sanção *rodou e passou* — indistinguível de "estava desligada" ou "a lista estava vazia".
-  *Pronto quando:* `results_json` traz todas as regras avaliadas com flag `triggered`.
+- [x] **Persistir também as regras que não dispararam** — `fix/audit-top10`
+  `RiskScoringService` filtrava por `triggered()` antes de gravar, então "a regra de sanção não
+  aparece na trilha" tinha três leituras indistinguíveis: rodou e o cliente estava limpo, estava
+  desligada no registry, ou a lista estava vazia. Só a primeira é aceitável.
+  `evaluated_json` (V028) guarda **todas** as regras do motor com o desfecho de cada uma —
+  `TRIGGERED` / `NOT_TRIGGERED` / `SUPPRESSED`. `results_json` foi preservado na forma antiga de
+  propósito: ele é lido para reconstruir decisões anteriores, e mudá-lo no lugar quebraria a
+  leitura do histórico que este item existe para melhorar.
+  Junto vieram mais duas lacunas de proveniência: `risk_scores` passou a referenciar o
+  `identity_check_id` e o `screening_result_id` **exatos** que o alimentaram (uma avaliação
+  retentada deixa várias linhas com o mesmo `assessment_id`, e nada dizia qual valeu), e
+  `screening_results.sources_json` guarda fonte → versão da lista consultada (a base é substituída
+  todo dia por `replaceSource`; sem o snapshot, um CLEAR de seis meses atrás é afirmação sem lastro).
+  *Verificado ao vivo:* numa avaliação aprovada, as 9 regras aparecem com `NOT_TRIGGERED`, o
+  snapshot traz `{"OFAC": "live-1", "SEED": "seed-v1"}`, e o `JOIN` de `risk_scores` com
+  `identity_checks` e `screening_results` fecha nos ids gravados.
+  *`ENGINE_VERSION` não subiu:* mudou o que é **registrado**, não o que é **decidido** — scores,
+  bandas e recomendações são idênticos.
 
 ---
 
@@ -186,10 +325,36 @@ de outro tenant.
   automático — negação de serviço a empresa legalmente apta.
   *Pronto quando:* `MatchType.DEBARMENT` com peso de alerta, não de bloqueio.
 
-- [ ] **Screening dos sócios PF e do representante legal**
-  Hoje o screening consulta só o CNPJ. Empresa limpa com sócio sancionado é aprovada — o sócio
-  nunca é consultado.
-  *Pronto quando:* teste com sócio em lista resulta em escalonamento.
+- [x] **Screening dos sócios PF e do representante legal** — `fix/audit-top10`
+  O screening consultava só o titular: PJ com situação ATIVA, CNAE inócuo e um sócio na SDN saía
+  aprovada automaticamente. `ScreeningCommand` passou a levar as partes relacionadas (QSA +
+  representante legal, deduplicadas por nome normalizado), e todo apontamento carrega o
+  `ScreenedParty` a que pertence — sem isso o analista recebe "sanção encontrada" sem saber se é a
+  empresa ou um sócio, e as duas coisas exigem condutas diferentes.
+  **Só o titular bloqueia:** apontamento de parte relacionada escala para revisão mas nunca reprova
+  a PJ, porque a entidade sancionada é o sócio, não a empresa. Hoje o QSA vem sem documento, então
+  na prática já seria match por nome; a trava existe para o dia em que um provedor de KYB trouxer o
+  CPF do sócio.
+  Custo: `WatchlistProvider.searchAll` carrega a base **uma vez** por avaliação em vez de uma por
+  parte — sem isso uma PJ com 10 sócios faria 11 varreduras completas da tabela.
+  *Verificado ao vivo, A/B no mesmo CNPJ:* sem representante legal declarado, nenhum apontamento
+  (os 41 sócios reais do QSA não geraram falso positivo); com o representante legal declarado,
+  `SANCTION_NAME_MATCH` atribuído a `REPRESENTANTE_LEGAL`, casando `"Jose Antonio da Silva"` com a
+  entrada `"SILVA, JOSE ANTONIO"` a 100% — e desfecho `EM_REVISAO`, não reprovação.
+
+- [x] **Evidência em `VARCHAR` estourava e derrubava a avaliação** 🔴 *(achado novo, ao vivo)*
+  Estava mapeado como "perda de evidência de auditoria". É pior: o `INSERT` falha com *value too
+  long*, a avaliação esgota as 5 tentativas e termina em `FALHA_PROCESSAMENTO`. Reproduzido com um
+  CNPJ real — o Banco do Brasil tem **41 sócios** no QSA, 4577 bytes de JSON contra o teto de 4000.
+  **Empresas grandes não conseguiam ser onboardadas**, e são justamente as de estrutura societária
+  mais complexa. O mesmo teto valia para `hits_json` (cliente com muitos apontamentos, isto é, o de
+  maior risco) e `results_json` (decisão com muitas regras disparadas): o limite estava exatamente
+  onde a informação mais importa.
+  `partners_json`, `hits_json` e `results_json` migrados para **JSONB** (V026) — sem teto e
+  consultáveis, que é pergunta de auditoria ("quais avaliações tiveram apontamento de PEP?");
+  `factors` virou `TEXT`, por ser texto legível e não JSON.
+  ⚠️ `outbox.payload` e `deliveries.payload` seguem `VARCHAR(4000)`. Hoje o payload é pequeno e
+  limitado (ids + status), mas é o mesmo modo de falha esperando um contrato de evento maior.
 
 - [ ] **UBO ≥25%** — provedor KYB com percentual de participação; QSA da BrasilAPI não traz.
   *Pronto quando:* UBO indeterminado força REVIEW.
@@ -211,11 +376,15 @@ de outro tenant.
   automática** em outro parceiro.
   *Pronto quando:* escrita é atribuída ao tenant; um tenant não altera o que outro declarou.
 
-- [ ] **Histórico versionado de configuração**
-  `tenant_risk_config`, `risk_rule_registry` e `subject_profiles` são mutáveis sem histórico —
-  e o snapshot da watchlist usada não é preservado. Não dá para responder "quais regras estavam
-  ativas, com que parâmetros, contra qual lista" numa decisão de 8 meses atrás.
-  *Pronto quando:* uma decisão antiga é reproduzível a partir do que está gravado.
+- [ ] **Histórico versionado de configuração** — *parcialmente fechado*
+  Já resolvido: **quais regras estavam ativas** (`evaluated_json` distingue `SUPPRESSED` de
+  `NOT_TRIGGERED`) e **contra qual lista** (`sources_json`).
+  Aberto: `tenant_risk_config`, `risk_rule_registry` e `subject_profiles` seguem mutáveis sem
+  histórico. O parâmetro efetivo aparece na evidência da regra que disparou (`config:months=`), mas
+  não o de uma regra que passou — então "com que parâmetros" ainda não é respondível em geral.
+  `risk_rule_registry` nem tem coluna `updated_by`, que `tenant_risk_config` tem.
+  *Pronto quando:* uma decisão antiga é reproduzível a partir do que está gravado, incluindo os
+  parâmetros efetivos de todas as regras.
 
 - [ ] **Fila de EDD separada e 4-eyes**
   "Falta um campo cadastral" e "é PEP" caem na mesma fila, com a mesma severidade e o mesmo
@@ -287,7 +456,7 @@ cujas condições atuais para empresa privada precisam ser confirmadas.
 
 ## Convenções
 
-- Mudança de regra ou peso **sobe `ENGINE_VERSION`** (atual: `barrier-risk-rules/1.2.0`).
+- Mudança de regra ou peso **sobe `ENGINE_VERSION`** (atual: `barrier-risk-rules/1.4.0`).
 - Bug corrigido vem com teste de regressão que **falha antes** da correção.
 - Controle novo que possa faltar em produção ganha um `ReadinessGuard` no padrão dos existentes:
   falha a subida em `prod`, avisa nos demais profiles.

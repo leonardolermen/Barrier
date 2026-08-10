@@ -10,11 +10,12 @@ import org.junit.jupiter.api.Test;
 class RegistrationCompletenessTest {
 
   private final UUID subjectId = UUID.randomUUID();
+  private static final String TENANT = "acme";
 
   @Test
   void cpfIncompletoQuandoPerfilEstaEmBranco() {
     RegistrationCompleteness completeness =
-        RegistrationCompleteness.evaluate("CPF", SubjectProfile.blank(subjectId));
+        RegistrationCompleteness.evaluate("CPF", SubjectProfile.blank(subjectId, TENANT));
 
     assertThat(completeness.complete()).isFalse();
     assertThat(completeness.missingFields())
@@ -27,6 +28,7 @@ class RegistrationCompletenessTest {
         new SubjectProfile(
             UUID.randomUUID(),
             subjectId,
+            TENANT,
             LocalDate.of(1990, 1, 1),
             null,
             "Brasileira",
@@ -53,7 +55,7 @@ class RegistrationCompletenessTest {
   @Test
   void cnpjIncompletoQuandoPerfilEstaEmBranco() {
     RegistrationCompleteness completeness =
-        RegistrationCompleteness.evaluate("CNPJ", SubjectProfile.blank(subjectId));
+        RegistrationCompleteness.evaluate("CNPJ", SubjectProfile.blank(subjectId, TENANT));
 
     assertThat(completeness.complete()).isFalse();
     assertThat(completeness.missingFields())
@@ -66,6 +68,7 @@ class RegistrationCompletenessTest {
         new SubjectProfile(
             UUID.randomUUID(),
             subjectId,
+            TENANT,
             null,
             LocalDate.of(2010, 5, 20),
             null,
@@ -92,7 +95,7 @@ class RegistrationCompletenessTest {
   @Test
   void rejeitaTipoDeDocumentoDesconhecido() {
     assertThatThrownBy(
-            () -> RegistrationCompleteness.evaluate("RG", SubjectProfile.blank(subjectId)))
+            () -> RegistrationCompleteness.evaluate("RG", SubjectProfile.blank(subjectId, TENANT)))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }

@@ -25,6 +25,12 @@ import org.springframework.stereotype.Component;
  *
  * <p>Quando os dois tipos aparecem juntos, o match por documento prevalece: já há identificação
  * inequívoca, o indício por nome não enfraquece isso.
+ *
+ * <p><b>Só o titular bloqueia.</b> Desde que o screening passou a consultar sócios e representante
+ * legal, um apontamento pode se referir a outra entidade. Sócio do QSA vem sem documento (a Receita
+ * não o publica), então na prática casa sempre por nome e já cairia em revisão — mas amarrar o
+ * bloqueio ao titular é o que impede que um provedor de KYB futuro, trazendo o CPF do sócio,
+ * transforme a regra em reprovação automática de uma PJ por sanção de terceiro.
  */
 @Component
 public class SanctionRiskRule implements RiskRule {
@@ -41,9 +47,15 @@ public class SanctionRiskRule implements RiskRule {
       return RiskResult.notApplicable("SANCTION");
     }
 
-    boolean byDocument = sanctions.stream().anyMatch(h -> h.basis() == MatchBasis.DOCUMENT);
+    // Só o TITULAR bloqueia. Um sócio identificado por documento numa lista é um sinal forte, mas
+    // a entidade sancionada é ele, não a empresa — reprovar a PJ automaticamente por isso seria
+    // punir uma pessoa jurídica distinta, sem análise. Vai para revisão como qualquer indício.
+    boolean byDocument =
+        sanctions.stream().anyMatch(h -> h.basis() == MatchBasis.DOCUMENT && h.isTitular());
     List<String> evidences =
-        sanctions.stream().map(h -> h.basis() + ":" + h.source() + ":" + h.matchedName()).toList();
+        sanctions.stream()
+            .map(h -> h.party().label() + " · " + h.basis() + ":" + h.source() + ":" + h.matchedName())
+            .toList();
 
     return byDocument
         ? new RiskResult(

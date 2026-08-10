@@ -19,6 +19,7 @@ public class Delivery {
   private int attempts;
   private String lastError;
   private Instant nextAttemptAt;
+  private Instant claimedAt;
   private final Instant createdAt;
   private Instant deliveredAt;
 
@@ -39,6 +40,10 @@ public class Delivery {
     this.status = DeliveryStatus.PENDING;
     this.attempts = 0;
     this.nextAttemptAt = createdAt;
+    // Nasce reivindicada: quem cria é quem tenta a entrega em seguida. Sem isso, a linha já nascia
+    // vencida (next_attempt_at = created_at) e o scheduler a pegava enquanto o POST original ainda
+    // estava em andamento — entrega dobrada numa instância só. Ver migration V003.
+    this.claimedAt = createdAt;
     this.createdAt = createdAt;
   }
 
@@ -61,6 +66,7 @@ public class Delivery {
       int attempts,
       String lastError,
       Instant nextAttemptAt,
+      Instant claimedAt,
       Instant createdAt,
       Instant deliveredAt) {
     Delivery d = new Delivery(id, eventId, assessmentId, tenantId, targetUrl, payload, createdAt);
@@ -68,6 +74,7 @@ public class Delivery {
     d.attempts = attempts;
     d.lastError = lastError;
     d.nextAttemptAt = nextAttemptAt;
+    d.claimedAt = claimedAt;
     d.deliveredAt = deliveredAt;
     return d;
   }
@@ -78,13 +85,21 @@ public class Delivery {
     this.status = DeliveryStatus.DELIVERED;
     this.lastError = null;
     this.nextAttemptAt = null;
+    this.claimedAt = null;
     this.deliveredAt = Instant.now();
   }
 
-  /** Registra falha: reagenda se ainda há tentativas, senão marca como morta. */
+  /**
+   * Registra falha: reagenda se ainda há tentativas, senão marca como morta.
+   *
+   * <p>Libera a posse em qualquer caso: quem governa a próxima tentativa é o {@code nextAttemptAt}
+   * (backoff exponencial), não a lease — que existe só para devolver à fila uma entrega cuja
+   * instância morreu no meio do POST.
+   */
   public void markFailed(String error, int maxAttempts, Instant nextAttemptAt) {
     this.attempts++;
     this.lastError = error;
+    this.claimedAt = null;
     if (this.attempts >= maxAttempts) {
       this.status = DeliveryStatus.DEAD;
       this.nextAttemptAt = null;
@@ -132,6 +147,10 @@ public class Delivery {
 
   public Instant nextAttemptAt() {
     return nextAttemptAt;
+  }
+
+  public Instant claimedAt() {
+    return claimedAt;
   }
 
   public Instant createdAt() {

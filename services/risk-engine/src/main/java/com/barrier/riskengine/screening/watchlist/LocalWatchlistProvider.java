@@ -24,7 +24,10 @@ public class LocalWatchlistProvider implements WatchlistProvider {
   @Override
   public List<WatchlistEntry> search(WatchlistQuery query) {
     return repository.findByDocument(query.documentDigits()).stream()
-        .map(r -> new WatchlistEntry(r.type(), MatchBasis.DOCUMENT, r.source(), r.name(), r.detail()))
+        .map(
+            r ->
+                new WatchlistEntry(
+                    r.type(), MatchBasis.DOCUMENT, query.party(), r.source(), r.name(), r.detail()))
         .toList();
   }
 

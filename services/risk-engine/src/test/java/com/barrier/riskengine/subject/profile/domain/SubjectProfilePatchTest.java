@@ -19,6 +19,7 @@ class SubjectProfilePatchTest {
         new SubjectProfile(
             UUID.randomUUID(),
             subjectId,
+            "acme",
             LocalDate.of(1990, 1, 1),
             null,
             "Brasileira",
@@ -58,6 +59,7 @@ class SubjectProfilePatchTest {
         new SubjectProfile(
             UUID.randomUUID(),
             subjectId,
+            "acme",
             null,
             LocalDate.of(2010, 5, 20),
             null,

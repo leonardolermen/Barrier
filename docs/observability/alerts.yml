@@ -1,0 +1,111 @@
+# Regras de alerta do Barrier (formato Prometheus).
+#
+# Métrica sem alerta é um gráfico que ninguém olha. Estas são as sete que a auditoria apontou como
+# as que fecham a pergunta "se algo quebrar amanhã, alguém fica sabendo antes do cliente?".
+#
+# Cada regra diz o que detecta e — mais importante — qual incidente real ela teria pego. Todas
+# nasceram de um modo de falha observado neste sistema, não de um catálogo genérico.
+groups:
+  - name: barrier-risk-engine
+    rules:
+      # ---------------------------------------------------------------------------------------
+      # 1. Pipeline travado. Pega TODA forma de congelamento com uma métrica só: provider pendurado
+      #    sem timeout, thread do scheduler bloqueada, banco lento, poison pill. O sintoma é sempre
+      #    o mesmo — avaliações param de concluir — e nenhum aparece no /actuator/health.
+      - alert: BarrierAvaliacaoPresaNaFila
+        expr: barrier_assessment_pending_oldest_seconds > 900
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Avaliação EM_ANALISE há mais de 15 minutos"
+          description: >-
+            A avaliação pendente mais antiga tem {{ $value | humanizeDuration }}. O pipeline parou
+            de concluir. Verificar: bureau respondendo, thread do scheduler, conexões do banco.
+
+      # 2. Fila crescendo sem parar — capacidade insuficiente ou processamento degradado.
+      - alert: BarrierFilaDeAvaliacoesCrescendo
+        expr: barrier_assessment_pending_count > 500 and deriv(barrier_assessment_pending_count[15m]) > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Fila de avaliações crescendo de forma sustentada"
+
+      # ---------------------------------------------------------------------------------------
+      # 3. O alerta mais importante do conjunto. Uma mudança de taxa de aprovação é o único sinal
+      #    que pega, ao mesmo tempo: regra nova mal calibrada, provider devolvendo lixo (ex.: campo
+      #    renomeado fazendo todo CNPJ virar NOT_FOUND) e fraude em escala. Nenhum dos três se
+      #    anuncia de outro jeito.
+      - alert: BarrierTaxaDeAprovacaoForaDaBanda
+        expr: |
+          (
+            sum(rate(barrier_assessment_decisions_total{status="APROVADO"}[30m]))
+            /
+            sum(rate(barrier_assessment_decisions_total[30m]))
+          ) > 0.95
+          or
+          (
+            sum(rate(barrier_assessment_decisions_total{status="APROVADO"}[30m]))
+            /
+            sum(rate(barrier_assessment_decisions_total[30m]))
+          ) < 0.40
+        for: 30m
+        labels: { severity: critical }
+        annotations:
+          summary: "Taxa de aprovação em {{ $value | humanizePercentage }} — fora da banda esperada"
+          description: >-
+            Calibrar os limiares com dados reais antes de ligar. Salto para cima sugere controle
+            desarmado (regra desligada, lista vazia, provider aprovando tudo); queda sugere provider
+            devolvendo erro interpretado como recusa.
+
+      # 4. Reprovação automática em massa. Chegou como "value too long" uma vez; da próxima vez que
+      #    um provider mudar um campo, aparece aqui antes de chegar pelo suporte.
+      - alert: BarrierReprovacaoEmMassa
+        expr: sum(rate(barrier_assessment_decisions_total{status="REPROVADO"}[15m])) / sum(rate(barrier_assessment_decisions_total[15m])) > 0.25
+        for: 15m
+        labels: { severity: critical }
+        annotations:
+          summary: "Mais de 25% das avaliações reprovadas nos últimos 15 minutos"
+
+      # 5. Falha de processamento recorrente: provider quebrado, evidência que não cabe, banco fora.
+      - alert: BarrierFalhasDeProcessamento
+        expr: rate(barrier_assessment_processing_failures_total[10m]) > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Avaliações falhando no processamento de forma contínua"
+
+      # 6. Cobertura de listas restritivas. O modo de falha que a ScreeningCoverageRiskRule já
+      #    contém tecnicamente (força revisão), mas que precisa de gente para ser resolvido — senão
+      #    toda a fila humana enche até alguém perceber.
+      - alert: BarrierSemCoberturaDeListas
+        expr: up{job="barrier-risk-engine"} == 1 and on() barrier_watchlist_coverage_missing > 0
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "Screening rodando sem cobertura de SANCTION ou PEP"
+          description: >-
+            Requer a métrica derivada de WatchlistImportStatus (ainda não exposta — ver plano).
+            Enquanto isso, o /actuator/health já reflete o estado.
+
+      # 7. Outbox parada: eventos decididos que não chegam ao cliente.
+      - alert: BarrierOutboxAcumulando
+        expr: barrier_outbox_pending_oldest_seconds > 300
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Evento pendente na outbox há mais de 5 minutos"
+          description: >-
+            Requer a métrica de outbox (ainda não exposta — ver plano). Kafka indisponível não
+            perde evento, mas o cliente não recebe o desfecho do KYC.
+
+  - name: barrier-webhook-api
+    rules:
+      # 8. Entrega morta: o cliente NUNCA soube do resultado do KYC, e nada avisa hoje.
+      - alert: BarrierEntregaDeWebhookMorta
+        expr: increase(barrier_webhook_deliveries_total{status="DEAD"}[1h]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "Entrega de webhook esgotou as tentativas"
+          description: >-
+            Requer a métrica de entregas (ainda não exposta — ver plano). Sem endpoint de
+            reprocessamento, hoje isto exige intervenção manual no banco.

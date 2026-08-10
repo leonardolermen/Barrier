@@ -6,8 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.barrier.riskengine.assessment.controller.AssessmentResponse;
 import com.barrier.riskengine.assessment.controller.SubmitAssessmentRequest;
 import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.subject.profile.controller.ProfileResponse;
+import com.barrier.riskengine.subject.profile.controller.UpdateProfileRequest;
 import com.barrier.riskengine.tenant.repository.TenantRepository;
 import com.barrier.riskengine.tenant.service.ApiKeyService;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -55,6 +60,7 @@ class TenantIsolationIntegrationTest {
 
   @Autowired ApiKeyService apiKeyService;
   @Autowired TenantRepository tenantRepository;
+  @Autowired JdbcTemplate jdbc;
 
   private String credencial;
 
@@ -162,5 +168,104 @@ class TenantIsolationIntegrationTest {
             () -> submete(com("chave-de-admin-de-teste-com-tamanho-ok"), "111.444.777-35", "F"))
         .isInstanceOf(HttpClientErrorException.class)
         .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.UNAUTHORIZED));
+  }
+
+  // --- Isolamento do cadastro (CMN 4.753) entre tenants -------------------------------------
+
+  private static final String CPF_ALVO = "111.444.777-35";
+
+  private String credencialDe(String tenantId) {
+    jdbc.update(
+        "INSERT INTO tenants (id, name, active) VALUES (?, ?, true) ON CONFLICT (id) DO NOTHING",
+        tenantId,
+        tenantId);
+    return apiKeyService.issue(tenantId, "integracao").presentedValue();
+  }
+
+  private ProfileResponse atualizaCadastro(String apiKey, UpdateProfileRequest corpo) {
+    return com(apiKey)
+        .put()
+        .uri("/v1/subjects/{doc}/profile", CPF_ALVO.replaceAll("\\D", ""))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(corpo)
+        .retrieve()
+        .toEntity(ProfileResponse.class)
+        .getBody();
+  }
+
+  private static UpdateProfileRequest cadastroCompletoPf() {
+    return new UpdateProfileRequest(
+        LocalDate.of(1985, 3, 12),
+        null,
+        "Brasileira",
+        "Engenheira",
+        new BigDecimal("12000.00"),
+        new UpdateProfileRequest.AddressRequest(
+            "Rua Confidencial", "42", null, "Centro", "São Paulo", "SP", "01000-000"),
+        "11999998888",
+        "titular@exemplo.com",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  /**
+   * O achado: {@code PUT .../profile} devolvia o cadastro depois do merge, e um patch vazio não
+   * altera nada. Com o vínculo criado por um simples {@code POST /v1/assessments}, duas chamadas
+   * entregavam a um parceiro o dossiê do cliente de outro — endereço, telefone, e-mail, nascimento,
+   * renda declarada.
+   *
+   * <p>O critério de pronto não é "a resposta mudou de formato": é que o tenant B <b>não tenha</b>
+   * os dados que o tenant A declarou. Por isso a asserção é sobre a completude — se B enxergasse o
+   * cadastro de A, o checklist de B viria completo sem B ter declarado nada.
+   */
+  @Test
+  void cadastroDeclaradoPorUmTenantNaoVazaParaOutro() {
+    String tenantA = credencialDe("parceiro-a");
+    String tenantB = credencialDe("parceiro-b");
+
+    submete(com(tenantA), CPF_ALVO, "Fulano de Tal");
+    ProfileResponse deA = atualizaCadastro(tenantA, cadastroCompletoPf());
+    assertThat(deA.complete()).isTrue();
+
+    // B cria o próprio vínculo com o mesmo CPF e tenta ler o cadastro com um patch vazio
+    submete(com(tenantB), CPF_ALVO, "Fulano de Tal");
+    ProfileResponse deB =
+        atualizaCadastro(
+            tenantB,
+            new UpdateProfileRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+    assertThat(deB.complete()).isFalse();
+    assertThat(deB.missingFields())
+        .containsExactlyInAnyOrder("data de nascimento", "nacionalidade", "ocupação", "endereço");
+  }
+
+  /** E a escrita de um tenant não altera o cadastro do outro (o vetor de indução de aprovação). */
+  @Test
+  void escritaDeUmTenantNaoAlteraOCadastroDoOutro() {
+    String tenantA = credencialDe("parceiro-c");
+    String tenantB = credencialDe("parceiro-d");
+
+    submete(com(tenantA), CPF_ALVO, "Fulano de Tal");
+    atualizaCadastro(tenantA, cadastroCompletoPf());
+
+    submete(com(tenantB), CPF_ALVO, "Fulano de Tal");
+    atualizaCadastro(
+        tenantB,
+        new UpdateProfileRequest(
+            LocalDate.of(1999, 9, 9), null, "Outra", "Outra", null, null, null, null, null, null,
+            null, null, null, null));
+
+    // o cadastro de A continua o que A declarou: patch vazio de A segue completo
+    ProfileResponse deA =
+        atualizaCadastro(
+            tenantA,
+            new UpdateProfileRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+    assertThat(deA.complete()).isTrue();
   }
 }

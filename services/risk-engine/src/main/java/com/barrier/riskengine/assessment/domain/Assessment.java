@@ -1,5 +1,6 @@
 package com.barrier.riskengine.assessment.domain;
 
+import com.barrier.commons.observability.Correlation;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import java.time.Instant;
 import java.util.List;
@@ -23,6 +24,8 @@ public class Assessment {
   private List<String> factors = List.of();
   private final Instant createdAt;
   private Instant completedAt;
+  /** Correlação da requisição que criou a avaliação; restaurada no processamento assíncrono. */
+  private String correlationId;
   private String reviewedBy;
   private String reviewedByKey;
   private int attempts;
@@ -30,6 +33,14 @@ public class Assessment {
   private Instant nextAttemptAt;
   private String reviewReason;
   private Instant reviewedAt;
+
+  /**
+   * Versão da linha no momento em que o agregado foi carregado. O domínio não usa este número para
+   * nada — ele existe porque, sem carregá-lo, a checagem de concorrência otimista era feita contra
+   * um valor lido no instante da escrita, o que a tornava decorativa. Ver
+   * {@code AssessmentRepositoryImpl.save}.
+   */
+  private long version;
 
   private Assessment(
       AssessmentId id,
@@ -63,8 +74,11 @@ public class Assessment {
       throw new IllegalArgumentException("name obrigatório");
     }
     String digits = Documents.normalize(documentType, rawDocument);
-    return new Assessment(
-        AssessmentId.newId(), tenantId, subjectId, documentType, digits, name, Instant.now());
+    Assessment assessment =
+        new Assessment(
+            AssessmentId.newId(), tenantId, subjectId, documentType, digits, name, Instant.now());
+    assessment.correlationId = Correlation.currentOrNew();
+    return assessment;
   }
 
   /** Reconstrói o agregado a partir da persistência. */
@@ -87,9 +101,13 @@ public class Assessment {
       Instant reviewedAt,
       int attempts,
       String lastError,
-      Instant nextAttemptAt) {
+      Instant nextAttemptAt,
+      long version,
+      String correlationId) {
     Assessment a =
         new Assessment(id, tenantId, subjectId, documentType, documentDigits, name, createdAt);
+    a.correlationId = correlationId;
+    a.version = version;
     a.reviewedByKey = reviewedByKey;
     a.attempts = attempts;
     a.lastError = lastError;
@@ -177,6 +195,15 @@ public class Assessment {
 
   public boolean isPending() {
     return status == AssessmentStatus.EM_ANALISE;
+  }
+
+  /** Versão da linha quando este agregado foi carregado; detalhe de persistência. */
+  public long version() {
+    return version;
+  }
+
+  public String correlationId() {
+    return correlationId;
   }
 
   public int attempts() {

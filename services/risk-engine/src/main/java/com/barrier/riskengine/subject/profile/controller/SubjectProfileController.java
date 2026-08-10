@@ -45,9 +45,9 @@ public class SubjectProfileController {
         };
     Subject subject = subjectService.getForTenant(tenant.id(), documentType, digits);
 
-    SubjectProfile profile = profileService.upsert(subject.id(), request.toPatch());
+    SubjectProfile profile = profileService.upsert(subject.id(), tenant.id(), request.toPatch());
     RegistrationCompleteness completeness =
         RegistrationCompleteness.evaluate(documentType, profile);
-    return ResponseEntity.ok(ProfileResponse.of(completeness, profile));
+    return ResponseEntity.ok(ProfileResponse.of(completeness));
   }
 }

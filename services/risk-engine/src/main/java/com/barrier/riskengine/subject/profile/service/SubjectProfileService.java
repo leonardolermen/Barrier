@@ -12,6 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
  * Casos de uso do cadastro (CMN 4.753): atualização progressiva (cliente ou enriquecimento pelo
  * bureau) e checagem de completude, usada como gate antes da aprovação automática de uma
  * avaliação.
+ *
+ * <p>Toda operação é escopada por {@code tenantId}. Não existe assinatura que aceite só o
+ * {@code subjectId}: era isso que permitia um parceiro ler e completar o cadastro do cliente de
+ * outro (ver migration V024). O tipo do método é a defesa — um endpoint novo não tem como
+ * esquecer de passar o tenant.
  */
 @Service
 public class SubjectProfileService {
@@ -22,23 +27,24 @@ public class SubjectProfileService {
     this.repository = repository;
   }
 
-  /** Aplica o patch sobre o cadastro existente do subject, criando-o se ainda não existir. */
+  /** Aplica o patch sobre o cadastro que este tenant declarou, criando-o se ainda não existir. */
   @Transactional
-  public SubjectProfile upsert(UUID subjectId, SubjectProfilePatch patch) {
-    SubjectProfile current =
-        repository.findBySubjectId(subjectId).orElseGet(() -> SubjectProfile.blank(subjectId));
+  public SubjectProfile upsert(UUID subjectId, String tenantId, SubjectProfilePatch patch) {
+    SubjectProfile current = find(subjectId, tenantId);
     return repository.save(patch.applyTo(current));
   }
 
-  /** Verifica se o cadastro do subject cobre o checklist mínimo do tipo de documento. */
+  /** Verifica se o cadastro deste tenant cobre o checklist mínimo do tipo de documento. */
   @Transactional(readOnly = true)
-  public RegistrationCompleteness completeness(UUID subjectId, String documentType) {
-    return RegistrationCompleteness.evaluate(documentType, find(subjectId));
+  public RegistrationCompleteness completeness(UUID subjectId, String tenantId, String documentType) {
+    return RegistrationCompleteness.evaluate(documentType, find(subjectId, tenantId));
   }
 
-  /** Cadastro do subject, em branco se ainda não houver nenhum dado preenchido. */
+  /** Cadastro declarado por este tenant; em branco se ainda não houver nenhum dado preenchido. */
   @Transactional(readOnly = true)
-  public SubjectProfile find(UUID subjectId) {
-    return repository.findBySubjectId(subjectId).orElseGet(() -> SubjectProfile.blank(subjectId));
+  public SubjectProfile find(UUID subjectId, String tenantId) {
+    return repository
+        .findBySubjectIdAndTenantId(subjectId, tenantId)
+        .orElseGet(() -> SubjectProfile.blank(subjectId, tenantId));
   }
 }
