@@ -17,6 +17,9 @@ import java.util.UUID;
  * @param occurredAt instante em que o evento ocorreu
  * @param version versão do contrato do payload
  * @param payload conteúdo do evento já serializado (ex.: JSON)
+ * @param correlationId id da requisição que originou o evento; {@code null} em eventos gravados
+ *     antes da correlação existir. É o que liga o {@code POST} do cliente à decisão e à entrega do
+ *     webhook num único fio, atravessando duas threads e um broker
  */
 public record EventEnvelope(
     UUID eventId,
@@ -24,7 +27,8 @@ public record EventEnvelope(
     String assessmentId,
     Instant occurredAt,
     int version,
-    String payload) {
+    String payload,
+    String correlationId) {
 
   public EventEnvelope {
     Objects.requireNonNull(eventId, "eventId");
@@ -35,6 +39,17 @@ public record EventEnvelope(
     if (version < 1) {
       throw new IllegalArgumentException("version deve ser >= 1");
     }
+  }
+
+  /** Envelope sem correlação — eventos anteriores à propagação do id, e testes. */
+  public EventEnvelope(
+      UUID eventId,
+      String type,
+      String assessmentId,
+      Instant occurredAt,
+      int version,
+      String payload) {
+    this(eventId, type, assessmentId, occurredAt, version, payload, null);
   }
 
   /** Cria um envelope novo com {@code eventId} aleatório e {@code occurredAt} = agora. */

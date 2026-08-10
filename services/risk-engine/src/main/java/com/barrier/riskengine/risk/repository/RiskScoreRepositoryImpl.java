@@ -1,5 +1,6 @@
 package com.barrier.riskengine.risk.repository;
 
+import com.barrier.riskengine.risk.domain.model.EvaluatedRule;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
 import java.util.List;
@@ -12,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 class RiskScoreRepositoryImpl implements RiskScoreRepository {
 
   private static final TypeReference<List<RiskResult>> RESULT_LIST = new TypeReference<>() {};
+  private static final TypeReference<List<EvaluatedRule>> EVALUATED_LIST = new TypeReference<>() {};
 
   private final RiskScoreJpaRepository jpa;
   private final ObjectMapper objectMapper;
@@ -30,6 +32,9 @@ class RiskScoreRepositoryImpl implements RiskScoreRepository {
     e.setTotalScore(score.totalScore());
     e.setRecommendation(score.recommendation());
     e.setResultsJson(objectMapper.writeValueAsString(score.results()));
+    e.setEvaluatedJson(objectMapper.writeValueAsString(score.evaluated()));
+    e.setIdentityCheckId(score.identityCheckId());
+    e.setScreeningResultId(score.screeningResultId());
     e.setEngineVersion(score.engineVersion());
     e.setScoredAt(score.scoredAt());
     return toDomain(jpa.save(e));
@@ -42,6 +47,12 @@ class RiskScoreRepositoryImpl implements RiskScoreRepository {
 
   private RiskScore toDomain(RiskScoreEntity e) {
     List<RiskResult> results = objectMapper.readValue(e.getResultsJson(), RESULT_LIST);
+    // Decisão anterior à V028 não tem a trilha completa — lista vazia, não erro: o registro
+    // histórico continua legível, que é o ponto de não ter mudado results_json de forma.
+    List<EvaluatedRule> evaluated =
+        e.getEvaluatedJson() == null
+            ? List.of()
+            : objectMapper.readValue(e.getEvaluatedJson(), EVALUATED_LIST);
     return new RiskScore(
         e.getId(),
         e.getAssessmentId(),
@@ -49,6 +60,9 @@ class RiskScoreRepositoryImpl implements RiskScoreRepository {
         e.getTotalScore(),
         e.getRecommendation(),
         results,
+        evaluated,
+        e.getIdentityCheckId(),
+        e.getScreeningResultId(),
         e.getEngineVersion(),
         e.getScoredAt());
   }

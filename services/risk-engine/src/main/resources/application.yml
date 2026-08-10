@@ -20,20 +20,42 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        # O relay publica com .join() (síncrono, para só marcar SENT após confirmação do broker).
+        # Sem estes limites, um broker em rebalance deixa o join() pendurado pelos 2 min padrão de
+        # delivery.timeout.ms — segurando a thread do scheduler e a transação da outbox.
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 15000
+  task:
+    scheduling:
+      # Era 1 thread (default do Spring), compartilhada por AssessmentProcessor, OutboxRelay e
+      # WatchlistImporter. A importação das 03:00 (dezenas de milhar de linhas) congelava o
+      # processamento de avaliações, e um Kafka lento congelava os dois.
+      pool:
+        size: 4
+      thread-name-prefix: barrier-sched-
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 server:
   port: ${SERVER_PORT:8080}
 
 logging:
+  # Correlação e avaliação no console de dev; em prod o log é JSON e o MDC vai inteiro (ver
+  # application-prod.yml). Sem isto, o MDC existe mas não aparece em lugar nenhum.
+  pattern:
+    level: "%5p [${spring.application.name},%X{correlationId:-},%X{assessmentId:-}]"
   level:
     # DEBUG de bureau/screening expõe dado pessoal (nome do cliente, razão social) — vale só em
     # dev. O profile prod sobrescreve para INFO; ver application-prod.yml.
@@ -85,7 +107,13 @@ barrier:
       alt-path: /ALT.CSV # apelidos/aka
   screening:
     fuzzy:
-      threshold: 0.95 # mais restritivo: evita falso positivo em nomes genéricos (ex.: "NATIONAL BANK OF …")
+      # Limiar POR TOKEN (Jaro-Winkler), não sobre o nome inteiro — não é comparável ao 0.95
+      # anterior, que era medido sobre a string toda e por isso perdia nome em ordem invertida
+      # ("SILVA, JOSE ANTONIO" na lista vs. "Jose Antonio da Silva" no cadastro). Aqui 0.90 absorve
+      # erro de digitação dentro de um token e ainda separa sobrenomes diferentes.
+      # Calibrar isto olhando só falso positivo foi o que quebrou o controle: em screening de
+      # sanção, medir recall primeiro (conjunto rotulado), precisão depois.
+      threshold: 0.90
       min-name-length: 6
   risk:
     new-company:

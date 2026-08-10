@@ -49,7 +49,8 @@ class AssessmentEntity {
   @Column(name = "decision", length = 200)
   private String decision;
 
-  @Column(name = "factors", length = 2000)
+  /** TEXT: lista de linhas legíveis, não JSON — mas sem teto, pelo mesmo motivo (V026). */
+  @Column(name = "factors")
   private String factors;
 
   @Column(name = "created_at", nullable = false)
@@ -86,8 +87,23 @@ class AssessmentEntity {
   @Column(name = "reviewed_at")
   private Instant reviewedAt;
 
+  @Column(name = "correlation_id", length = 64)
+  private String correlationId;
+
+  String getCorrelationId() {
+    return correlationId;
+  }
+
+  void setCorrelationId(String correlationId) {
+    this.correlationId = correlationId;
+  }
+
   protected AssessmentEntity() {
     // JPA
+  }
+
+  long getVersion() {
+    return version;
   }
 
   UUID getId() {

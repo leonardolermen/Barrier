@@ -26,4 +26,14 @@ public class StubBureauProvider implements BureauProvider {
   public String name() {
     return "stub";
   }
+
+  /**
+   * Não é verificação de identidade: confirma qualquer CPF. Marcar isto no próprio provider é o
+   * que impede a cadeia de {@link com.barrier.riskengine.identity.service.IdentityService} de usá-lo
+   * como fallback de um bureau real indisponível.
+   */
+  @Override
+  public boolean authoritative() {
+    return false;
+  }
 }

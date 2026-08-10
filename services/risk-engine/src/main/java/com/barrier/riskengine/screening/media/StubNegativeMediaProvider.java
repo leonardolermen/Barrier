@@ -41,6 +41,7 @@ public class StubNegativeMediaProvider implements NegativeMediaProvider {
         new WatchlistEntry(
             MatchType.ADVERSE_MEDIA,
             MatchBasis.NAME,
+            query.party(),
             name(),
             query.name(),
             "Nome associado a termos de mídia negativa (lavagem/corrupção/fraude/tráfico/"

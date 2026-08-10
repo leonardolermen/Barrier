@@ -49,18 +49,36 @@ public class OutboxEvent {
   @Column(name = "sent_at")
   private Instant sentAt;
 
+  /**
+   * Posse desta linha por um relay, com expiração. Substitui o lock de banco que era mantido
+   * durante a publicação — ver migration V025.
+   */
+  @Column(name = "claimed_at")
+  private Instant claimedAt;
+
+  /** Correlação da requisição que originou o evento; viaja até o consumidor. */
+  @Column(name = "correlation_id", length = 64)
+  private String correlationId;
+
   protected OutboxEvent() {
     // JPA
   }
 
   private OutboxEvent(
-      UUID id, String aggregateId, String type, String payload, int version, Instant occurredAt) {
+      UUID id,
+      String aggregateId,
+      String type,
+      String payload,
+      int version,
+      Instant occurredAt,
+      String correlationId) {
     this.id = id;
     this.aggregateId = aggregateId;
     this.type = type;
     this.payload = payload;
     this.version = version;
     this.occurredAt = occurredAt;
+    this.correlationId = correlationId;
     this.createdAt = Instant.now();
     this.status = OutboxStatus.PENDING;
     this.attempts = 0;
@@ -68,8 +86,19 @@ public class OutboxEvent {
 
   /** Cria um evento pendente com id aleatório. */
   public static OutboxEvent pending(
-      String aggregateId, String type, String payload, int version, Instant occurredAt) {
-    return new OutboxEvent(UUID.randomUUID(), aggregateId, type, payload, version, occurredAt);
+      String aggregateId,
+      String type,
+      String payload,
+      int version,
+      Instant occurredAt,
+      String correlationId) {
+    return new OutboxEvent(
+        UUID.randomUUID(), aggregateId, type, payload, version, occurredAt, correlationId);
+  }
+
+  /** Reivindica a linha para publicação por esta instância, iniciando a lease. */
+  public void markClaimed(Instant now) {
+    this.claimedAt = now;
   }
 
   /** Marca como enviado após publicação bem-sucedida. */
@@ -79,9 +108,14 @@ public class OutboxEvent {
     this.attempts++;
   }
 
-  /** Registra uma tentativa de publicação que falhou. */
+  /**
+   * Registra uma tentativa de publicação que falhou e <b>libera a posse</b>, para que o próximo
+   * ciclo possa tentar de novo sem esperar a lease expirar — a lease existe para sobreviver à
+   * morte da instância, não para servir de backoff.
+   */
   public void markFailedAttempt() {
     this.attempts++;
+    this.claimedAt = null;
   }
 
   public UUID getId() {
@@ -114,5 +148,13 @@ public class OutboxEvent {
 
   public Instant getOccurredAt() {
     return occurredAt;
+  }
+
+  public Instant getClaimedAt() {
+    return claimedAt;
+  }
+
+  public String getCorrelationId() {
+    return correlationId;
   }
 }

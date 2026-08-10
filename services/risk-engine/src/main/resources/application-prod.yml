@@ -5,6 +5,11 @@
 # pessoal indo para o agregador de logs sem base legal nem controle de acesso. Em produção o
 # essencial (desfecho, provider, documento mascarado) já sai em INFO.
 logging:
+  # Log estruturado em produção: o MDC (correlationId, assessmentId) vira campo indexável em vez de
+  # texto dentro da linha. É a diferença entre "grep no agregador" e "filtrar por correlationId".
+  structured:
+    format:
+      console: ecs
   level:
     com.barrier: INFO
     com.barrier.riskengine.identity: INFO

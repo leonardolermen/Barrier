@@ -18,6 +18,7 @@ final class DeliveryEntityMapper {
     e.setAttempts(d.attempts());
     e.setLastError(d.lastError());
     e.setNextAttemptAt(d.nextAttemptAt());
+    e.setClaimedAt(d.claimedAt());
     e.setCreatedAt(d.createdAt());
     e.setDeliveredAt(d.deliveredAt());
     return e;
@@ -35,6 +36,7 @@ final class DeliveryEntityMapper {
         e.getAttempts(),
         e.getLastError(),
         e.getNextAttemptAt(),
+        e.getClaimedAt(),
         e.getCreatedAt(),
         e.getDeliveredAt());
   }

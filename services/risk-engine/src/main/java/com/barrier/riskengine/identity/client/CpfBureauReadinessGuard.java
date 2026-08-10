@@ -40,18 +40,20 @@ public class CpfBureauReadinessGuard implements ApplicationRunner {
 
   @Override
   public void run(ApplicationArguments args) {
-    List<String> cpfProviders =
-        providers.stream().filter(p -> p.supports(CPF)).map(BureauProvider::name).toList();
-    boolean onlyStub =
-        cpfProviders.size() == 1 && cpfProviders.contains(new StubBureauProvider().name());
-    if (!cpfProviders.isEmpty() && !onlyStub) {
+    List<BureauProvider> cpfProviders = providers.stream().filter(p -> p.supports(CPF)).toList();
+    // Autoritativo = bureau de verdade. Comparar por nome com o stub deixava passar qualquer outro
+    // provider não-autoritativo que viesse a existir, e falhava se houvesse dois deles.
+    boolean hasAuthoritative = cpfProviders.stream().anyMatch(BureauProvider::authoritative);
+    if (hasAuthoritative) {
       return;
     }
 
     String problema =
         cpfProviders.isEmpty()
             ? "nenhum provider de CPF habilitado"
-            : "o único provider de CPF é o stub, que confirma qualquer documento";
+            : "nenhum provider autoritativo de CPF: só há "
+                + cpfProviders.stream().map(BureauProvider::name).toList()
+                + ", que confirmam qualquer documento";
     if (Arrays.asList(environment.getActiveProfiles()).contains(PROD_PROFILE)) {
       throw new IllegalStateException(
           "Profile 'prod' ativo e "

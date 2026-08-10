@@ -16,7 +16,7 @@ public class SanctionMatchRule implements ScreeningRule {
         .map(
             e ->
                 new ScreeningHit(
-                    MatchType.SANCTION, e.basis(), e.source(), e.matchedName(), e.detail()))
+                    MatchType.SANCTION, e.basis(), e.party(), e.source(), e.matchedName(), e.detail()))
         .toList();
   }
 }

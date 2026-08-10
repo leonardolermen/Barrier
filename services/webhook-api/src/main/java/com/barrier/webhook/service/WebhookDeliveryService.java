@@ -8,12 +8,15 @@ import com.barrier.webhook.client.WebhookSendResult;
 import com.barrier.webhook.config.WebhookProperties;
 import com.barrier.webhook.domain.Delivery;
 import com.barrier.webhook.repository.DeliveryRepository;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Entrega os resultados de avaliação ao endpoint do cliente.
@@ -31,16 +34,24 @@ public class WebhookDeliveryService {
   private final WebhookClient client;
   private final HmacSigner signer;
   private final WebhookProperties properties;
+  private final TransactionTemplate transactionTemplate;
+  private final Duration lease;
 
   public WebhookDeliveryService(
       DeliveryRepository repository,
       WebhookClient client,
       HmacSigner signer,
-      WebhookProperties properties) {
+      WebhookProperties properties,
+      TransactionTemplate transactionTemplate,
+      @Value("${barrier.webhook.lease:PT2M}") Duration lease) {
     this.repository = repository;
     this.client = client;
     this.signer = signer;
     this.properties = properties;
+    this.transactionTemplate = transactionTemplate;
+    // Precisa ser maior que o pior caso de uma tentativa (connect + read timeout do cliente);
+    // curta demais faz outro worker reenviar enquanto o POST original ainda está em voo.
+    this.lease = lease;
   }
 
   /** Recebe um evento de avaliação concluída e tenta entregá-lo, no escopo de um tenant. */
@@ -71,9 +82,21 @@ public class WebhookDeliveryService {
     attempt(delivery);
   }
 
-  /** Reprocessa entregas vencidas (agendado). Retorna quantas foram tentadas. */
+  /**
+   * Reprocessa entregas vencidas (agendado). Retorna quantas foram tentadas.
+   *
+   * <p>A reivindicação acontece numa transação curta; os POSTs ficam <b>fora</b> dela. Antes o
+   * método só lia (`findDue`) e saía postando: réplicas concorrentes entregavam o mesmo veredito de
+   * KYC ao cliente, e mesmo com uma instância só o scheduler competia com o próprio listener do
+   * Kafka por entregas recém-criadas (ver migration V003).
+   */
   public int retryDue() {
-    List<Delivery> due = repository.findDue(Instant.now(), RETRY_BATCH);
+    List<Delivery> due =
+        transactionTemplate.execute(
+            status -> repository.claimDue(Instant.now(), RETRY_BATCH, lease));
+    if (due == null || due.isEmpty()) {
+      return 0;
+    }
     due.forEach(this::attempt);
     return due.size();
   }

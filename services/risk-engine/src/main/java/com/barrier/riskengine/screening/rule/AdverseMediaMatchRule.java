@@ -16,7 +16,7 @@ public class AdverseMediaMatchRule implements ScreeningRule {
         .map(
             e ->
                 new ScreeningHit(
-                    MatchType.ADVERSE_MEDIA, e.basis(), e.source(), e.matchedName(), e.detail()))
+                    MatchType.ADVERSE_MEDIA, e.basis(), e.party(), e.source(), e.matchedName(), e.detail()))
         .toList();
   }
 }

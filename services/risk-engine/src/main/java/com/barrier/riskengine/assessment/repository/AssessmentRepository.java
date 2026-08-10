@@ -12,6 +12,15 @@ import java.util.Optional;
  */
 public interface AssessmentRepository {
 
+  /** Quantas avaliações aguardam processamento. Alimenta a métrica de fila. */
+  long countPending();
+
+  /**
+   * Instante de criação da avaliação pendente mais antiga; {@code null} se não há nenhuma. É a
+   * medida que revela pipeline travado — ver {@code PipelineHealthMetrics}.
+   */
+  java.time.Instant oldestPendingCreatedAt();
+
   Assessment save(Assessment assessment);
 
   Optional<Assessment> findById(AssessmentId id);

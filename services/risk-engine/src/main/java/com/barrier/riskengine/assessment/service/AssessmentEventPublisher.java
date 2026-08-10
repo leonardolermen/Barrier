@@ -25,10 +25,13 @@ public class AssessmentEventPublisher {
   }
 
   public void publishCompleted(Assessment assessment) {
+    // A correlação vem do agregado, não do MDC: a conclusão automática roda num @Scheduled, onde o
+    // contexto da requisição original não existe mais.
     outbox.record(
         assessment.id().asString(),
         EVENT_TYPE,
         EVENT_VERSION,
-        objectMapper.writeValueAsString(AssessmentCompletedPayload.from(assessment)));
+        objectMapper.writeValueAsString(AssessmentCompletedPayload.from(assessment)),
+        assessment.correlationId());
   }
 }

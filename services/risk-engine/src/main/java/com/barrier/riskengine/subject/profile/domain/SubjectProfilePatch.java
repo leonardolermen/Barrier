@@ -31,6 +31,7 @@ public record SubjectProfilePatch(
     return new SubjectProfile(
         current.id(),
         current.subjectId(),
+        current.tenantId(),
         firstNonNull(birthDate, current.birthDate()),
         firstNonNull(foundingDate, current.foundingDate()),
         firstNonNull(nationality, current.nationality()),

@@ -3,6 +3,7 @@ package com.barrier.riskengine.screening.repository;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Repository;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -15,6 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 class ScreeningResultRepositoryImpl implements ScreeningResultRepository {
 
   private static final TypeReference<List<ScreeningHit>> HIT_LIST = new TypeReference<>() {};
+  private static final TypeReference<Map<String, String>> SOURCE_MAP = new TypeReference<>() {};
 
   private final ScreeningResultJpaRepository jpa;
   private final ObjectMapper objectMapper;
@@ -31,6 +33,7 @@ class ScreeningResultRepositoryImpl implements ScreeningResultRepository {
     e.setAssessmentId(result.assessmentId());
     e.setStatus(result.status());
     e.setHitsJson(objectMapper.writeValueAsString(result.hits()));
+    e.setSourcesJson(objectMapper.writeValueAsString(result.sources()));
     e.setCheckedAt(result.checkedAt());
     return toDomain(jpa.save(e));
   }
@@ -42,7 +45,12 @@ class ScreeningResultRepositoryImpl implements ScreeningResultRepository {
 
   private ScreeningResult toDomain(ScreeningResultEntity e) {
     List<ScreeningHit> hits = objectMapper.readValue(e.getHitsJson(), HIT_LIST);
+    // Screening anterior à V028 não tem snapshot de listas — mapa vazio, não erro.
+    Map<String, String> sources =
+        e.getSourcesJson() == null
+            ? Map.of()
+            : objectMapper.readValue(e.getSourcesJson(), SOURCE_MAP);
     return new ScreeningResult(
-        e.getId(), e.getAssessmentId(), e.getStatus(), hits, e.getCheckedAt());
+        e.getId(), e.getAssessmentId(), e.getStatus(), hits, sources, e.getCheckedAt());
   }
 }

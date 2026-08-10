@@ -26,8 +26,23 @@ class ScreeningResultEntity {
   @Column(name = "status", nullable = false, length = 20)
   private ScreeningStatus status;
 
-  @Column(name = "hits_json", nullable = false, length = 4000)
+  /** JSONB: um cliente com muitos apontamentos estourava o teto (ver migration V026). */
+  @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+  @Column(name = "hits_json", nullable = false)
   private String hitsJson;
+
+  /** Fonte → versão da lista consultada; snapshot que torna o CLEAR verificável (V028). */
+  @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+  @Column(name = "sources_json")
+  private String sourcesJson;
+
+  String getSourcesJson() {
+    return sourcesJson;
+  }
+
+  void setSourcesJson(String sourcesJson) {
+    this.sourcesJson = sourcesJson;
+  }
 
   @Column(name = "checked_at", nullable = false)
   private Instant checkedAt;

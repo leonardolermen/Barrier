@@ -9,5 +9,9 @@ public interface SubjectProfileRepository {
 
   SubjectProfile save(SubjectProfile profile);
 
-  Optional<SubjectProfile> findBySubjectId(UUID subjectId);
+  /**
+   * Cadastro que <b>este tenant</b> declarou para o subject. Não existe busca só por subject: o
+   * cadastro de um parceiro não é visível para outro (ver migration V024).
+   */
+  Optional<SubjectProfile> findBySubjectIdAndTenantId(UUID subjectId, String tenantId);
 }

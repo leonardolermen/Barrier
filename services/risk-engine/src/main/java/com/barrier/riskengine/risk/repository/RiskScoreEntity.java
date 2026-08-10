@@ -34,11 +34,48 @@ class RiskScoreEntity {
   @Column(name = "recommendation", nullable = false, length = 10)
   private RiskRecommendation recommendation;
 
-  @Column(name = "results_json", nullable = false, length = 4000)
+  /** JSONB: uma decisão com muitas regras disparadas estourava o teto (ver migration V026). */
+  @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+  @Column(name = "results_json", nullable = false)
   private String resultsJson;
+
+  /** Todas as regras avaliadas, com desfecho — inclusive as que passaram (ver migration V028). */
+  @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+  @Column(name = "evaluated_json")
+  private String evaluatedJson;
+
+  @Column(name = "identity_check_id")
+  private UUID identityCheckId;
+
+  @Column(name = "screening_result_id")
+  private UUID screeningResultId;
 
   @Column(name = "engine_version", nullable = false, length = 40)
   private String engineVersion;
+
+  String getEvaluatedJson() {
+    return evaluatedJson;
+  }
+
+  void setEvaluatedJson(String evaluatedJson) {
+    this.evaluatedJson = evaluatedJson;
+  }
+
+  UUID getIdentityCheckId() {
+    return identityCheckId;
+  }
+
+  void setIdentityCheckId(UUID identityCheckId) {
+    this.identityCheckId = identityCheckId;
+  }
+
+  UUID getScreeningResultId() {
+    return screeningResultId;
+  }
+
+  void setScreeningResultId(UUID screeningResultId) {
+    this.screeningResultId = screeningResultId;
+  }
 
   @Column(name = "scored_at", nullable = false)
   private Instant scoredAt;

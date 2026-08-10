@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 interface SubjectProfileJpaRepository extends JpaRepository<SubjectProfileEntity, UUID> {
 
-  Optional<SubjectProfileEntity> findBySubjectId(UUID subjectId);
+  Optional<SubjectProfileEntity> findBySubjectIdAndTenantId(UUID subjectId, String tenantId);
 }

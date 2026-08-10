@@ -68,6 +68,17 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
     return jpa.findAll().stream().map(WatchlistEntryRepositoryImpl::toRecord).toList();
   }
 
+  @Override
+  public java.util.Map<String, String> sourceVersions() {
+    java.util.Map<String, String> versions = new java.util.LinkedHashMap<>();
+    jdbc.query(
+        "SELECT source, max(list_version) AS list_version FROM watchlist_entries GROUP BY source ORDER BY source",
+        rs -> {
+          versions.put(rs.getString("source"), rs.getString("list_version"));
+        });
+    return versions;
+  }
+
   private static WatchlistRecord toRecord(WatchlistEntryEntity e) {
     return new WatchlistRecord(
         e.getSource(),

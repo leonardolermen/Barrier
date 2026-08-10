@@ -122,6 +122,39 @@ class IdentityServiceTest {
     assertThat(check.provider()).isEqualTo("todos");
   }
 
+  /**
+   * Regressão: o stub ({@code authoritative() == false}) não pode ser fallback de um bureau real
+   * indisponível — isso convertia indisponibilidade em identidade verificada.
+   */
+  @Test
+  void bureauRealIndisponivelNaoCaiParaOStub() {
+    when(provider.supports("CPF")).thenReturn(true);
+    when(provider.authoritative()).thenReturn(true); // bureau real
+    when(fallback.supports("CPF")).thenReturn(true); // mock devolve authoritative() == false
+    when(provider.check(any(BureauQuery.class))).thenThrow(new BureauUnavailableException("timeout"));
+    when(provider.name()).thenReturn("bureau-real");
+
+    IdentityCheck check =
+        new IdentityService(List.of(provider, fallback), repository).verify(cpfCommand()).check();
+
+    assertThat(check.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
+    verify(fallback, never()).check(any());
+  }
+
+  /** Sem nenhum bureau real para o tipo, o stub segue valendo — é o que sustenta dev/teste. */
+  @Test
+  void semBureauRealOStubContinuaNaCadeia() {
+    when(provider.supports("CPF")).thenReturn(true);
+    when(provider.authoritative()).thenReturn(false);
+    when(provider.check(any(BureauQuery.class))).thenReturn(BureauResult.match("stub"));
+    when(provider.name()).thenReturn("stub");
+
+    IdentityCheck check =
+        new IdentityService(List.of(provider), repository).verify(cpfCommand()).check();
+
+    assertThat(check.status()).isEqualTo(IdentityStatus.VERIFIED);
+  }
+
   @Test
   void resultadoDefinitivoNaoTentaOProximo() {
     when(provider.supports("CPF")).thenReturn(true);

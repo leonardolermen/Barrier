@@ -1,5 +1,6 @@
 package com.barrier.riskengine.web;
 
+import com.barrier.commons.observability.Correlation;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,7 +21,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class CorrelationIdFilter extends OncePerRequestFilter {
 
   static final String HEADER = "X-Correlation-Id";
-  static final String MDC_KEY = "correlationId";
+  static final String MDC_KEY = Correlation.MDC_KEY;
 
   @Override
   protected void doFilterInternal(
