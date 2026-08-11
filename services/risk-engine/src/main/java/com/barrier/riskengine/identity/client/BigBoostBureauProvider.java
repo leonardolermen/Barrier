@@ -18,16 +18,15 @@ import org.springframework.web.client.RestClientException;
  * Bureau real de <b>CPF</b> via BigBoost (BigDataCorp), dataset {@code basic_data} — API
  * pública com doc aberta, self-service (sem CNPJ para contratar). Desligado por padrão
  * ({@code barrier.identity.bigboost.enabled=false}): dev/testes usam o {@link
- * StubBureauProvider}; habilitar exige {@code AccessToken}/{@code TokenId} reais (ver
+ * FakeCpfBureauProvider}; habilitar exige {@code AccessToken}/{@code TokenId} reais (ver
  * application.yml e ADR correspondente).
  *
- * <p>Mapeamento: {@code Result} vazio → NOT_FOUND; {@code Result} não-vazio → MATCH. A API
- * também expõe status do CPF na Receita (regular/irregular) para MISMATCH, mas o campo exato
- * do schema não foi confirmado na doc pública (truncada no exemplo) — a confirmar quando a
- * API key estiver contratada.
+ * <p>Mapeamento: {@code Result} vazio → NOT_FOUND; caso contrário a <b>situação cadastral</b>
+ * ({@code TaxIdStatus} + {@code HasObitIndication}) decide primeiro (ver {@link #outcomeOf}), e só
+ * um CPF regular chega à comparação de nome.
  */
 @Component
-@Order(20) // depois do bureau real de CNPJ (BrasilAPI=10), antes do stub (=100)
+@Order(20) // depois do bureau real de CNPJ (BrasilAPI=10), antes do simulado (=100)
 @ConditionalOnProperty(name = "barrier.identity.bigboost.enabled", havingValue = "true")
 public class BigBoostBureauProvider implements BureauProvider {
 
@@ -66,9 +65,21 @@ public class BigBoostBureauProvider implements BureauProvider {
         return new BureauResult(BureauResult.Outcome.NOT_FOUND, "CPF não encontrado na BigBoost");
       }
       BigBoostBasicDataResponse.BasicData data = results.get(0).basicData();
-      log.debug("BigBoost CPF {}: nome={}", Documents.mask(query.documentDigits()), data.name());
-      // O CPF existir não diz que pertence a quem o informou. Sem esta comparação, um CPF real de
-      // terceiro somado a qualquer nome resultava em identidade "verificada".
+      log.debug(
+          "BigBoost CPF {}: status={}, obito={}",
+          Documents.mask(query.documentDigits()),
+          data.taxIdStatus(),
+          data.hasObitIndication());
+
+      // A situação cadastral é avaliada ANTES do nome: um CPF de titular falecido com o nome
+      // batendo é justamente o caso perigoso, e comparar nome primeiro o aprovaria.
+      BureauResult.Outcome byStatus = outcomeOf(data);
+      if (byStatus != BureauResult.Outcome.MATCH) {
+        return new BureauResult(byStatus, "Situação do CPF na Receita: " + statusLabel(data));
+      }
+
+      // O CPF existir e estar regular não diz que pertence a quem o informou. Sem esta comparação,
+      // um CPF real de terceiro somado a qualquer nome resultava em identidade "verificada".
       if (!NameSimilarity.matches(query.name(), data.name(), nameThreshold)) {
         return new BureauResult(
             BureauResult.Outcome.MISMATCH,
@@ -80,6 +91,42 @@ public class BigBoostBureauProvider implements BureauProvider {
     } catch (RestClientException e) {
       throw new BureauUnavailableException("BigBoost indisponível: " + e.getMessage(), e);
     }
+  }
+
+  /**
+   * Traduz a situação cadastral da Receita para o desfecho do bureau.
+   *
+   * <p>Fecha o "a confirmar" do ADR-0014: até aqui, {@code Result} não-vazio virava MATCH, e um CPF
+   * de titular falecido com o nome batendo era aprovado como identidade verificada.
+   *
+   * <ul>
+   *   <li>óbito (status ou indicação) → {@link BureauResult.Outcome#DECEASED}, bloqueio;
+   *   <li>{@code NULA} → NOT_FOUND: o CPF nunca existiu validamente;
+   *   <li>{@code SUSPENSA}/{@code CANCELADA}/{@code PENDENTE} → MISMATCH: o titular existe, o
+   *       cadastro é que não está apto — é caso de revisão, não de recusa automática;
+   *   <li>status ausente/desconhecido → MISMATCH, nunca MATCH. Campo que a API deixou de mandar não
+   *       pode ser lido como "está tudo certo" — foi assim que o fail-open nasceu.
+   * </ul>
+   */
+  private static BureauResult.Outcome outcomeOf(BigBoostBasicDataResponse.BasicData data) {
+    if (Boolean.TRUE.equals(data.hasObitIndication())) {
+      return BureauResult.Outcome.DECEASED;
+    }
+    String status = data.taxIdStatus() == null ? "" : data.taxIdStatus().trim().toUpperCase();
+    if (status.contains("FALECID")) {
+      return BureauResult.Outcome.DECEASED;
+    }
+    if (status.equals("NULA")) {
+      return BureauResult.Outcome.NOT_FOUND;
+    }
+    return status.equals("REGULAR") ? BureauResult.Outcome.MATCH : BureauResult.Outcome.MISMATCH;
+  }
+
+  private static String statusLabel(BigBoostBasicDataResponse.BasicData data) {
+    String status = data.taxIdStatus() == null ? "não informada" : data.taxIdStatus();
+    return Boolean.TRUE.equals(data.hasObitIndication())
+        ? status + " (com indicação de óbito)"
+        : status;
   }
 
   @Override

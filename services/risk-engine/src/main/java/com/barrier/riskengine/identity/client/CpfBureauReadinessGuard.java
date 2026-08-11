@@ -13,15 +13,22 @@ import org.springframework.stereotype.Component;
  * Trava de segurança operacional do bureau de CPF, no mesmo espírito do
  * {@code WatchlistReadinessGuard}.
  *
- * <p>O {@link StubBureauProvider} responde MATCH para <b>qualquer</b> CPF sintaticamente válido —
- * ele existe para dev/testes rodarem sem provider pago. Como é o último da cadeia
- * ({@code @Order(100)}), ele entra em ação sempre que nenhum bureau real de CPF está habilitado, e
- * o efeito é que toda pessoa física é aprovada com identidade "verificada" sem verificação alguma.
- * Sem esta trava a falha é invisível: a aplicação sobe saudável e o {@code /actuator/health} fica
- * verde.
+ * <p>O {@code FakeCpfBureauProvider} devolve desfechos simulados derivados do próprio CPF — existe
+ * para dev/testes rodarem sem provider pago. Sem esta trava, subir em produção sem bureau real
+ * significaria decidir sobre pessoa física com resposta inventada, e a falha seria invisível: a
+ * aplicação sobe saudável e o {@code /actuator/health} fica verde.
  *
- * <p>Falha rápido (não sobe) se o profile {@code prod} estiver ativo e o stub for o único provider
- * de CPF. Em outros profiles, apenas avisa.
+ * <p>Duas condições fazem a subida falhar em {@code prod}:
+ *
+ * <ol>
+ *   <li>nenhum provider <b>autoritativo</b> de CPF na cadeia;
+ *   <li>bureau real habilitado, mas apontando para {@code localhost} — configuração de
+ *       desenvolvimento copiada para produção. Sem esta segunda checagem, apontar a
+ *       {@code base-url} para um mock local tornaria o provider autoritativo e desarmaria a
+ *       primeira, que é o buraco por onde a trava seria contornada sem ninguém decidir isso.
+ * </ol>
+ *
+ * <p>Em outros profiles, apenas avisa.
  */
 @Component
 public class CpfBureauReadinessGuard implements ApplicationRunner {
@@ -40,28 +47,44 @@ public class CpfBureauReadinessGuard implements ApplicationRunner {
 
   @Override
   public void run(ApplicationArguments args) {
-    List<BureauProvider> cpfProviders = providers.stream().filter(p -> p.supports(CPF)).toList();
-    // Autoritativo = bureau de verdade. Comparar por nome com o stub deixava passar qualquer outro
-    // provider não-autoritativo que viesse a existir, e falhava se houvesse dois deles.
-    boolean hasAuthoritative = cpfProviders.stream().anyMatch(BureauProvider::authoritative);
-    if (hasAuthoritative) {
+    String problema = problema();
+    if (problema == null) {
       return;
     }
-
-    String problema =
-        cpfProviders.isEmpty()
-            ? "nenhum provider de CPF habilitado"
-            : "nenhum provider autoritativo de CPF: só há "
-                + cpfProviders.stream().map(BureauProvider::name).toList()
-                + ", que confirmam qualquer documento";
     if (Arrays.asList(environment.getActiveProfiles()).contains(PROD_PROFILE)) {
       throw new IllegalStateException(
           "Profile 'prod' ativo e "
               + problema
-              + ". Toda pessoa física seria aprovada com identidade não verificada. Habilite um "
-              + "bureau real de CPF (ex.: barrier.identity.bigboost.enabled=true com credenciais) "
-              + "antes de subir em produção.");
+              + ". Pessoa física seria decidida sem verificação de identidade real. Habilite um "
+              + "bureau real de CPF (ex.: barrier.identity.bigboost.enabled=true com credenciais e "
+              + "base-url pública) antes de subir em produção.");
     }
     log.warn("KYC de pessoa física SEM verificação real: {}. Não usar em produção.", problema);
+  }
+
+  /** Descrição do que impede confiar no KYC de PF; {@code null} quando está tudo certo. */
+  private String problema() {
+    List<BureauProvider> cpfProviders = providers.stream().filter(p -> p.supports(CPF)).toList();
+    // Autoritativo = bureau de verdade. Comparar por nome com uma classe específica deixava passar
+    // qualquer outro provider não-autoritativo que viesse a existir.
+    if (cpfProviders.stream().noneMatch(BureauProvider::authoritative)) {
+      return cpfProviders.isEmpty()
+          ? "nenhum provider de CPF habilitado"
+          : "nenhum provider autoritativo de CPF: só há "
+              + cpfProviders.stream().map(BureauProvider::name).toList();
+    }
+    String baseUrl = environment.getProperty("barrier.identity.bigboost.base-url", "");
+    return isLocal(baseUrl)
+        ? "o bureau de CPF aponta para um endereço local (" + baseUrl + ")"
+        : null;
+  }
+
+  /**
+   * Um bureau "real" apontado para a própria máquina é um simulador com crachá: torna o provider
+   * autoritativo e desarma a checagem acima sem que ninguém tenha decidido isso.
+   */
+  private static boolean isLocal(String baseUrl) {
+    String url = baseUrl == null ? "" : baseUrl.toLowerCase();
+    return url.contains("localhost") || url.contains("127.0.0.1") || url.contains("://[::1]");
   }
 }

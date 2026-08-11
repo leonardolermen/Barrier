@@ -6,6 +6,6 @@ ${AnsiColor.BRIGHT_CYAN}
 ╚███╔███╔╝███████╗██████╔╝██║  ██║╚██████╔╝╚██████╔╝██║  ██╗
  ╚══╝╚══╝ ╚══════╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝
 ${AnsiColor.BRIGHT_BLACK}    B A R R I E R   ·   E V E N T   D E L I V E R Y
-${AnsiColor.BRIGHT_YELLOW}  Webhook API ${AnsiColor.WHITE}v0.1.0-SNAPSHOT ${application.version}
+${AnsiColor.BRIGHT_YELLOW}  Webhook API ${AnsiColor.WHITE}v${barrier.version}
 ${AnsiColor.BRIGHT_BLACK}  Spring Boot ${spring-boot.version} · Java ${java.version} · HMAC + retry
 ${AnsiColor.DEFAULT}

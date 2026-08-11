@@ -7,6 +7,7 @@ import com.barrier.webhook.client.WebhookRequest;
 import com.barrier.webhook.client.WebhookSendResult;
 import com.barrier.webhook.config.WebhookProperties;
 import com.barrier.webhook.domain.Delivery;
+import com.barrier.webhook.domain.SigningMaterial;
 import com.barrier.webhook.repository.DeliveryRepository;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,6 +32,7 @@ public class WebhookDeliveryService {
   private static final int RETRY_BATCH = 100;
 
   private final DeliveryRepository repository;
+  private final WebhookEndpointService endpoints;
   private final WebhookClient client;
   private final HmacSigner signer;
   private final WebhookProperties properties;
@@ -39,12 +41,14 @@ public class WebhookDeliveryService {
 
   public WebhookDeliveryService(
       DeliveryRepository repository,
+      WebhookEndpointService endpoints,
       WebhookClient client,
       HmacSigner signer,
       WebhookProperties properties,
       TransactionTemplate transactionTemplate,
       @Value("${barrier.webhook.lease:PT2M}") Duration lease) {
     this.repository = repository;
+    this.endpoints = endpoints;
     this.client = client;
     this.signer = signer;
     this.properties = properties;
@@ -60,8 +64,15 @@ public class WebhookDeliveryService {
       log.debug("Evento {} já registrado; ignorando (idempotência)", envelope.eventId());
       return;
     }
-    if (properties.targetUrl() == null || properties.targetUrl().isBlank()) {
-      log.warn("Nenhum endpoint de webhook configurado; evento {} não entregue", envelope.eventId());
+    // O destino sai do tenant DONO DO EVENTO, não de uma configuração global: com destino global,
+    // o callback de KYC de um tenant chegava no endpoint do outro.
+    String targetUrl = endpoints.resolveTargetUrl(tenantId).orElse(null);
+    if (targetUrl == null) {
+      log.error(
+          "Tenant {} sem endpoint de webhook; evento {} não entregue (a decisão segue disponível"
+              + " no GET /v1/assessments)",
+          tenantId,
+          envelope.eventId());
       return;
     }
 
@@ -73,7 +84,7 @@ public class WebhookDeliveryService {
                   envelope.eventId(),
                   envelope.assessmentId(),
                   tenantId,
-                  properties.targetUrl(),
+                  targetUrl,
                   envelope.payload()));
     } catch (DataIntegrityViolationException e) {
       log.debug("Entrega concorrente para o evento {}; ignorando", envelope.eventId());
@@ -102,14 +113,20 @@ public class WebhookDeliveryService {
   }
 
   private void attempt(Delivery delivery) {
-    String signature = signer.sign(delivery.payload(), properties.secret());
+    // Segredo do tenant, resolvido a cada tentativa: uma rotação entre a primeira tentativa e o
+    // retry assina com o que vale agora, sem carregar o segredo antigo na linha da entrega.
+    SigningMaterial material = endpoints.resolveSigningMaterial(delivery.tenantId());
+    String signature = signer.sign(delivery.payload(), material.secret());
+    String previousSignature =
+        material.hasPrevious() ? signer.sign(delivery.payload(), material.previousSecret()) : null;
     WebhookSendResult result =
         client.send(
             new WebhookRequest(
                 delivery.targetUrl(),
                 delivery.payload(),
                 delivery.eventId().toString(),
-                signature));
+                signature,
+                previousSignature));
 
     if (result.success()) {
       delivery.markDelivered();

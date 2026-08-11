@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>NOT_FOUND → bloqueio (documento inexistente no bureau)
  *   <li>MISMATCH → revisão (dados divergentes)
+ *   <li>DECEASED → <b>bloqueio</b> (CPF de titular falecido)
  *   <li>UNAVAILABLE → <b>revisão</b> (não foi possível confirmar a identidade)
  *   <li>VERIFIED → não aplicável
  * </ul>
@@ -46,6 +47,14 @@ public class IdentityRiskRule implements RiskRule {
               "Dados divergentes do bureau",
               evidence,
               RiskRecommendation.REVIEW);
+      case DECEASED ->
+          new RiskResult(
+              "IDENTITY_DECEASED",
+              1000,
+              Severity.CRITICAL,
+              "CPF de titular falecido",
+              evidence,
+              RiskRecommendation.REJECT);
       case UNAVAILABLE ->
           new RiskResult(
               "IDENTITY_UNAVAILABLE",

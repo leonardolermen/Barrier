@@ -19,9 +19,23 @@ record BigBoostBasicDataResponse(@JsonProperty("Result") List<ResultItem> result
   record ResultItem(
       @JsonProperty("MatchKeys") String matchKeys, @JsonProperty("BasicData") BasicData basicData) {}
 
+  /**
+   * @param taxIdStatus situação cadastral na Receita: {@code REGULAR},
+   *     {@code PENDENTE DE REGULARIZACAO}, {@code SUSPENSA}, {@code CANCELADA},
+   *     {@code TITULAR FALECIDO}, {@code NULA}
+   * @param hasObitIndication indicação de óbito agregada de outras fontes. Conferido
+   *     <b>independentemente</b> do status: a BigBoost agrega óbito de fontes que costumam
+   *     registrar antes de a Receita atualizar o cadastro, então {@code REGULAR} com indicação de
+   *     óbito é caso real — e o mais perigoso dos dois
+   * @param motherName nome da mãe; segundo fator clássico de identidade. Ainda não consumido —
+   *     quando for, comparar e guardar apenas o <b>resultado</b> da comparação, nunca o valor
+   */
   @JsonIgnoreProperties(ignoreUnknown = true)
   record BasicData(
       @JsonProperty("TaxIdNumber") String taxIdNumber,
       @JsonProperty("Name") String name,
-      @JsonProperty("Gender") String gender) {}
+      @JsonProperty("Gender") String gender,
+      @JsonProperty("TaxIdStatus") String taxIdStatus,
+      @JsonProperty("HasObitIndication") Boolean hasObitIndication,
+      @JsonProperty("MotherName") String motherName) {}
 }

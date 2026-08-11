@@ -66,6 +66,9 @@ logging:
     org.apache.kafka.common.config.AbstractConfig: WARN
 
 barrier:
+  # Preenchido pelo Maven (resource filtering do spring-boot-starter-parent) a partir da
+  # versão do POM — o banner lê daqui, então basta bumpar o POM para o banner acompanhar.
+  version: @project.version@
   admin:
     # Protege /v1/risk-rules e /v1/tenants/*/risk-config (header X-Admin-Key). Vazia por padrão:
     # em dev o filtro fica inerte; em prod a aplicação não sobe sem ela (AdminApiKeyReadinessGuard).
@@ -78,10 +81,24 @@ barrier:
     # Tentativas antes de marcar FALHA_PROCESSAMENTO, com backoff exponencial entre elas.
     max-attempts: 5
     base-backoff: PT30S
+    # Por quanto tempo uma Idempotency-Key do intake continua valendo como repetição. 24h cobre
+    # retry de rede, redeploy do cliente e reprocessamento de fila; passado isso, a mesma chave
+    # começa uma avaliação nova — o que é o correto, porque a decisão de KYC envelhece.
+    idempotency-window: PT24H
+    idempotency-purge-cron: "0 30 3 * * *" # todo dia às 03:30
   outbox:
     relay-delay-ms: 2000
+  resilience:
+    # Disjuntor por bureau: N falhas seguidas param as chamadas por open-duration. Sem isto, cada
+    # avaliação paga o timeout inteiro de um provider que já se sabe fora do ar.
+    failure-threshold: 5
+    open-duration: PT30S
   identity:
     brasilapi:
+      # Bureau de CNPJ da fase de teste: API pública, gratuita, sem SLA e sem contrato. Ligada por
+      # padrão em dev; em produção a decisão de mantê-la fica explícita (CnpjBureauReadinessGuard
+      # avisa quando ela é a única fonte de PJ).
+      enabled: true
       base-url: https://brasilapi.com.br
     bigboost:
       # Bureau real de CPF (BigDataCorp, dataset basic_data). Desligado por padrão — dev/testes

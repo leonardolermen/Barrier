@@ -8,6 +8,8 @@ import com.barrier.riskengine.identity.client.BureauUnavailableException;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.repository.IdentityCheckRepository;
+import com.barrier.riskengine.resilience.CircuitBreaker;
+import com.barrier.riskengine.resilience.CircuitBreakerRegistry;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,10 +32,15 @@ public class IdentityService {
 
   private final List<BureauProvider> providers;
   private final IdentityCheckRepository repository;
+  private final CircuitBreakerRegistry breakers;
 
-  public IdentityService(List<BureauProvider> providers, IdentityCheckRepository repository) {
+  public IdentityService(
+      List<BureauProvider> providers,
+      IdentityCheckRepository repository,
+      CircuitBreakerRegistry breakers) {
     this.providers = providers;
     this.repository = repository;
+    this.breakers = breakers;
   }
 
   public IdentityResult verify(VerifyIdentityCommand command) {
@@ -55,8 +62,17 @@ public class IdentityService {
     String lastError = null;
 
     for (BureauProvider provider : chain) {
+      CircuitBreaker breaker = breakers.forName(provider.name());
+      if (!breaker.allowRequest()) {
+        // Sem esta recusa, cada avaliação pagaria o timeout inteiro de um provider que já se sabe
+        // fora do ar — e a fila inteira ficaria lenta por causa de um terceiro.
+        lastError = provider.name() + ": disjuntor aberto (provider em falha recente)";
+        log.warn("Bureau {} com disjuntor aberto; pulando sem chamar", provider.name());
+        continue;
+      }
       try {
         BureauResult result = provider.check(query);
+        breaker.recordSuccess();
         IdentityCheck check =
             save(command, toStatus(result.outcome()), provider.name(), result.detail());
         // O detail traz nome/razão social vindos do bureau (dado pessoal). Fica persistido em
@@ -72,6 +88,9 @@ public class IdentityService {
         log.debug("Detalhe do bureau '{}': {}", provider.name(), result.detail());
         return new IdentityResult(check, result.company());
       } catch (BureauUnavailableException e) {
+        // Só indisponibilidade conta para o disjuntor. Um erro de programação (NPE, parsing) não é
+        // provider fora do ar, e abrir por causa dele esconderia o bug atrás de um UNAVAILABLE.
+        breaker.recordFailure();
         lastError = provider.name() + ": " + e.getMessage();
         log.warn("Bureau {} indisponível; tentando o próximo. {}", provider.name(), e.getMessage());
       }
@@ -85,7 +104,7 @@ public class IdentityService {
    * Providers que atendem o tipo, em ordem de prioridade — <b>excluindo os não-autoritativos
    * quando existe pelo menos um autoritativo</b> para aquele tipo.
    *
-   * <p>Sem esse recorte, o {@code StubBureauProvider} ({@code @Order(100)}, último da cadeia)
+   * <p>Sem esse recorte, o {@code FakeCpfBureauProvider} ({@code @Order(100)}, último da cadeia)
    * respondia MATCH sempre que o bureau real lançava {@link BureauUnavailableException}. O efeito
    * era converter indisponibilidade em identidade verificada — silenciosamente, e sem que o
    * {@code CpfBureauReadinessGuard} pudesse perceber, porque a configuração estava correta: o
@@ -126,6 +145,7 @@ public class IdentityService {
       case MATCH -> IdentityStatus.VERIFIED;
       case NOT_FOUND -> IdentityStatus.NOT_FOUND;
       case MISMATCH -> IdentityStatus.MISMATCH;
+      case DECEASED -> IdentityStatus.DECEASED;
     };
   }
 }

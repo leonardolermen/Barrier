@@ -9,18 +9,45 @@ import org.springframework.mock.env.MockEnvironment;
 
 class CpfBureauReadinessGuardTest {
 
-  private static final BureauProvider STUB = new StubBureauProvider();
+  private static final BureauProvider SIMULADO = new FakeCpfBureauProvider();
   private static final BureauProvider CNPJ_REAL = fake("brasilapi", "CNPJ");
   private static final BureauProvider CPF_REAL = fake("bureau-cpf", "CPF");
 
   @Test
-  void falhaAoSubirEmProducaoQuandoOStubEOUnicoProviderDeCpf() {
-    CpfBureauReadinessGuard guard =
-        new CpfBureauReadinessGuard(List.of(CNPJ_REAL, STUB), prod());
+  void falhaAoSubirEmProducaoQuandoOSimuladoEOUnicoProviderDeCpf() {
+    CpfBureauReadinessGuard guard = new CpfBureauReadinessGuard(List.of(CNPJ_REAL, SIMULADO), prod());
 
     assertThatThrownBy(() -> guard.run(null))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("stub");
+        .hasMessageContaining("nenhum provider autoritativo")
+        .hasMessageContaining("simulado");
+  }
+
+  /**
+   * Regressão da armadilha que o bureau simulado cria: apontar a {@code base-url} de um bureau
+   * "real" para a própria máquina o torna autoritativo e desarma a checagem acima — sem ninguém
+   * ter decidido isso. É config de dev copiada para produção.
+   */
+  @Test
+  void falhaAoSubirEmProducaoComBureauApontandoParaLocalhost() {
+    MockEnvironment prod = prod();
+    prod.setProperty("barrier.identity.bigboost.base-url", "http://localhost:8080");
+
+    CpfBureauReadinessGuard guard = new CpfBureauReadinessGuard(List.of(CPF_REAL), prod);
+
+    assertThatThrownBy(() -> guard.run(null))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("endereço local");
+  }
+
+  @Test
+  void naoFalhaComBureauRealApontandoParaEndpointPublico() {
+    MockEnvironment prod = prod();
+    prod.setProperty(
+        "barrier.identity.bigboost.base-url", "https://plataforma.bigdatacorp.com.br");
+
+    assertThatCode(() -> new CpfBureauReadinessGuard(List.of(CPF_REAL), prod).run(null))
+        .doesNotThrowAnyException();
   }
 
   @Test
@@ -33,17 +60,17 @@ class CpfBureauReadinessGuardTest {
   @Test
   void naoFalhaEmProducaoComBureauRealDeCpf() {
     CpfBureauReadinessGuard guard =
-        new CpfBureauReadinessGuard(List.of(CNPJ_REAL, CPF_REAL, STUB), prod());
+        new CpfBureauReadinessGuard(List.of(CNPJ_REAL, CPF_REAL, SIMULADO), prod());
 
     assertThatCode(() -> guard.run(null)).doesNotThrowAnyException();
   }
 
   @Test
-  void naoFalhaForaDeProducaoMesmoSoComOStub() {
+  void naoFalhaForaDeProducaoMesmoSoComOSimulado() {
     MockEnvironment dev = new MockEnvironment();
     dev.setActiveProfiles("dev");
 
-    assertThatCode(() -> new CpfBureauReadinessGuard(List.of(STUB), dev).run(null))
+    assertThatCode(() -> new CpfBureauReadinessGuard(List.of(SIMULADO), dev).run(null))
         .doesNotThrowAnyException();
   }
 

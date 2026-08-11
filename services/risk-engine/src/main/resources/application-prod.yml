@@ -16,6 +16,12 @@ logging:
     com.barrier.riskengine.screening: INFO
 
 barrier:
+  identity:
+    # Bureau contratado (ADR-0014) para CPF e CNPJ. Sem ele, o CnpjBureauReadinessGuard e o
+    # CpfBureauReadinessGuard impedem a subida: decidir KYC com provider simulado é o fail-open que
+    # a auditoria nomeou.
+    bigboost:
+      enabled: true
   watchlist:
     cgu:
       enabled: true

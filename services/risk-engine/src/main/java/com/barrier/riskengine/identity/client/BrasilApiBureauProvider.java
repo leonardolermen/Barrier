@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -25,6 +26,9 @@ import org.springframework.web.client.RestClientException;
  */
 @Component
 @Order(10) // bureau real tem prioridade sobre stubs na cadeia de fallback
+// Desligável para produção assumir só o bureau contratado: a BrasilAPI é da fase de teste, e o
+// CnpjBureauReadinessGuard avisa quando ela é a única fonte de PJ em prod.
+@ConditionalOnProperty(name = "barrier.identity.brasilapi.enabled", matchIfMissing = true, havingValue = "true")
 public class BrasilApiBureauProvider implements BureauProvider {
 
   private static final Logger log = LoggerFactory.getLogger(BrasilApiBureauProvider.class);

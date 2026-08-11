@@ -1,6 +1,7 @@
 package com.barrier.riskengine.web;
 
 import com.barrier.riskengine.assessment.domain.AssessmentNotFoundException;
+import com.barrier.riskengine.assessment.domain.IdempotencyConflictException;
 import com.barrier.riskengine.assessment.domain.InvalidDocumentException;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
@@ -28,6 +29,16 @@ class ProblemExceptionHandler {
   @ExceptionHandler(UnknownTenantException.class)
   ProblemDetail handleUnknownTenant(UnknownTenantException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
+  }
+
+  /**
+   * Reuso indevido de {@code Idempotency-Key} (conteúdo diferente) ou submissão original ainda em
+   * curso. 409 e não 500: o cliente precisa distinguir "sua chave já vale para outra coisa" de um
+   * erro do servidor — no primeiro caso, repetir não resolve.
+   */
+  @ExceptionHandler(IdempotencyConflictException.class)
+  ProblemDetail handleIdempotencyConflict(IdempotencyConflictException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 
   @ExceptionHandler(IllegalStateException.class)

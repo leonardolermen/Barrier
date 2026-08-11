@@ -3,15 +3,18 @@ package com.barrier.riskengine.assessment.controller;
 import com.barrier.riskengine.assessment.domain.Assessment;
 import com.barrier.riskengine.assessment.domain.AssessmentId;
 import com.barrier.riskengine.assessment.service.AssessmentService;
+import com.barrier.riskengine.assessment.service.SubmissionResult;
 import com.barrier.riskengine.assessment.service.SubmitAssessmentCommand;
 import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import java.net.URI;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,15 +32,28 @@ public class AssessmentController {
     this.service = service;
   }
 
-  /** Submete uma avaliação. Responde 202 (aceita para processamento assíncrono). */
+  /**
+   * Submete uma avaliação. Responde 202 (aceita para processamento assíncrono).
+   *
+   * <p>O header opcional {@code Idempotency-Key} torna o reenvio seguro: dentro da janela
+   * configurada, a mesma chave com o mesmo conteúdo devolve a avaliação original (com {@code
+   * Idempotency-Replayed: true}), a mesma chave com conteúdo diferente responde 409, e o cliente
+   * que não manda chave nenhuma continua criando uma avaliação por POST.
+   */
   @PostMapping
   public ResponseEntity<AssessmentResponse> submit(
-      AuthenticatedTenant tenant, @Valid @RequestBody SubmitAssessmentRequest req) {
-    Assessment created =
+      AuthenticatedTenant tenant,
+      @RequestHeader(value = "Idempotency-Key", required = false) @Size(max = 255)
+          String idempotencyKey,
+      @Valid @RequestBody SubmitAssessmentRequest req) {
+    SubmissionResult result =
         service.submit(
-            new SubmitAssessmentCommand(tenant.id(), req.documentType(), req.document(), req.name()));
+            new SubmitAssessmentCommand(
+                tenant.id(), req.documentType(), req.document(), req.name(), idempotencyKey));
+    Assessment created = result.assessment();
     return ResponseEntity.accepted()
         .location(URI.create("/v1/assessments/" + created.id().asString()))
+        .header("Idempotency-Replayed", String.valueOf(result.replayed()))
         .body(AssessmentDtoMapper.toResponse(created));
   }
 

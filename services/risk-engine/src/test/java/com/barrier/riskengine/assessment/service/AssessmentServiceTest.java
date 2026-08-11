@@ -3,7 +3,10 @@ package com.barrier.riskengine.assessment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.assessment.domain.Assessment;
@@ -11,6 +14,8 @@ import com.barrier.riskengine.assessment.domain.AssessmentId;
 import com.barrier.riskengine.assessment.domain.AssessmentNotFoundException;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.assessment.domain.IdempotencyConflictException;
+import com.barrier.riskengine.assessment.domain.IdempotencyReservation;
 import com.barrier.riskengine.assessment.domain.InvalidDocumentException;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
@@ -30,9 +35,10 @@ class AssessmentServiceTest {
   @Mock AssessmentRepository repository;
   @Mock SubjectService subjectService;
   @Mock AssessmentEventPublisher eventPublisher;
+  @Mock IdempotencyService idempotency;
 
   private AssessmentService service() {
-    return new AssessmentService(repository, subjectService, eventPublisher);
+    return new AssessmentService(repository, subjectService, eventPublisher, idempotency);
   }
 
   private Assessment emRevisao(String tenantId) {
@@ -49,14 +55,88 @@ class AssessmentServiceTest {
         .thenReturn(Subject.create("CPF", "11144477735", "Fulano"));
     when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-    Assessment result =
+    SubmissionResult result =
         service()
             .submit(
                 new SubmitAssessmentCommand("default", DocumentType.CPF, "111.444.777-35", "Fulano"));
 
-    assertThat(result.status()).isEqualTo(AssessmentStatus.EM_ANALISE);
-    assertThat(result.tenantId()).isEqualTo("default");
-    assertThat(result.subjectId()).isNotNull();
+    assertThat(result.replayed()).isFalse();
+    assertThat(result.assessment().status()).isEqualTo(AssessmentStatus.EM_ANALISE);
+    assertThat(result.assessment().tenantId()).isEqualTo("default");
+    assertThat(result.assessment().subjectId()).isNotNull();
+    // sem Idempotency-Key o serviço nem consulta a tabela de chaves
+    verifyNoInteractions(idempotency);
+  }
+
+  @Test
+  void submitComChaveRepetidaDevolveAAvaliacaoOriginalSemCriarOutra() {
+    var original =
+        Assessment.submit(
+            "default", UUID.randomUUID().toString(), DocumentType.CPF, "111.444.777-35", "Fulano");
+    var command =
+        new SubmitAssessmentCommand(
+            "default", DocumentType.CPF, "111.444.777-35", "Fulano", "chave-1");
+    when(idempotency.reserve(eq("default"), eq("chave-1"), any()))
+        .thenAnswer(
+            inv ->
+                new IdempotencyReservation(inv.getArgument(2), original.id(), false));
+    when(repository.findById(original.id())).thenReturn(Optional.of(original));
+
+    SubmissionResult result = service().submit(command);
+
+    assertThat(result.replayed()).isTrue();
+    assertThat(result.assessment().id()).isEqualTo(original.id());
+    verify(repository, never()).save(any());
+    verifyNoInteractions(subjectService);
+  }
+
+  /** Mesma chave com outro conteúdo é erro do cliente: servir a resposta antiga seria mentir. */
+  @Test
+  void submitComChaveReusadaParaOutroConteudoConflita() {
+    when(idempotency.reserve(eq("default"), eq("chave-1"), any()))
+        .thenReturn(new IdempotencyReservation("hash-de-outra-requisicao", AssessmentId.newId(), false));
+
+    assertThatThrownBy(
+            () ->
+                service()
+                    .submit(
+                        new SubmitAssessmentCommand(
+                            "default", DocumentType.CPF, "111.444.777-35", "Fulano", "chave-1")))
+        .isInstanceOf(IdempotencyConflictException.class);
+    verify(repository, never()).save(any());
+  }
+
+  /** Reserva sem avaliação: a submissão original ainda está em curso, não há o que repetir. */
+  @Test
+  void submitComSubmissaoOriginalEmAndamentoConflita() {
+    var command =
+        new SubmitAssessmentCommand(
+            "default", DocumentType.CPF, "111.444.777-35", "Fulano", "chave-1");
+    when(idempotency.reserve(eq("default"), eq("chave-1"), any()))
+        .thenAnswer(inv -> new IdempotencyReservation(inv.getArgument(2), null, false));
+
+    assertThatThrownBy(() -> service().submit(command))
+        .isInstanceOf(IdempotencyConflictException.class);
+  }
+
+  /** Falha depois da reserva não pode deixar a chave travada até o fim da janela. */
+  @Test
+  void submitQueFalhaLiberaAChave() {
+    when(idempotency.reserve(eq("default"), eq("chave-1"), any()))
+        .thenAnswer(inv -> IdempotencyReservation.taken(inv.getArgument(2)));
+    when(subjectService.findOrCreate(any(), any(), any()))
+        .thenThrow(new IllegalStateException("banco fora do ar"));
+
+    assertThatThrownBy(
+            () ->
+                service()
+                    .submit(
+                        new SubmitAssessmentCommand(
+                            "default", DocumentType.CPF, "111.444.777-35", "Fulano", "chave-1")))
+        .isInstanceOf(IllegalStateException.class);
+
+    verify(idempotency).release("default", "chave-1");
+    verify(idempotency, never()).bind(any(), any(), any());
   }
 
   @Test

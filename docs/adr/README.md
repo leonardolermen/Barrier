@@ -21,6 +21,7 @@ Formato baseado em [Michael Nygard](https://cognitect.com/blog/2011/11/15/docume
 | [0012](0012-subject-registration-profile.md) | Cadastro do subject (CMN 4.753) como agregado próprio, 1:1 | Aceito |
 | [0013](0013-watchlist-fontes-producao.md) | Watchlist em produção: fail-fast sem CGU/OFAC habilitados | Aceito |
 | [0014](0014-bureau-cpf-bigboost.md) | Bureau real de CPF via BigBoost (self-service, sem CNPJ) | Aceito |
+| [0015](0015-ingestao-em-massa-faixa-separada.md) | Ingestão em massa como faixa separada, com cota por tenant | Proposto |
 
 ## Status possíveis
 
