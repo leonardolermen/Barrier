@@ -22,9 +22,19 @@ mas o modelo de acesso já é bem mais aberto que o do Serpro.
 Implementar `BigBoostBureauProvider` (`identity/client/`) como bureau real de CPF, seguindo
 exatamente o mesmo padrão do `BrasilApiBureauProvider` (RestClient + mapeamento para
 `BureauResult`), mas **desligado por padrão** (`barrier.identity.bigboost.enabled=false`) —
-dev/testes continuam usando `StubBureauProvider`. Quando as credenciais (`AccessToken`/
+dev/testes usam o `FakeCpfBureauProvider` (ver
+[bureau-simulado.md](../implementation/bureau-simulado.md)). Quando as credenciais (`AccessToken`/
 `TokenId`) estiverem disponíveis, basta setar as env vars `BIGBOOST_ACCESS_TOKEN`/
 `BIGBOOST_TOKEN_ID` e a flag, sem mudar código.
+
+> **Atualização — situação cadastral mapeada.** Esta ADR registrava que o campo de status do CPF
+> "não foi confirmado na doc pública" e que, por isso, `Result` não-vazio virava `MATCH`. Os campos
+> são **`TaxIdStatus`** (`REGULAR`, `PENDENTE DE REGULARIZACAO`, `SUSPENSA`, `CANCELADA`,
+> `TITULAR FALECIDO`, `NULA`) e **`HasObitIndication`**. O mapeamento está implementado e coberto
+> por `BigBoostBureauProviderTest` contra o JSON documentado. Consequência: um CPF de titular
+> falecido com o nome batendo era aprovado como identidade verificada — agora é
+> `BureauResult.Outcome.DECEASED` → `IDENTITY_DECEASED` → reprovação, com a trilha dizendo a
+> verdade em vez de "documento não encontrado".
 
 - `@Order(20)` — depois do bureau real de CNPJ (`BrasilApiBureauProvider`, `@Order(10)`), antes
   do stub (`@Order(100)`). Quando habilitado, `IdentityService` tenta BigBoost primeiro e cai

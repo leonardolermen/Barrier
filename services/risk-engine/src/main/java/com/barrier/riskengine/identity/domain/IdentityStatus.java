@@ -8,6 +8,8 @@ public enum IdentityStatus {
   NOT_FOUND,
   /** Documento encontrado, mas dados divergem (ex.: nome). */
   MISMATCH,
+  /** Documento encontrado, titular falecido — indício de fraude, não divergência cadastral. */
+  DECEASED,
   /** Bureau indisponível; verificação não pôde ser concluída. */
   UNAVAILABLE
 }

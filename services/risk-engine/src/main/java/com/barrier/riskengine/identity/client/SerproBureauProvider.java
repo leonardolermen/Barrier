@@ -5,7 +5,7 @@ package com.barrier.riskengine.identity.client;
  *
  * <p>Ainda NÃO é um bean Spring (sem {@code @Component}) — não é ativado. Quando a integração
  * for implementada, torná-lo condicional (ex.: {@code barrier.identity.provider=serpro}) e
- * substituir o {@link StubBureauProvider} como provider ativo.
+ * substituir o {@code FakeCpfBureauProvider} como provider ativo.
  */
 public class SerproBureauProvider implements BureauProvider {
 

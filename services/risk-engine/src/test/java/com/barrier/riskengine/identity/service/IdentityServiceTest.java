@@ -3,6 +3,7 @@ package com.barrier.riskengine.identity.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,6 +14,8 @@ import com.barrier.riskengine.identity.client.BureauUnavailableException;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.repository.IdentityCheckRepository;
+import com.barrier.riskengine.resilience.CircuitBreakerRegistry;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +37,12 @@ class IdentityServiceTest {
 
   private IdentityService service() {
     when(provider.supports("CPF")).thenReturn(true);
-    return new IdentityService(List.of(provider), repository);
+    return new IdentityService(List.of(provider), repository, breakers());
+  }
+
+  /** Registro novo a cada serviço: o estado do disjuntor não deve vazar entre os testes. */
+  private static CircuitBreakerRegistry breakers() {
+    return new CircuitBreakerRegistry(3, Duration.ofSeconds(30));
   }
 
   private VerifyIdentityCommand cpfCommand() {
@@ -78,7 +86,7 @@ class IdentityServiceTest {
   @Test
   void semProviderParaTipoViraUnavailable() {
     // provider não suporta o tipo -> nenhum selecionado
-    var svc = new IdentityService(List.of(provider), repository);
+    var svc = new IdentityService(List.of(provider), repository, breakers());
 
     IdentityCheck check =
         svc.verify(new VerifyIdentityCommand("aid", "PASSAPORTE", "X", "Fulano")).check();
@@ -98,7 +106,7 @@ class IdentityServiceTest {
     when(fallback.name()).thenReturn("secundario");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider, fallback), repository).verify(cpfCommand()).check();
+        new IdentityService(List.of(provider, fallback), repository, breakers()).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.VERIFIED);
     assertThat(check.provider()).isEqualTo("secundario");
@@ -116,7 +124,7 @@ class IdentityServiceTest {
     when(fallback.name()).thenReturn("p2");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider, fallback), repository).verify(cpfCommand()).check();
+        new IdentityService(List.of(provider, fallback), repository, breakers()).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
     assertThat(check.provider()).isEqualTo("todos");
@@ -135,7 +143,7 @@ class IdentityServiceTest {
     when(provider.name()).thenReturn("bureau-real");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider, fallback), repository).verify(cpfCommand()).check();
+        new IdentityService(List.of(provider, fallback), repository, breakers()).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
     verify(fallback, never()).check(any());
@@ -150,9 +158,54 @@ class IdentityServiceTest {
     when(provider.name()).thenReturn("stub");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider), repository).verify(cpfCommand()).check();
+        new IdentityService(List.of(provider), repository, breakers()).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.VERIFIED);
+  }
+
+  /**
+   * O disjuntor é o que impede um provider degradado de cobrar o timeout inteiro de cada avaliação:
+   * passado o limite de falhas seguidas, ele deixa de ser chamado e a avaliação vai direto para
+   * UNAVAILABLE (que a IdentityRiskRule converte em revisão humana).
+   */
+  @Test
+  void bureauEmFalhaParaDeSerChamadoEAAvaliacaoVaiParaUnavailable() {
+    when(provider.supports("CPF")).thenReturn(true);
+    when(provider.check(any(BureauQuery.class))).thenThrow(new BureauUnavailableException("timeout"));
+    when(provider.name()).thenReturn("bureau-real");
+    IdentityService svc = new IdentityService(List.of(provider), repository, breakers());
+
+    for (int i = 0; i < 3; i++) {
+      assertThat(svc.verify(cpfCommand()).check().status()).isEqualTo(IdentityStatus.UNAVAILABLE);
+    }
+    verify(provider, times(3)).check(any());
+
+    IdentityCheck depoisDeAbrir = svc.verify(cpfCommand()).check();
+
+    assertThat(depoisDeAbrir.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
+    // nenhuma chamada nova: o disjuntor recusou antes de sair para a rede
+    verify(provider, times(3)).check(any());
+  }
+
+  /** Disjuntor aberto no primário não impede o secundário saudável de atender. */
+  @Test
+  void disjuntorAbertoNoPrimarioAindaCaiParaOProximo() {
+    when(provider.supports("CPF")).thenReturn(true);
+    when(fallback.supports("CPF")).thenReturn(true);
+    when(provider.check(any(BureauQuery.class))).thenThrow(new BureauUnavailableException("timeout"));
+    when(provider.name()).thenReturn("primario");
+    when(fallback.name()).thenReturn("secundario");
+    when(fallback.check(any(BureauQuery.class))).thenReturn(BureauResult.match("ok"));
+    IdentityService svc = new IdentityService(List.of(provider, fallback), repository, breakers());
+
+    for (int i = 0; i < 3; i++) {
+      svc.verify(cpfCommand());
+    }
+    IdentityCheck check = svc.verify(cpfCommand()).check();
+
+    assertThat(check.status()).isEqualTo(IdentityStatus.VERIFIED);
+    assertThat(check.provider()).isEqualTo("secundario");
+    verify(provider, times(3)).check(any());
   }
 
   @Test
@@ -164,7 +217,7 @@ class IdentityServiceTest {
     when(provider.name()).thenReturn("primario");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider, fallback), repository).verify(cpfCommand()).check();
+        new IdentityService(List.of(provider, fallback), repository, breakers()).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.NOT_FOUND);
     verify(fallback, never()).check(any());

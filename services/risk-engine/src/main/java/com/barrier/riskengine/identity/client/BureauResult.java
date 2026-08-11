@@ -14,7 +14,16 @@ public record BureauResult(Outcome outcome, String detail, CompanyProfile compan
   public enum Outcome {
     MATCH,
     NOT_FOUND,
-    MISMATCH
+    MISMATCH,
+    /**
+     * Documento encontrado, titular falecido.
+     *
+     * <p>Tem desfecho próprio em vez de virar {@code NOT_FOUND} porque a trilha precisa dizer a
+     * verdade: o CPF <i>foi</i> encontrado — quem morreu foi o titular. Registrar "documento não
+     * encontrado no bureau" para um falecido dá a decisão certa com a explicação errada, e uso de
+     * CPF de falecido é indício de fraude, não ambiguidade de cadastro.
+     */
+    DECEASED
   }
 
   /** Conveniência para bureaus que não trazem perfil de PJ (CPF, stubs). */

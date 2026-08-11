@@ -33,6 +33,8 @@ public record IdentityCheck(
 
   /** Identidade explicitamente reprovada (não confunde com indisponibilidade do bureau). */
   public boolean isRejected() {
-    return status == IdentityStatus.NOT_FOUND || status == IdentityStatus.MISMATCH;
+    return status == IdentityStatus.NOT_FOUND
+        || status == IdentityStatus.MISMATCH
+        || status == IdentityStatus.DECEASED;
   }
 }

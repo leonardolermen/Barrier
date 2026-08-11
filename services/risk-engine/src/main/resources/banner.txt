@@ -6,6 +6,6 @@ ${AnsiColor.BRIGHT_CYAN}
 ██████╔╝██║  ██║██║  ██║██║  ██║██║███████╗██║  ██║
 ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝╚═╝  ╚═╝
 ${AnsiColor.BRIGHT_BLACK}         K Y C   ·   P L D - F T   E N G I N E
-${AnsiColor.BRIGHT_YELLOW}  Risk Engine ${AnsiColor.WHITE}v0.1.0-SNAPSHOT ${application.version}
+${AnsiColor.BRIGHT_YELLOW}  Risk Engine ${AnsiColor.WHITE}v${barrier.version}
 ${AnsiColor.BRIGHT_BLACK}  Spring Boot ${spring-boot.version} · Java ${java.version}
 ${AnsiColor.DEFAULT}

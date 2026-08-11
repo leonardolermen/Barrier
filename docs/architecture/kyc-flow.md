@@ -77,9 +77,12 @@ definitivo encerra a cadeia:
 | Tipo | Provider (ordem) | Observação |
 |------|-------------------|------------|
 | **CNPJ** | `BrasilApiBureauProvider` (`@Order(10)`) | Real. Devolve situação cadastral + `CompanyProfile` (data de abertura, CNAE, QSA) |
-| **CPF**  | `BigBoostBureauProvider` (`@Order(20)`, desligado por padrão) → `StubBureauProvider` (`@Order(100)`) | BigBoost é real (dataset `basic_data`), self-service, sem CNPJ pra contratar — [ADR-0014](../adr/0014-bureau-cpf-bigboost.md) |
+| **CPF**  | `BigBoostBureauProvider` (`@Order(20)`, desligado por padrão) → `FakeCpfBureauProvider` (`@Order(100)`, fora de `prod`) | BigBoost é real (dataset `basic_data`), self-service — [ADR-0014](../adr/0014-bureau-cpf-bigboost.md). O simulado atende dev/teste com cenários escolhidos por prefixo — [bureau-simulado.md](../implementation/bureau-simulado.md) |
 
-Resultado: `IdentityCheck` com status `VERIFIED`/`NOT_FOUND`/`MISMATCH`/`UNAVAILABLE`. Para
+O simulado **não é autoritativo**: quando há bureau real habilitado para o tipo, `IdentityService`
+o remove da cadeia. Bureau real indisponível vira `UNAVAILABLE` → revisão, nunca "verificado".
+
+Resultado: `IdentityCheck` com status `VERIFIED`/`NOT_FOUND`/`MISMATCH`/`DECEASED`/`UNAVAILABLE`. Para
 PJ, o `CompanyProfile` (quando presente) é **persistido no `SubjectProfile`** (data de
 abertura, CNAE, QSA) — antes era descartado depois de alimentar as regras, hoje vira cadastro.
 
