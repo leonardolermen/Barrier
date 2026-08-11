@@ -1,5 +1,6 @@
 package com.barrier.riskengine.screening.watchlist;
 
+import com.barrier.riskengine.screening.domain.MatchType;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -26,6 +27,15 @@ class CnepWatchlistSource extends CguWatchlistSource {
         referenceDate.isBlank()
             ? LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
             : referenceDate;
+  }
+
+  /**
+   * Punição pela Lei Anticorrupção é impedimento perante a administração pública, não sanção
+   * financeira: não bloqueia relacionamento bancário. Ver {@link MatchType#DEBARMENT}.
+   */
+  @Override
+  protected MatchType matchType() {
+    return MatchType.DEBARMENT;
   }
 
   @Override

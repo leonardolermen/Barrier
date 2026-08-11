@@ -56,7 +56,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 ```
 
 - Risk Engine: <http://localhost:8080/actuator/health>
-  - `POST /v1/assessments` (202) · `GET /v1/assessments/{id}` · `POST /v1/assessments/{id}/decision` (EDD)
+  - `POST /v1/assessments` (202, aceita `Idempotency-Key`) · `GET /v1/assessments/{id}` · `POST /v1/assessments/{id}/decision` (EDD)
   - `GET /v1/subjects/{document}` · `PUT /v1/subjects/{document}/profile` (cadastro CMN 4.753) · `POST`/`GET /v1/subjects/{document}/history` (histórico interno)
   - `PUT`/`GET /v1/tenants/{tenantId}/risk-config` (override de regra por parceiro) · `PUT`/`GET /v1/risk-rules` (liga/desliga regra sem deploy)
   - toda chamada de negócio exige **`Authorization: Bearer <api-key>`**; em dev a chave é emitida
@@ -66,6 +66,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
     exigem **`X-Admin-Key`**
   - contrato completo e exemplos: [collection Postman](docs/api/README.md) (ainda sem OpenAPI/springdoc — Fase 5)
 - Webhook API: <http://localhost:8082/actuator/health> (consome `assessment.completed` → callback assinado)
+  - `PUT`/`GET`/`DELETE /v1/webhook-endpoints/{tenantId}` e `POST .../rotate-secret`, protegidos por `X-Admin-Key`
 - Kafka UI: <http://localhost:8081>
 
 ## Documentação
@@ -77,25 +78,35 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 - [Requisitos regulatórios](docs/architecture/compliance.md)
 - [Padrões de código e design patterns](docs/implementation/coding-standards.md)
 - [Plano de implementação e progresso](docs/implementation/risk-engine-plan.md)
+- [Bureau simulado de CPF (cenários de teste)](docs/implementation/bureau-simulado.md)
 - [**Plano de remediação da auditoria**](docs/implementation/plano-remediacao-auditoria.md) — o que falta para produção, com critérios de pronto
 - [Diagramas](docs/diagrams/README.md)
 - [Registros de decisão (ADRs)](docs/adr/README.md)
 
 ## Status
 
-🏗️ **Fluxo ponta a ponta funcionando** (build verde, 144 testes em `main`). Fases 0–7 da
-Risk Engine concluídas + Webhook API:
+🏗️ **Fluxo ponta a ponta funcionando** (build verde, 283 testes). Fases 0–8 da
+Risk Engine concluídas + Webhook API. **Ainda não pode ir para produção** — o que falta é
+estrutural (escala, monitoramento contínuo, criptografia em repouso) e está rastreado no
+[plano de remediação](docs/implementation/plano-remediacao-auditoria.md).
 
-- **Fase 0–1** — scaffolding, intake `202`/`GET`, transactional outbox.
-- **Fase 2** — módulo Identity: cadeia de bureaus com fallback — CNPJ real (BrasilAPI), CPF
-  real (BigBoost, `ADR-0014`, desligado por padrão), stub como último fallback.
-- **Fase 3** — módulo Screening: watchlists **ingeridas** (`ADR-0010`) — CGU/CEIS/CNEP e OFAC
-  reais (gated por config), match fuzzy por nome, mais mídia negativa (stub).
+- **Fase 0–1** — scaffolding, intake `202`/`GET`, transactional outbox, `Idempotency-Key`
+  opcional no intake (escopo por tenant, janela de 24h, replay devolve a avaliação original).
+- **Fase 2** — módulo Identity: cadeia de bureaus com prioridade e fallback — CNPJ via
+  BrasilAPI e BigBoost, CPF via BigBoost ([ADR-0014](docs/adr/0014-bureau-cpf-bigboost.md),
+  desligado por padrão); situação cadastral (falecido/suspensa/nula) decide antes da comparação
+  de nome; [bureau simulado](docs/implementation/bureau-simulado.md) só fora de `prod` e nunca
+  como fallback de bureau real; disjuntor (`CircuitBreaker`) por provider.
+- **Fase 3** — módulo Screening: watchlists **ingeridas** (`ADR-0010`) — CEIS/CNEP, **PEP da
+  CGU** e OFAC reais (gated por config), match por nome token a token com discriminador de CPF
+  parcial, mídia negativa (provider stub) e cobertura verificável (importação vazia não
+  substitui a base, health indicator e `ScreeningCoverageRiskRule` forçando revisão).
 - **Fase 4** — motor de risco: cada `RiskRule` devolve um `RiskResult` padronizado (score,
   severidade, motivo, evidências, recomendação); score **0–1000** em bandas
   **LOW/MEDIUM/HIGH/CRITICAL**, com override (sanção→bloqueio, PEP→revisão), fatores
   explicáveis e **versão do motor** gravada (`risk_scores`).
-- **Webhook API** — entrega assinada (HMAC), retry com backoff, idempotência por evento.
+- **Webhook API** — endpoint e segredo HMAC **por tenant** (rotação com janela de sobreposição),
+  retry com backoff, idempotência por evento, DLT para payload ilegível e job de reconciliação.
 - **Fase 6** — conformidade Bacen: `SubjectProfile` (cadastro CMN 4.753, progressivo, com gate
   de completude antes da aprovação automática — [ADR-0012](docs/adr/0012-subject-registration-profile.md))
   e `WatchlistReadinessGuard` (falha a subida em produção com watchlist incompleta —
@@ -105,14 +116,17 @@ Risk Engine concluídas + Webhook API:
   **registry global de regras** (liga/desliga uma família de regra e define vigência sem
   deploy, kill switch operacional independente do override por parceiro).
 
-**Em revisão (branches empilhadas, ainda não mergeadas em `main`):** Fase 8 — motor de risco
-ampliado com mais sinais explicáveis: consistência telefone×endereço, GeoIP, reuso de
-device/email, VoIP, email descartável, histórico interno (chargeback/PIX devolvido/fraude) e
-gancho pronto para score de crédito externo (Serasa/Boa Vista/SCR). Detalhe completo e ordem
-das PRs em [risk-engine-plan.md](docs/implementation/risk-engine-plan.md#fase-8--motor-de-risco-ampliado-fila-de-prs-em-andamento).
+- **Fase 8** — motor de risco ampliado: mídia negativa, consistência telefone×endereço
+  (DDD×UF), histórico interno do subject e KYB de 1º grau (QSA da BrasilAPI). Sinais restantes
+  da fila (GeoIP, reuso de device/email, VoIP, email descartável, score de crédito externo) em
+  [risk-engine-plan.md](docs/implementation/risk-engine-plan.md#fase-8--motor-de-risco-ampliado-fila-de-prs-em-andamento).
+- **Segurança/integridade** — autenticação por API key com tenant derivado da credencial
+  (`X-Client-Id` não é mais lido), gate de admin, PII mascarada em log, reivindicação exclusiva
+  por lease no processamento, transação por avaliação e estado de falha explícito.
 
-**Próximo:** Fase 5 (hardening: OpenAPI, idempotency-key no intake, mascaramento de CPF/CNPJ),
-monitoramento transacional contínuo pós-onboarding (PIX em rajada, layering — maior mudança
-estrutural da fila, motor hoje só roda no onboarding) e o backlog de compliance que ainda
-falta (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do 1º grau) —
-listado em detalhe no [plano de implementação](docs/implementation/risk-engine-plan.md).
+**Próximo (por onda, no [plano de remediação](docs/implementation/plano-remediacao-auditoria.md)):**
+Onda 1 fecha a integridade da decisão; Onda 2 é compliance de verdade (COAF/SISCOAF, retenção de
+10 anos, criptografia em repouso, UBO além do 1º grau, rescreening periódico); Onda 3 é escala e
+antifraude — incluindo o monitoramento transacional contínuo pós-onboarding (PIX em rajada,
+layering), a maior mudança estrutural da fila, já que o motor hoje só roda no onboarding.
+Hardening pendente da Fase 5: OpenAPI/springdoc.

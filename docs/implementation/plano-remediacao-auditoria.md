@@ -439,10 +439,27 @@ de outro tenant.
   É a lista mais obrigatória de todas e é a que **não** existe.
   *Pronto quando:* nova `WatchlistSource` ativa e coberta pelo readiness guard.
 
-- [ ] **Separar CEIS/CNEP de sanção financeira**
-  Inidoneidade em licitação **não** impede relacionamento bancário, e hoje gera `REJECT`
-  automático — negação de serviço a empresa legalmente apta.
-  *Pronto quando:* `MatchType.DEBARMENT` com peso de alerta, não de bloqueio.
+- [x] **Separar CEIS/CNEP de sanção financeira** — `fix/audit-top10`
+  Inidoneidade em licitação **não** impede relacionamento bancário, e gerava `REJECT` automático —
+  negação de serviço a empresa legalmente apta. `MatchType.DEBARMENT` é categoria própria;
+  `CeisWatchlistSource`/`CnepWatchlistSource` passaram a produzi-la, `DebarmentMatchRule` a
+  transforma em apontamento e `DebarmentRiskRule` dá **peso de alerta**: 200 + REVIEW para match por
+  documento no titular (CNPJ exato, sem ambiguidade — o analista decide com o contexto do negócio),
+  100 e sem recomendação para match por nome. Nunca recusa automática, e nunca escala por
+  apontamento de sócio: a entidade punida é ele, não a empresa avaliada.
+  O apontamento **continua na trilha e continua pesando** — é informação reputacional legítima para
+  PLD-FT e pode levar à revisão pela banda de score somado a outros fatores. O que deixou de existir
+  é o caminho direto para a recusa.
+  `DEBARMENT` **não** entra em `RegulatoryRiskRules`, de propósito: nenhuma norma do Bacen manda
+  recusar conta por inidoneidade em licitação, então é regra de apetite de risco e pode ser
+  desligada pelo registry como qualquer outra (V030).
+  ⚠️ **Consequência operacional:** a CGU deixa de contar como cobertura de `SANCTION`. A única fonte
+  de sanção financeira passa a ser a OFAC — habilitar só a CGU em `prod` agora falha no
+  `WatchlistReadinessGuard`, o que é a verdade que antes ficava escondida.
+  `ENGINE_VERSION` → `1.6.0` (mudou o que é decidido, não só o que é registrado).
+  *Verificado:* `DebarmentRiskRuleTest` (documento no titular → REVIEW e nunca REJECT; nome → só
+  pontua; sócio não escala; evidência identifica parte e fonte) e `ScreeningRulesTest` — CEIS e OFAC
+  no mesmo screening produzem apontamentos de categorias diferentes.
 
 - [x] **Screening dos sócios PF e do representante legal** — `fix/audit-top10`
   O screening consultava só o titular: PJ com situação ATIVA, CNAE inócuo e um sócio na SDN saía

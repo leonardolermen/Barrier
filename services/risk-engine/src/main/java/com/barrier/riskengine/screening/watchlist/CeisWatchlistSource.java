@@ -1,5 +1,6 @@
 package com.barrier.riskengine.screening.watchlist;
 
+import com.barrier.riskengine.screening.domain.MatchType;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -26,6 +27,16 @@ class CeisWatchlistSource extends CguWatchlistSource {
         referenceDate.isBlank()
             ? LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
             : referenceDate;
+  }
+
+  /**
+   * Inidoneidade em licitação, não sanção financeira: a empresa segue legalmente apta a manter
+   * relacionamento bancário. Classificada como SANCTION, gerava recusa automática — negação de
+   * serviço a quem a lei não impede de ser cliente.
+   */
+  @Override
+  protected MatchType matchType() {
+    return MatchType.DEBARMENT;
   }
 
   @Override
