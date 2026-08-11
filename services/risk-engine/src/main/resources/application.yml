@@ -122,6 +122,12 @@ barrier:
       base-url: https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports
       sdn-path: /SDN.CSV # nomes primários (SDN)
       alt-path: /ALT.CSV # apelidos/aka
+    un:
+      # CSNU/ONU — Lei 13.810/2019 manda indisponibilizar ativos destes sancionados de imediato.
+      # É a lista de cumprimento mais direto que existe; desligada aqui só porque dev não baixa nada.
+      enabled: false
+      base-url: https://scsanctions.un.org
+      path: /resources/xml/en/consolidated.xml
   screening:
     fuzzy:
       # Limiar POR TOKEN (Jaro-Winkler), não sobre o nome inteiro — não é comparável ao 0.95

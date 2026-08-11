@@ -435,9 +435,39 @@ de outro tenant.
   dataset de relacionamentos — vira item do UBO, abaixo.
 
 
-- [ ] **CSNU/ONU** — obrigação legal direta (Lei 13.810/19, indisponibilidade imediata de ativos).
-  É a lista mais obrigatória de todas e é a que **não** existe.
-  *Pronto quando:* nova `WatchlistSource` ativa e coberta pelo readiness guard.
+- [x] **CSNU/ONU** — obrigação legal direta (Lei 13.810/19, indisponibilidade imediata de ativos)
+  — `fix/audit-top10`
+  Era a lista mais obrigatória de todas e a única que **não** existia: o motor decidia PLD-FT sem
+  nunca consultá-la. `UnWatchlistSource` ingere a lista consolidada (XML único, pessoas em
+  `INDIVIDUALS` e entidades em `ENTITIES`), declara `provides() = SANCTION` — então entra
+  automaticamente na cobertura exigida pelo `WatchlistReadinessGuard` — e está **ligada por padrão
+  no profile `prod`**, porque não é decisão de apetite.
+  O nome vem quebrado em até quatro campos e é remontado; **cada alias vira entrada própria**, como
+  os `aka` da OFAC: a ONU publica grafias alternativas porque transliteração do árabe/cirílico
+  varia, e casar só o nome principal perde o apontamento por diferença de grafia.
+  Sem documento: o CSNU identifica por nome, nacionalidade e data de nascimento, e não publica
+  CPF/CNPJ. O casamento é sempre por nome, ou seja, sempre `MatchBasis.NAME` — pontua alto e escala
+  para revisão humana, sem reprovar sozinho, que é o comportamento já existente da
+  `SanctionRiskRule`.
+  *Verificado:* `UnWatchlistSourceTest` — nome remontado dos quatro campos, alias virando entrada,
+  alias vazio ignorado, ausência de documento, classificação como `SANCTION`, e o detalhe trazendo
+  referência (`TAi.004`) e regime para o analista achar a entrada na fonte. Inclui **recusa de XML
+  com DOCTYPE**: lista de terceiro é entrada não confiável, e com entidades externas habilitadas um
+  arquivo publicado ou interceptado leria arquivo local ou faria o serviço bater em endereço interno
+  (XXE).
+  ⚠️ Como CEIS/CNEP saíram de `SANCTION` (item acima), a cobertura de sanção em produção agora vem
+  de **OFAC + CSNU** — as duas precisam estar habilitadas.
+
+- [ ] **Sem limite de vazão na entrega de webhook** *(achado ao rodar carga)*
+  Observado com k6: o intake sustenta o ramp, mas cada avaliação concluída vira uma entrega, e o
+  retry com backoff não tem teto **por tenant**. Com 1004 avaliações na fila e 2800 entregas
+  falhadas, o serviço passou a metralhar o endpoint do cliente — 1818 vencidas simultaneamente,
+  reivindicadas de 100 em 100 a cada 5s. Um parceiro com endpoint lento ou fora do ar vira alvo do
+  próprio backlog: o retry que existe para ajudá-lo é o que o derruba.
+  Não é o problema de escala da Onda 3 (aquele é o custo por avaliação); é ausência de controle de
+  vazão na saída.
+  *Pronto quando:* existe teto de entregas por minuto por tenant, e o backoff é global por endpoint
+  e não por linha.
 
 - [x] **Separar CEIS/CNEP de sanção financeira** — `fix/audit-top10`
   Inidoneidade em licitação **não** impede relacionamento bancário, e gerava `REJECT` automático —

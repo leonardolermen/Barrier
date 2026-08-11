@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
-/** Clientes HTTP das fontes de watchlist que baixam arquivos publicados (CGU, OFAC). */
+/** Clientes HTTP das fontes de watchlist que baixam arquivos publicados (CGU, OFAC, CSNU). */
 @Configuration
 class ScreeningClientConfig {
 
@@ -25,6 +25,12 @@ class ScreeningClientConfig {
               "${barrier.watchlist.ofac.base-url:"
                   + "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports}")
           String baseUrl) {
+    return download(baseUrl, Duration.ofSeconds(60));
+  }
+
+  @Bean
+  RestClient unRestClient(
+      @Value("${barrier.watchlist.un.base-url:https://scsanctions.un.org}") String baseUrl) {
     return download(baseUrl, Duration.ofSeconds(60));
   }
 

@@ -27,3 +27,6 @@ barrier:
       enabled: true
     ofac:
       enabled: true
+    # CSNU: obrigação legal direta (Lei 13.810/2019). Não é opcional em produção.
+    un:
+      enabled: true

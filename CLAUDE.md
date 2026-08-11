@@ -69,8 +69,10 @@ Watchlists (screening): **ingeridas** (ADR-0010) — `WatchlistImporter` (Applic
 casa por documento (exato). Fontes: semente `resources/watchlists/ceis-seed.csv`; CGU real
 (`CeisWatchlistSource`/`CnepWatchlistSource` — baixam o ZIP do Portal da Transparência, parseiam
 CSV ISO-8859-1 `;`); OFAC (`OfacWatchlistSource` — `sdn.csv` + `alt.csv`, entradas por nome sem
-documento, apelidos viram linhas próprias). Fontes que baixam são gated por config
-(`barrier.watchlist.cgu.enabled` / `.ofac.enabled`, **off por padrão** — dev/testes não baixam).
+documento, apelidos viram linhas próprias). CSNU/ONU (`UnWatchlistSource` — XML consolidado, INDIVIDUALS+ENTITIES, cada alias vira entrada,
+sem documento; obrigação da Lei 13.810/19, **ligada por padrão em prod**). Fontes que baixam são
+gated por config (`barrier.watchlist.cgu.enabled` / `.ofac.enabled` / `.un.enabled`, off por padrão
+em dev). Cobertura de SANCTION em prod vem de OFAC + CSNU (CEIS/CNEP agora são DEBARMENT).
 Match por **nome (fuzzy)**: `FuzzyNameWatchlistProvider` (Jaro-Winkler + `NameNormalizer` sobre
 as entradas sem documento; limiar/`min-name-length` configuráveis). Evolução: índice/blocking
 para volumes grandes do OFAC.
