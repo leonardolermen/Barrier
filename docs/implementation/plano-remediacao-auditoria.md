@@ -411,17 +411,29 @@ de outro tenant.
   não garantia.
   *Pronto quando:* uma importação real traz contagem plausível e os campos batem.
 
-- [ ] **CNPJ fica sem bureau real em produção** 🔴
-  A BrasilAPI é da **fase de teste**; o bureau de produção é a BigBoost
-  ([ADR-0014](../adr/0014-bureau-cpf-bigboost.md)). Mas `BigBoostBureauProvider.supports()` cobre
-  **só CPF**, e `BrasilApiBureauProvider` cobre **só CNPJ**. Com a BrasilAPI fora, a cadeia de PJ
-  cai direto no simulado: avaliação de pessoa jurídica vira verificação fictícia, sem que nada
-  falhe. É o padrão que a auditoria nomeou — *falha aberto onde deveria falhar fechado*.
-  Duas saídas: (a) `BigBoostCnpjBureauProvider` sobre o dataset de empresas da BigDataCorp, ou
-  (b) assumir a BrasilAPI como dependência **de produção** — e então registrar que um controle
-  regulatório de PJ depende de uma API pública gratuita, sem SLA e sem contrato.
-  *Pronto quando:* existe bureau real de CNPJ com o `ReadinessGuard` no padrão do
-  `CpfBureauReadinessGuard` impedindo a subida em `prod` sem ele.
+- [x] **CNPJ fica sem bureau real em produção** 🔴 — `fix/audit-top10`
+  Resolvido pela rota (a) do que estava mapeado abaixo, que é a que segue o ADR-0014: existe
+  `BigBoostCnpjBureauProvider` (dataset `basic_data` da API de Empresas), `@Order(20)`, na mesma
+  flag e credenciais do bureau de CPF. Com a BrasilAPI fora do ar, a cadeia de PJ agora cai em
+  **outro bureau real**; sem nenhum, o desfecho é indisponibilidade → revisão humana, e não
+  verificação fictícia.
+  `CnpjBureauReadinessGuard` no padrão do de CPF: em `prod`, sem provider autoritativo de CNPJ a
+  aplicação **não sobe**, e bureau contratado apontando para endereço local também barra (simulador
+  com crachá desarmaria a primeira checagem). A BrasilAPI virou desligável
+  (`barrier.identity.brasilapi.enabled`) e `application-prod.yml` liga a BigBoost por padrão.
+  A rota (b) continua possível e **fica registrada quando escolhida**: com a BrasilAPI como único
+  bureau de PJ em produção, a aplicação sobe mas o guard emite aviso nomeando a dependência — API
+  pública gratuita, sem SLA e sem contrato sustentando um controle regulatório.
+  *Verificado:* `BigBoostCnpjBureauProviderTest` (13 casos — ativa+nome casa; nome fantasia vale;
+  nome divergente é MISMATCH; BAIXADA/SUSPENSA/INAPTA → MISMATCH, NULA → NOT_FOUND, **situação
+  ausente ou desconhecida → MISMATCH e nunca MATCH**; 5xx vira indisponibilidade; data ilegível não
+  quebra) e `CnpjBureauReadinessGuardTest`.
+  ⚠️ Dois limites: o schema do dataset de empresas **não foi verificado contra a API real** (mesma
+  situação do dataset de pessoas — depende de credencial contratada), e o `basic_data` **não traz
+  QSA**, então uma avaliação atendida por este provider entrega perfil com abertura e CNAE mas sem
+  sócios, e a regra de estrutura societária (KYB 1º grau) fica sem entrada. Fechar isso exige o
+  dataset de relacionamentos — vira item do UBO, abaixo.
+
 
 - [ ] **CSNU/ONU** — obrigação legal direta (Lei 13.810/19, indisponibilidade imediata de ativos).
   É a lista mais obrigatória de todas e é a que **não** existe.

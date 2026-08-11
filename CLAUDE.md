@@ -171,6 +171,16 @@ contratar (ao contrário do Serpro). Desligado por padrão
 `BIGBOOST_TOKEN_ID`. `Result` vazio → NOT_FOUND; caso contrário a situação cadastral decide
 primeiro (ver acima) e só CPF regular chega à comparação de nome.
 
+Bureau real de CNPJ (Onda 2): `BigBoostCnpjBureauProvider` (`@Order(20)`, dataset `basic_data` da
+API de Empresas, mesma flag `barrier.identity.bigboost.enabled`) tira a cadeia de PJ do fail-open —
+BrasilAPI fora do ar agora cai em outro bureau real, não no simulado. `CnpjBureauReadinessGuard`
+barra a subida em `prod` sem provider autoritativo de CNPJ (ou com base-url local) e **avisa**
+quando a BrasilAPI é a única fonte de PJ (API pública sem SLA sustentando controle regulatório).
+`barrier.identity.brasilapi.enabled` permite desligá-la; `application-prod.yml` liga a BigBoost.
+⚠️ `basic_data` de empresas **não traz QSA** — perfil vem com abertura/CNAE e sócios vazios, então
+`CorporateStructureRiskRule` fica sem entrada quando este provider atende; e o schema ainda não foi
+verificado contra a API real.
+
 Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
 (`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode
 variar por desfecho (ex.: `IdentityRiskRule` devolve `IDENTITY_NOT_FOUND`/`IDENTITY_MISMATCH`/

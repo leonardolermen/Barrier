@@ -95,6 +95,10 @@ barrier:
     open-duration: PT30S
   identity:
     brasilapi:
+      # Bureau de CNPJ da fase de teste: API pública, gratuita, sem SLA e sem contrato. Ligada por
+      # padrão em dev; em produção a decisão de mantê-la fica explícita (CnpjBureauReadinessGuard
+      # avisa quando ela é a única fonte de PJ).
+      enabled: true
       base-url: https://brasilapi.com.br
     bigboost:
       # Bureau real de CPF (BigDataCorp, dataset basic_data). Desligado por padrão — dev/testes
