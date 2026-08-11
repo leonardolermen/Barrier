@@ -1,5 +1,7 @@
 package com.barrier.riskengine.identity.client;
 
+import com.barrier.riskengine.identity.domain.PersonProfile;
+import java.time.LocalDate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
@@ -51,7 +53,14 @@ public class FakeCpfBureauProvider implements BureauProvider {
     PENDENTE,
     NULA,
     NAO_ENCONTRADO,
-    INDISPONIVEL;
+    INDISPONIVEL,
+    /**
+     * CPF regular, mas o bureau responde <b>sem</b> os dados cadastrais. Existe para o caminho de
+     * "cadastro incompleto" continuar exercitável em dev depois que o mock passou a devolver perfil
+     * completo: um mock que sempre completa o cadastro esconderia o rebaixamento para revisão, que
+     * é justamente o gate da CMN 4.753.
+     */
+    REGULAR_SEM_CADASTRO;
 
     /**
      * Cenário de um CPF: {@code 999X…} usa {@code X} como seletor, qualquer outro é REGULAR.
@@ -78,7 +87,11 @@ public class FakeCpfBureauProvider implements BureauProvider {
     Scenario scenario = Scenario.of(query.documentDigits());
     log.debug("Bureau simulado: cenário {}", scenario);
     return switch (scenario) {
-      case REGULAR -> BureauResult.match("simulado: CPF regular na Receita");
+      case REGULAR ->
+          BureauResult.of(
+              BureauResult.Outcome.MATCH, "simulado: CPF regular na Receita", perfilSimulado());
+      case REGULAR_SEM_CADASTRO ->
+          BureauResult.match("simulado: CPF regular, bureau sem dados cadastrais");
       case TITULAR_FALECIDO ->
           new BureauResult(
               BureauResult.Outcome.DECEASED, "simulado: situação do CPF na Receita: TITULAR FALECIDO");
@@ -98,6 +111,25 @@ public class FakeCpfBureauProvider implements BureauProvider {
       case INDISPONIVEL ->
           throw new BureauUnavailableException("simulado: bureau indisponível");
     };
+  }
+
+  /**
+   * Dados cadastrais que um bureau real de PF devolve — é o que o {@code SubjectProfile} recebe,
+   * e sem isso toda avaliação de pessoa física em dev caía em revisão por cadastro incompleto,
+   * escondendo o caminho de aprovação automática atrás de um problema de ambiente.
+   *
+   * <p>Fixo de propósito: o mock existe para dirigir cenários, não para simular uma população. Quem
+   * quiser o cadastro faltando usa o cenário {@code 9998…}.
+   *
+   * <p>Ocupação fica de fora porque bureau nenhum a fornece — é declaração do cliente, e continuar
+   * cobrando ela do parceiro é o comportamento correto.
+   */
+  private static PersonProfile perfilSimulado() {
+    return new PersonProfile(
+        LocalDate.of(1990, 1, 1),
+        "Brasileira",
+        new PersonProfile.Address(
+            "Rua Simulada", "100", null, "Centro", "São Paulo", "SP", "01000-000"));
   }
 
   @Override

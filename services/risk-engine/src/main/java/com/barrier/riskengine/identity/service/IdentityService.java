@@ -4,6 +4,7 @@ import com.barrier.commons.mask.Documents;
 import com.barrier.riskengine.identity.client.BureauProvider;
 import com.barrier.riskengine.identity.client.BureauQuery;
 import com.barrier.riskengine.identity.client.BureauResult;
+import com.barrier.riskengine.identity.client.BureauTrace;
 import com.barrier.riskengine.identity.client.BureauUnavailableException;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
@@ -74,7 +75,7 @@ public class IdentityService {
         BureauResult result = provider.check(query);
         breaker.recordSuccess();
         IdentityCheck check =
-            save(command, toStatus(result.outcome()), provider.name(), result.detail());
+            save(command, toStatus(result.outcome()), provider.name(), result.detail(), result.trace());
         // O detail traz nome/razão social vindos do bureau (dado pessoal). Fica persistido em
         // identity_checks.detail, que é a evidência da decisão e tem controle de acesso — mas não
         // vai para o log, que é agregado e amplamente legível.
@@ -86,7 +87,7 @@ public class IdentityService {
             maskedDoc,
             result.company() != null ? " [perfil PJ obtido]" : "");
         log.debug("Detalhe do bureau '{}': {}", provider.name(), result.detail());
-        return new IdentityResult(check, result.company());
+        return new IdentityResult(check, result.company(), result.person());
       } catch (BureauUnavailableException e) {
         // Só indisponibilidade conta para o disjuntor. Um erro de programação (NPE, parsing) não é
         // provider fora do ar, e abrir por causa dele esconderia o bug atrás de um UNAVAILABLE.
@@ -132,12 +133,29 @@ public class IdentityService {
   }
 
   private IdentityResult unavailable(VerifyIdentityCommand command, String provider, String detail) {
-    return new IdentityResult(save(command, IdentityStatus.UNAVAILABLE, provider, detail), null);
+    return new IdentityResult(save(command, IdentityStatus.UNAVAILABLE, provider, detail), null, null);
   }
 
   private IdentityCheck save(
       VerifyIdentityCommand command, IdentityStatus status, String provider, String detail) {
-    return repository.save(IdentityCheck.create(command.assessmentId(), status, provider, detail));
+    return save(command, status, provider, detail, null);
+  }
+
+  /** Grava a verificação com o rastro da consulta (id no provedor + payload redigido), se houver. */
+  private IdentityCheck save(
+      VerifyIdentityCommand command,
+      IdentityStatus status,
+      String provider,
+      String detail,
+      BureauTrace trace) {
+    return repository.save(
+        IdentityCheck.create(
+            command.assessmentId(),
+            status,
+            provider,
+            detail,
+            trace == null ? null : trace.providerReference(),
+            trace == null ? null : trace.rawResponse()));
   }
 
   private static IdentityStatus toStatus(BureauResult.Outcome outcome) {

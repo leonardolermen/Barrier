@@ -181,8 +181,13 @@ class AssessmentProcessorTest {
     assertThat(pending.riskLevel()).isEqualTo(RiskLevel.CRITICAL);
   }
 
+  /**
+   * Cadastro incompleto sai da fila de EDD: "faltou o endereço" não pede analista, pede o campo.
+   * Enquanto isso virava EM_REVISAO, o volume que o time de operações mais via era justamente o que
+   * menos precisava dele — e não pode virar REPROVADO, que mentiria na trilha.
+   */
   @Test
-  void cadastroIncompletoRebaixaAprovadoParaRevisao() {
+  void cadastroIncompletoVaiParaSolicitarDocumentoENaoParaRevisao() {
     var processor = newProcessor();
     Assessment pending = pendingAssessment();
     stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
@@ -191,8 +196,24 @@ class AssessmentProcessorTest {
 
     processor.process();
 
-    assertThat(pending.status()).isEqualTo(AssessmentStatus.EM_REVISAO);
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.SOLICITAR_DOCUMENTO);
+    assertThat(pending.status())
+        .isNotIn(AssessmentStatus.EM_REVISAO, AssessmentStatus.REPROVADO);
     assertThat(pending.factors()).anyMatch(f -> f.contains("Cadastro incompleto"));
+  }
+
+  /** Risco que já pedia revisão continua em revisão: o cadastro não rebaixa o que já é EDD. */
+  @Test
+  void cadastroIncompletoNaoDesviaOQueJaEraRevisao() {
+    var processor = newProcessor();
+    Assessment pending = pendingAssessment();
+    stubRisk(RiskLevel.MEDIUM, RiskRecommendation.REVIEW, 300);
+    when(subjectProfileService.find(any(UUID.class), anyString()))
+        .thenReturn(SubjectProfile.blank(UUID.randomUUID(), "default"));
+
+    processor.process();
+
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.EM_REVISAO);
   }
 
   /**

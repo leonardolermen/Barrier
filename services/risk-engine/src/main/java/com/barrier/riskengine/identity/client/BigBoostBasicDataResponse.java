@@ -37,5 +37,6 @@ record BigBoostBasicDataResponse(@JsonProperty("Result") List<ResultItem> result
       @JsonProperty("Gender") String gender,
       @JsonProperty("TaxIdStatus") String taxIdStatus,
       @JsonProperty("HasObitIndication") Boolean hasObitIndication,
-      @JsonProperty("MotherName") String motherName) {}
+      @JsonProperty("MotherName") String motherName,
+      @JsonProperty("BirthDate") String birthDate) {}
 }

@@ -552,10 +552,59 @@ de outro tenant.
   *Pronto quando:* uma decisão antiga é reproduzível a partir do que está gravado, incluindo os
   parâmetros efetivos de todas as regras.
 
-- [ ] **Fila de EDD separada e 4-eyes**
-  "Falta um campo cadastral" e "é PEP" caem na mesma fila, com a mesma severidade e o mesmo
-  fluxo de decisão. Faltam `SOLICITAR_DOCUMENTO`, `BLOQUEIO_TEMPORARIO`, `ESCALADO_AML`.
+- [ ] **Fila de EDD separada e 4-eyes** — *parcialmente fechado*
+  Fechado: **`SOLICITAR_DOCUMENTO`** (`fix/audit-top10`). "Falta um campo cadastral" e "é PEP"
+  caíam na mesma fila, com a mesma severidade — e o volume que o time de operações mais via era
+  justamente o que menos precisava dele: numa base de teste, **7501 de 7529** avaliações em
+  `EM_REVISAO` eram `APPROVE · score 0` rebaixadas por cadastro incompleto. Agora risco aprovado +
+  cadastro incompleto vira status próprio, fora da fila de análise.
+  **Não virou reprovação**, e a escolha é deliberada: reprovar por falta de dado mentiria na trilha
+  (a recusa não teria fator de risco que a justificasse pelo nome — a mesma regra que a correção da
+  banda de score estabeleceu), contaminaria a taxa de recusa que o regulador lê como indicador de
+  PLD-FT, e seria terminal. Sai do estado completando o cadastro e submetendo nova avaliação;
+  `Assessment.decide` continua exigindo `EM_REVISAO`, para ninguém "aprovar" cadastro que segue
+  incompleto.
+  Junto veio a redução do volume na origem: o bureau agora **preenche** o cadastro de PF (ver
+  `PersonProfile`), então nascimento, nacionalidade e endereço deixam de ser cobrados do parceiro.
+  Sobra ocupação, que bureau nenhum fornece.
+  *Verificado:* `AssessmentProcessorTest` — aprovado com cadastro incompleto vai para
+  `SOLICITAR_DOCUMENTO` e não para `EM_REVISAO`/`REPROVADO`; o que já era revisão por risco continua
+  em revisão.
+  Aberto: `BLOQUEIO_TEMPORARIO`, `ESCALADO_AML` e o 4-eyes.
   *Pronto quando:* PEP/mídia negativa exigem aprovação de dois revisores distintos.
+
+- [x] **Cadastro de PF vinha do bureau e era descartado** — `fix/audit-top10`
+  `BureauResult` só carregava `CompanyProfile`: os dados objetivos de PJ eram persistidos no
+  cadastro, os de PF não tinham por onde entrar. O efeito era que **toda** avaliação de pessoa
+  física era rebaixada por cadastro incompleto, mesmo com o bureau tendo respondido — e nem o
+  bureau real resolveria, porque o `BigBoostBureauProvider` mapeava só nome e situação cadastral.
+  `PersonProfile` fecha a simetria (nascimento, nacionalidade, endereço), persistido por patch —
+  campo que o bureau não trouxe preserva o que o parceiro declarou. O bureau simulado devolve o
+  perfil completo, e ganhou o cenário `9998…` = "responde sem dados cadastrais", para o gate da
+  CMN 4.753 continuar exercitável em dev: mock que sempre completa o cadastro esconderia o
+  rebaixamento, que é o mesmo erro do stub que aprovava tudo.
+  *Verificado:* `FakeCpfBureauPersonProfileTest` — o perfil do bureau sozinho deixa faltando
+  **exatamente** `ocupação`, e com ela declarada o cadastro fecha.
+
+- [x] **Consulta ao bureau não deixava rastro verificável** — `fix/audit-top10`
+  `identity_checks` guardava provider, status, detail e instante — tudo afirmação nossa sobre nós
+  mesmos. Não dava para conferir contra o extrato do provedor numa inspeção, reconciliar a fatura
+  (cada consulta é paga) nem investigar uma contestação sem refazer a consulta, que hoje
+  responderia outra coisa. É a mesma lacuna que `sources_json` fechou para as listas, deixada
+  aberta só no bureau.
+  `provider_reference` (o `QueryId` da BigDataCorp) e `raw_response` em JSONB (V031). O payload vai
+  **com redação** dos campos que o projeto já decidiu não guardar — nome da mãe é fator de
+  autenticação, e a decisão de guardar só o resultado da comparação estava documentada no DTO desde
+  que ele existe; gravar o bruto a desfaria em silêncio. O `QueryId` é o ponteiro para a cópia
+  íntegra que o provedor mantém sob o controle de acesso dele.
+  Fonte sem identificador de consulta (BrasilAPI) fica com `provider_reference` nulo — registrar a
+  ausência é mais honesto que inventar um id nosso.
+  *Verificado:* `BureauTraceTest` — extrai o id, redige o nome da mãe preservando o que sustentou a
+  decisão, guarda só o ponteiro com a persistência desligada, e corpo ilegível não derruba a
+  verificação (rastro é evidência, não decisão).
+  ⚠️ Isto passa a guardar dado pessoal por avaliação: **retenção de 10 anos e criptografia em
+  repouso (Fase 6) valem explicitamente para `raw_response`**. Até lá é desligável em
+  `barrier.identity.store-raw-response`.
 
 - [ ] **Contract tests + golden dataset**
   Nenhum teste valida o schema de BrasilAPI/CGU/OFAC: mudança de coluna quebra em produção, em

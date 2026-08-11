@@ -42,13 +42,19 @@ class FakeCpfBureauProviderTest {
     assertThat(FakeCpfBureauProvider.Scenario.of("999" + seletor + "0000000")).isEqualTo(esperado);
   }
 
-  /** Seletor fora da faixa não pode virar cenário por acidente. */
+  /**
+   * Seletor fora da faixa não pode virar cenário por acidente.
+   *
+   * <p>O {@code 8} deixou de estar fora da faixa quando o mock passou a devolver cadastro: é o
+   * cenário "bureau responde sem dados cadastrais", que mantém o rebaixamento por cadastro
+   * incompleto exercitável em dev.
+   */
   @Test
   void seletorDesconhecidoCaiEmRegular() {
     assertThat(FakeCpfBureauProvider.Scenario.of("99990000000"))
         .isEqualTo(FakeCpfBureauProvider.Scenario.REGULAR);
     assertThat(FakeCpfBureauProvider.Scenario.of("99980000000"))
-        .isEqualTo(FakeCpfBureauProvider.Scenario.REGULAR);
+        .isEqualTo(FakeCpfBureauProvider.Scenario.REGULAR_SEM_CADASTRO);
   }
 
   /**

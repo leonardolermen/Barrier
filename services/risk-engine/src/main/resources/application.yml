@@ -94,6 +94,11 @@ barrier:
     failure-threshold: 5
     open-duration: PT30S
   identity:
+    # Guarda a resposta do bureau (com redação) junto com o id da consulta, como evidência de
+    # auditoria — sem ela, "consultamos o bureau" é afirmação nossa sobre nós mesmos. É dado
+    # pessoal: retenção de 10 anos e criptografia em repouso são pendências da Fase 6 e valem para
+    # esta coluna. Desligue aqui para guardar só o identificador.
+    store-raw-response: true
     brasilapi:
       # Bureau de CNPJ da fase de teste: API pública, gratuita, sem SLA e sem contrato. Ligada por
       # padrão em dev; em produção a decisão de mantê-la fica explícita (CnpjBureauReadinessGuard

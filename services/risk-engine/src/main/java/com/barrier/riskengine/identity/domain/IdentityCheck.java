@@ -19,12 +19,36 @@ public record IdentityCheck(
     IdentityStatus status,
     String provider,
     String detail,
-    Instant checkedAt) {
+    Instant checkedAt,
+    String providerReference,
+    String rawResponse) {
 
   /** Cria um registro novo com id aleatório e instante atual. */
   public static IdentityCheck create(
       String assessmentId, IdentityStatus status, String provider, String detail) {
-    return new IdentityCheck(UUID.randomUUID(), assessmentId, status, provider, detail, Instant.now());
+    return create(assessmentId, status, provider, detail, null, null);
+  }
+
+  /**
+   * Registro com o rastro da consulta: id da consulta no provedor e resposta bruta (redigida).
+   * Sem eles, "consultamos o bureau" é afirmação nossa sobre nós mesmos — ver migration V031.
+   */
+  public static IdentityCheck create(
+      String assessmentId,
+      IdentityStatus status,
+      String provider,
+      String detail,
+      String providerReference,
+      String rawResponse) {
+    return new IdentityCheck(
+        UUID.randomUUID(),
+        assessmentId,
+        status,
+        provider,
+        detail,
+        Instant.now(),
+        providerReference,
+        rawResponse);
   }
 
   public boolean isVerified() {

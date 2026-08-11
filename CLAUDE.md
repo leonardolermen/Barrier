@@ -133,6 +133,21 @@ Fase B (mapeada, parcial): KYB de 1º grau já ativo (ver acima); pendentes: mon
 contínuo, reavaliação periódica, recálculo por transação, navegação do QSA até 3º grau (provedor
 KYB dedicado), e registro multi-tenant de endpoints.
 
+Cadastro de PF vindo do bureau: `PersonProfile` (identity/domain) é o simétrico do `CompanyProfile`
+— nascimento, nacionalidade e endereço saem do bureau e o `AssessmentProcessor` os persiste no
+`SubjectProfile` por patch (campo ausente preserva o que o parceiro declarou). Ocupação continua
+sendo declaração do cliente: bureau nenhum a fornece. O `FakeCpfBureauProvider` devolve o perfil
+completo, e o cenário `9998…` responde SEM cadastro para o gate da CMN 4.753 continuar exercitável.
+
+Rastro da consulta ao bureau (V031): `identity_checks.provider_reference` (o `QueryId` da
+BigDataCorp; nulo quando a fonte não fornece) e `raw_response` JSONB com **redação** de
+`MotherName` — ver `BureauTrace`. Desligável em `barrier.identity.store-raw-response`. ⚠️ dado
+pessoal: retenção e criptografia em repouso são pendências da Fase 6.
+
+Status `SOLICITAR_DOCUMENTO`: risco aprovado + cadastro incompleto sai da fila de EDD (não é
+reprovação — reprovar por falta de dado mentiria na trilha e contaminaria a taxa de recusa).
+`Assessment.decide` segue exigindo `EM_REVISAO`.
+
 Cadastro (CMN 4.753, ADR-0012): `SubjectProfile` (pacote `subject.profile`) é o cadastro
 completo do subject — 1:1 (`subject_profiles.subject_id UNIQUE`), separado do `Subject` (que
 continua sendo só a identidade mínima para dedup). Campos nullable divididos por tipo (PF:

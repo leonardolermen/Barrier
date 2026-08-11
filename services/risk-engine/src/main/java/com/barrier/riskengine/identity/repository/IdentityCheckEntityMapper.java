@@ -14,6 +14,8 @@ final class IdentityCheckEntityMapper {
     e.setProvider(c.provider());
     e.setDetail(c.detail());
     e.setCheckedAt(c.checkedAt());
+    e.setProviderReference(c.providerReference());
+    e.setRawResponse(c.rawResponse());
     return e;
   }
 
@@ -24,6 +26,8 @@ final class IdentityCheckEntityMapper {
         e.getStatus(),
         e.getProvider(),
         e.getDetail(),
-        e.getCheckedAt());
+        e.getCheckedAt(),
+        e.getProviderReference(),
+        e.getRawResponse());
   }
 }
