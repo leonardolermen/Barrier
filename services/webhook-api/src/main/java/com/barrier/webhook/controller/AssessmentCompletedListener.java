@@ -10,7 +10,21 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
-/** Consome {@code barrier.assessment.completed} e aciona a entrega do webhook. */
+/**
+ * Consome {@code barrier.assessment.completed} e aciona a entrega do webhook.
+ *
+ * <p>Antes este método capturava <b>toda</b> {@code RuntimeException} e retornava normalmente, o
+ * que commitava o offset: com o banco fora do ar por trinta segundos, cada decisão de KYC que
+ * passasse nesse intervalo era perdida em definitivo — sem entrega, sem registro, sem rastro além
+ * de uma linha de log. O motivo original de engolir era legítimo (mensagem malformada retentada
+ * infinitamente trava a partição), mas a cura valia para as duas falhas, e só uma delas merecia.
+ *
+ * <p>Agora a distinção é explícita: o que não tem conserto vira {@link MalformedEventException} e
+ * vai direto para a DLT; o resto sobe, e o {@code KafkaErrorHandlingConfig} retenta com backoff
+ * <b>sem commitar</b>. Esgotadas as tentativas, o evento também vai para a DLT — ficar preso na
+ * partição pararia a entrega de todos os outros tenants —, e aí é a reconciliação
+ * ({@code DeliveryReconciliationJob}) que fecha a lacuna.
+ */
 @Component
 public class AssessmentCompletedListener {
 
@@ -28,22 +42,29 @@ public class AssessmentCompletedListener {
 
   @KafkaListener(topics = TOPIC, groupId = "${spring.kafka.consumer.group-id}")
   public void onMessage(String message) {
+    EventEnvelope envelope = parse(message);
+    String tenantId = extractTenantId(envelope.payload());
+    // Fecha o fio: o mesmo id que saiu do POST no risk-engine aparece no log da entrega.
+    Correlation.run(envelope.correlationId(), () -> service.onEvent(envelope, tenantId));
+  }
+
+  private EventEnvelope parse(String message) {
     try {
-      EventEnvelope envelope = objectMapper.readValue(message, EventEnvelope.class);
-      // Fecha o fio: o mesmo id que saiu do POST no risk-engine aparece no log da entrega.
-      Correlation.run(
-          envelope.correlationId(),
-          () -> service.onEvent(envelope, extractTenantId(envelope.payload())));
+      return objectMapper.readValue(message, EventEnvelope.class);
     } catch (RuntimeException e) {
-      // Não relança: evita loop de reentrega por mensagem malformada. Fica logado para análise.
-      log.error("Falha ao processar evento de avaliação concluída", e);
+      log.error("Evento ilegível na fila; será enviado para a DLT", e);
+      throw new MalformedEventException("Envelope de evento ilegível", e);
     }
   }
 
   private String extractTenantId(String payload) {
-    @SuppressWarnings("unchecked")
-    Map<String, Object> data = objectMapper.readValue(payload, Map.class);
-    Object tenantId = data.get("tenantId");
-    return tenantId == null ? null : tenantId.toString();
+    try {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> data = objectMapper.readValue(payload, Map.class);
+      Object tenantId = data.get("tenantId");
+      return tenantId == null ? null : tenantId.toString();
+    } catch (RuntimeException e) {
+      throw new MalformedEventException("Payload do evento ilegível", e);
+    }
   }
 }

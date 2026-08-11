@@ -14,8 +14,11 @@ import com.barrier.webhook.client.WebhookSendResult;
 import com.barrier.webhook.config.WebhookProperties;
 import com.barrier.webhook.domain.Delivery;
 import com.barrier.webhook.domain.DeliveryStatus;
+import com.barrier.webhook.domain.WebhookEndpoint;
 import com.barrier.webhook.repository.DeliveryRepository;
+import com.barrier.webhook.repository.WebhookEndpointRepository;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,16 +35,29 @@ import org.springframework.transaction.support.TransactionTemplate;
 class WebhookDeliveryServiceTest {
 
   @Mock DeliveryRepository repository;
+  @Mock WebhookEndpointRepository endpointRepository;
   @Mock WebhookClient client;
 
   private final HmacSigner signer = new HmacSigner();
 
+  /** Destino global configurado e nenhum endpoint por tenant: a situação de dev. */
   private WebhookDeliveryService service(String targetUrl) {
+    return service(targetUrl, null);
+  }
+
+  private WebhookDeliveryService service(String targetUrl, WebhookEndpoint registrado) {
+    WebhookProperties properties =
+        new WebhookProperties(targetUrl, "secret", 5, Duration.ofSeconds(1));
+    if (registrado != null) {
+      when(endpointRepository.findByTenantId(registrado.tenantId()))
+          .thenReturn(Optional.of(registrado));
+    }
     return new WebhookDeliveryService(
         repository,
+        new WebhookEndpointService(endpointRepository, properties, Duration.ofHours(24)),
         client,
         signer,
-        new WebhookProperties(targetUrl, "secret", 5, Duration.ofSeconds(1)),
+        properties,
         transactionTemplate(),
         Duration.ofMinutes(2));
   }
@@ -157,5 +173,108 @@ class WebhookDeliveryServiceTest {
 
     verify(client, never()).send(any());
     verify(repository, never()).save(any());
+  }
+
+  /**
+   * O núcleo do vazamento cross-tenant: o destino tem que sair do tenant dono do evento. Com
+   * destino global, o veredito de KYC dos clientes de uma empresa ia para o endpoint de outra.
+   */
+  @Test
+  void entregaVaiParaOEndpointDoTenantDoEvento() {
+    when(repository.existsByEventId(any(UUID.class))).thenReturn(false);
+    when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(client.send(any(WebhookRequest.class))).thenReturn(WebhookSendResult.ok(200));
+    WebhookEndpoint doTenant = WebhookEndpoint.register("acme", "https://acme.example/webhook");
+
+    service("https://destino-global.example/webhook", doTenant).onEvent(event(), "acme");
+
+    ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
+    verify(client).send(enviado.capture());
+    assertThat(enviado.getValue().url()).isEqualTo("https://acme.example/webhook");
+  }
+
+  /** Endpoint desativado não cai no destino global — isso reintroduziria o vazamento. */
+  @Test
+  void endpointDesativadoNaoEntregaNemCaiNoDestinoGlobal() {
+    when(repository.existsByEventId(any(UUID.class))).thenReturn(false);
+    WebhookEndpoint desativado =
+        WebhookEndpoint.register("acme", "https://acme.example/webhook").deactivate();
+
+    service("https://destino-global.example/webhook", desativado).onEvent(event(), "acme");
+
+    verify(client, never()).send(any());
+    verify(repository, never()).save(any());
+  }
+
+  /**
+   * Segredo compartilhado permitia a um parceiro forjar o callback de KYC de outro: quem conhecesse
+   * o segredo assinava um "APROVADO" válido para qualquer tenant. Cada um assina com o seu.
+   */
+  @Test
+  void assinaComOSegredoDoTenantENaoComOGlobal() {
+    when(repository.existsByEventId(any(UUID.class))).thenReturn(false);
+    when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(client.send(any(WebhookRequest.class))).thenReturn(WebhookSendResult.ok(200));
+    WebhookEndpoint acme =
+        WebhookEndpoint.register("acme", "https://acme.example/hook", "segredo-da-acme");
+    EventEnvelope evento = event();
+
+    service("https://global.example/hook", acme).onEvent(evento, "acme");
+
+    ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
+    verify(client).send(enviado.capture());
+    assertThat(enviado.getValue().signature())
+        .isEqualTo(signer.sign(evento.payload(), "segredo-da-acme"))
+        .isNotEqualTo(signer.sign(evento.payload(), "secret"));
+    assertThat(enviado.getValue().previousSignature()).isNull();
+  }
+
+  /** Durante a rotação vão as duas assinaturas: o cliente troca a chave quando puder. */
+  @Test
+  void duranteARotacaoEnviaTambemAAssinaturaAnterior() {
+    when(repository.existsByEventId(any(UUID.class))).thenReturn(false);
+    when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(client.send(any(WebhookRequest.class))).thenReturn(WebhookSendResult.ok(200));
+    WebhookEndpoint rotacionado =
+        WebhookEndpoint.register("acme", "https://acme.example/hook", "segredo-antigo")
+            .rotateSecret(Duration.ofHours(1));
+    EventEnvelope evento = event();
+
+    service("", rotacionado).onEvent(evento, "acme");
+
+    ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
+    verify(client).send(enviado.capture());
+    assertThat(enviado.getValue().previousSignature())
+        .isEqualTo(signer.sign(evento.payload(), "segredo-antigo"));
+    assertThat(enviado.getValue().signature())
+        .isEqualTo(signer.sign(evento.payload(), rotacionado.secret()))
+        .isNotEqualTo(enviado.getValue().previousSignature());
+  }
+
+  /** Vencida a janela, o segredo antigo para de ser aceito — senão a rotação não protege de nada. */
+  @Test
+  void depoisDaJanelaNaoEnviaMaisAAssinaturaAnterior() {
+    when(repository.existsByEventId(any(UUID.class))).thenReturn(false);
+    when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(client.send(any(WebhookRequest.class))).thenReturn(WebhookSendResult.ok(200));
+    WebhookEndpoint expirado =
+        WebhookEndpoint.register("acme", "https://acme.example/hook", "segredo-antigo")
+            .rotateSecret(Duration.ofSeconds(-1));
+
+    service("", expirado).onEvent(event(), "acme");
+
+    ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
+    verify(client).send(enviado.capture());
+    assertThat(enviado.getValue().previousSignature()).isNull();
+  }
+
+  /** Sem tenant no evento não há como endereçar; com o global vazio, nada é entregue. */
+  @Test
+  void eventoSemTenantENaoEntregueQuandoNaoHaDestinoGlobal() {
+    when(repository.existsByEventId(any(UUID.class))).thenReturn(false);
+
+    service("").onEvent(event(), null);
+
+    verify(client, never()).send(any());
   }
 }

@@ -20,6 +20,10 @@ import org.springframework.web.client.RestClient;
 public class HttpWebhookClient implements WebhookClient {
 
   static final String SIGNATURE_HEADER = "X-Barrier-Signature";
+
+  /** Só durante a janela de rotação do segredo; ver {@code WebhookEndpoint.rotateSecret}. */
+  static final String PREVIOUS_SIGNATURE_HEADER = "X-Barrier-Signature-Previous";
+
   static final String EVENT_ID_HEADER = "X-Barrier-Event-Id";
 
   private final RestClient restClient;
@@ -37,16 +41,17 @@ public class HttpWebhookClient implements WebhookClient {
   @Override
   public WebhookSendResult send(WebhookRequest request) {
     try {
-      var response =
+      var spec =
           restClient
               .post()
               .uri(request.url())
               .contentType(MediaType.APPLICATION_JSON)
               .header(EVENT_ID_HEADER, request.eventId())
-              .header(SIGNATURE_HEADER, request.signature())
-              .body(request.body())
-              .retrieve()
-              .toBodilessEntity();
+              .header(SIGNATURE_HEADER, request.signature());
+      if (request.previousSignature() != null) {
+        spec = spec.header(PREVIOUS_SIGNATURE_HEADER, request.previousSignature());
+      }
+      var response = spec.body(request.body()).retrieve().toBodilessEntity();
       int status = response.getStatusCode().value();
       return response.getStatusCode().is2xxSuccessful()
           ? WebhookSendResult.ok(status)
