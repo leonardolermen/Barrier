@@ -49,7 +49,7 @@ Notas por dimensão (0–10):
 | KYC | 2,0 | 4,0 | Nome comparado; **PF ainda sem bureau** |
 | Antifraude | 1,0 | 1,0 | Intocado |
 | AML/Compliance | 2,5 | 4,0 | PEP existe; CSNU, CEIS e rescreening abertos |
-| Escalabilidade | 2,0 | 2,0 | Intocado — ainda ~1–3 TPS/instância |
+| Escalabilidade | 2,0 | 2,0 | Intocado. **Agora medido:** ingestão 292 req/s, processamento ~12,5/s (bureau simulado) — e sem cota nem isolamento por tenant ([ADR-0015](../adr/0015-ingestao-em-massa-faixa-separada.md)) |
 | Resiliência | 3,5 | 6,5 | Fail-closed + poison pill e duplicação resolvidos |
 | Observabilidade | 2,0 | 2,5 | Só o health de cobertura |
 | Auditoria | 4,0 | 4,5 | Evidência mais rica; reprodutibilidade ainda não |
@@ -186,10 +186,25 @@ de outro tenant.
   não a pessoa. Identidade por operador exige autenticação de usuário (OIDC/SSO).
   *Pronto quando:* a decisão registra um operador autenticado, e não um texto livre.
 
-- [ ] **`Idempotency-Key` no intake**
-  Retry do cliente cria duas avaliações, dois custos de bureau, dois webhooks — e as decisões
-  podem divergir, o que torna o retry um oráculo: tentar até o bureau falhar.
-  *Pronto quando:* mesmo `POST` com a mesma chave em janela definida retorna a mesma avaliação.
+- [x] **`Idempotency-Key` no intake** — `fix/audit-top10`
+  Retry do cliente criava duas avaliações, dois custos de bureau, dois webhooks — e as decisões
+  podiam divergir, o que tornava o retry um oráculo: tentar até o bureau falhar.
+  Header opcional; a chave é escopada por tenant (`idempotency_keys`, V029) e vale por uma janela
+  configurável (`barrier.assessment.idempotency-window`, 24h). Repetição com o mesmo conteúdo
+  devolve a avaliação original com `Idempotency-Replayed: true`; **mesma chave com conteúdo
+  diferente responde 409**, porque servir a resposta antiga para outra requisição seria mentir.
+  A comparação é por hash SHA-256 do conteúdo — a tabela não guarda CPF nem nome de novo.
+  A reserva é gravada em transação própria **antes** da avaliação: é o índice único que serializa
+  duas requisições concorrentes com a mesma chave (verificar com um `SELECT` antes deixaria
+  justamente a janela em que nascem as duas avaliações). Enquanto a submissão original não terminou,
+  a chave não tem avaliação para devolver e a concorrente recebe 409 em vez de resposta parcial;
+  submissão que falha libera a chave, para o retry legítimo não esbarrar em 409 até o fim da janela.
+  Documento é normalizado antes da reserva — requisição inválida responde 400 sem queimar a chave.
+  *Verificado:* `IdempotentIntakeIntegrationTest` contra Postgres real — repetição devolve o mesmo
+  id com uma única linha em `assessments`; `111.444.777-35` e `11144477735` são a mesma requisição;
+  conteúdo diferente dá 409 e não cria nada; chave igual de outro tenant não colide; sem header, o
+  comportamento anterior (uma avaliação por POST) é preservado. E `AssessmentServiceTest` — falha
+  depois da reserva libera a chave e não faz o bind.
 
 - [x] **`FOR UPDATE SKIP LOCKED` + `@Version` nos dois pollers** — `fix/processing-integrity`
   Reivindicação com lease (`claimed_at`) nas avaliações, `SKIP LOCKED` na outbox, `@Version` no
@@ -220,11 +235,30 @@ de outro tenant.
   mesma thread. *Ainda não é um scheduler dedicado por job* — com pool compartilhado, quatro jobs
   lentos simultâneos ainda se bloqueiam; suficiente para os três jobs atuais.
 
-- [ ] **Circuit breaker nos clients** — *timeouts fechados em `fix/audit-top10`*
-  Connect (2s) + read timeout em todo client, e limites de tempo no producer Kafka. Falta o
-  breaker: hoje um provider degradado continua sendo chamado a cada avaliação, cada uma pagando o
-  timeout inteiro. Não há biblioteca de resiliência no classpath.
-  *Pronto quando:* provider em falha abre o breaker e a avaliação vai direto para `UNAVAILABLE`.
+- [x] **Circuit breaker nos clients** — `fix/audit-top10`
+  Connect (2s) + read timeout em todo client e limites de tempo no producer Kafka já estavam
+  fechados; faltava o breaker. Um provider degradado seguia sendo chamado a cada avaliação, e
+  **cada uma pagava o timeout inteiro** — indisponibilidade de terceiro virava lentidão do próprio
+  serviço, que é pior que a falha, porque segura threads que teriam outra coisa a fazer.
+  `CircuitBreaker` (CLOSED/OPEN/HALF_OPEN) com limite de falhas **seguidas** e período de abertura
+  configuráveis (`barrier.resilience.failure-threshold`=5, `open-duration`=PT30S); um por provider,
+  via `CircuitBreakerRegistry`. `IdentityService` consulta antes de sair para a rede: disjuntor
+  aberto conta como indisponibilidade daquele bureau, a cadeia segue para o próximo, e sem próximo
+  o desfecho é `UNAVAILABLE` — que a `IdentityRiskRule` já converte em revisão humana.
+  Meia-abertura libera **uma** sondagem: sem isso, no instante em que o período vence, todas as
+  avaliações represadas partem juntas para um provider que talvez ainda esteja doente.
+  Só `BureauUnavailableException` conta para o disjuntor — um erro de programação (NPE, parsing)
+  não é provider fora do ar, e abrir por causa dele esconderia o bug atrás de um `UNAVAILABLE`.
+  *Escrito à mão, sem biblioteca de resiliência:* é o único uso, cabe numa classe testável, e a
+  dependência traria autoconfiguração para um problema de três estados e um contador. Estado por
+  instância — cada réplica aprende com as próprias chamadas; compartilhar exigiria coordenação no
+  caminho da decisão para ganhar poucas chamadas.
+  *Verificado:* `CircuitBreakerTest` (abre no limite; sucesso no meio zera o contador; meia-abertura
+  libera só uma; sondagem boa fecha, sondagem ruim reabre) e `IdentityServiceTest` — depois de 3
+  falhas o bureau **deixa de ser chamado** (`verify(times(3))` não sobe) e a avaliação vai para
+  `UNAVAILABLE`; com disjuntor aberto no primário, o secundário saudável ainda atende.
+  ⚠️ Cobre a cadeia de bureaus. Watchlist (job agendado, fora do caminho da decisão) e a entrega de
+  webhook (que já tem backoff próprio e fila) continuam sem breaker — de propósito.
 
 - [x] **`OutboxRelay` publicava dentro da transação** 🔴 — `fix/audit-top10`
   `publishPending()` era `@Transactional` e chamava `kafkaTemplate.send(...).join()` **dentro**
@@ -251,16 +285,77 @@ de outro tenant.
   *Verificado:* `WebhookDeliveryServiceTest` (nasce reivindicada; falha libera a posse; `retryDue`
   reivindica antes de tentar) e `WebhookDeliveryIntegrationTest` contra Postgres real.
 
-- [ ] **Endpoint de webhook por tenant**
-  `barrier.webhook.target-url` é **global**: com dois tenants, um recebe as decisões de KYC do
-  outro. Vazamento cross-tenant por desenho.
-  *Pronto quando:* a entrega resolve a URL pelo `tenantId` do evento.
+- [x] **Endpoint de webhook por tenant** 🔴 — `fix/audit-top10`
+  `barrier.webhook.target-url` era **global**: com dois tenants, um recebia as decisões de KYC do
+  outro. Vazamento cross-tenant por desenho, e o dado vazado é o pior possível — documento, nome e
+  veredito de PLD-FT de clientes de outra empresa.
+  Agora a entrega resolve a URL pelo `tenantId` **do evento** (`webhook_endpoints`, V004 do schema
+  `webhook`). Sem registro, a entrega **não acontece** e fica logada — não entregar é reversível,
+  entregar no lugar errado não é; a decisão continua disponível no `GET /v1/assessments/{id}`.
+  O destino global sobrevive só como conveniência de dev: em `prod` a aplicação não sobe com ele
+  definido (`GlobalTargetUrlReadinessGuard`). Endpoint desativado também não cai no global — cair
+  reintroduziria o vazamento.
+  Registro por `PUT/GET/DELETE /v1/webhook-endpoints/{tenantId}`, protegido por `X-Admin-Key`
+  (mesma trava da risk-engine, portada): deixar o parceiro apontar o próprio destino seria
+  self-service para redirecionar callback alheio. `DELETE` desativa, não apaga — o registro é o que
+  se consulta quando um cliente reclama de callback não recebido. A URL é validada no domínio:
+  http(s) absoluto, e **TLS obrigatório** fora de host local (a assinatura HMAC prova origem, não
+  confidencialidade).
+  *Verificado:* `WebhookDeliveryIntegrationTest` contra Postgres real — com a 'acme' registrada, o
+  callback dela chega no servidor dela e **não** no destino global; `WebhookEndpointApiIntegrationTest`
+  (401 sem `X-Admin-Key` e com chave errada, 400 para URL sem TLS, desativação preserva o cadastro,
+  404 para tenant desconhecido); `WebhookDeliveryServiceTest` (endpoint do tenant vence o global;
+  desativado não entrega; evento sem tenant não entrega).
 
-- [ ] **Não perder evento por falha transitória**
-  `AssessmentCompletedListener` engole toda `RuntimeException` e commita o offset: banco fora do
-  ar = decisão perdida para sempre, sem DLQ e sem reconciliação.
-  *Pronto quando:* falha transitória não commita; existe DLQ e job que reconcilia
-  `assessments` concluídos contra `deliveries`.
+- [x] **Segredo HMAC por tenant** *(achado ao endereçar o item acima)* — `fix/audit-top10`
+  `barrier.webhook.secret` era um só para todos: quem conhecesse o segredo — um parceiro, um
+  ex-integrador, um vazamento de config — forjava um callback de KYC válido para **qualquer** outro
+  tenant, inclusive um "APROVADO". O endpoint por parceiro resolveu para onde o resultado vai; isto
+  resolve quem consegue provar que ele veio do Barrier.
+  Segredo próprio por registro (`webhook_endpoints.secret`, V005), gerado com `SecureRandom` (32
+  bytes) e devolvido **uma única vez**, no registro e na rotação — o `GET`/lista nunca o expõem,
+  só `secretConfigured`. Mesmo desenho da emissão de API key.
+  Rotação sem downtime por `POST /v1/webhook-endpoints/{tenantId}/rotate-secret`: o anterior segue
+  aceito por `secret-rotation-overlap` (24h) e, durante a janela, cada entrega leva **duas**
+  assinaturas — a nova em `X-Barrier-Signature` e a anterior em `X-Barrier-Signature-Previous`.
+  Header novo em vez de mudar o formato do principal: cliente que já verifica não precisa saber que
+  existe rotação. Sem a janela, rotacionar seria escolher entre reusar segredo comprometido e
+  derrubar a verificação do parceiro — e na prática ninguém rotacionaria.
+  Atualizar a URL de um tenant já registrado **preserva** o segredo: trocá-lo de quebra derrubaria a
+  verificação sem ninguém ter pedido. O segredo é resolvido a cada tentativa, então uma rotação
+  entre a primeira tentativa e o retry assina com o que vale agora.
+  *Verificado:* `WebhookDeliveryServiceTest` — assina com o segredo do tenant e não com o global;
+  durante a rotação vão as duas assinaturas; vencida a janela, a anterior some.
+  `WebhookEndpointApiIntegrationTest` — o `GET` e a lista não contêm o segredo devolvido no
+  registro; atualizar a URL preserva; rotação troca e abre a janela; rotação sem `X-Admin-Key` dá
+  401 e de tenant desconhecido dá 404. `WebhookEndpointTest` cobre o domínio.
+  ⚠️ O segredo fica **em texto** na coluna — assinar exige o valor (diferente das API keys, que são
+  hash). Criptografia em repouso é item da Fase 6 e vale para esta coluna.
+
+- [x] **Não perder evento por falha transitória** — `fix/audit-top10`
+  `AssessmentCompletedListener` engolia toda `RuntimeException` e retornava normalmente, o que
+  commitava o offset: banco fora do ar por trinta segundos = toda decisão daquele intervalo perdida
+  em definitivo, sem entrega e sem rastro além de uma linha de log. O motivo original de engolir era
+  legítimo — mensagem malformada retentada trava a partição —, mas a cura valia para as duas falhas
+  e só uma delas merecia.
+  Agora a distinção é explícita: o que não tem conserto vira `MalformedEventException` e vai direto
+  para a DLT (`addNotRetryableExceptions`); o resto **sobe**, e o `DefaultErrorHandler` retenta com
+  backoff exponencial **sem commitar** — se a instância morrer no meio, outra retoma do mesmo ponto.
+  Esgotado o `retry-max-elapsed` (2 min), o evento também vai para `<tópico>.DLT`: ficar preso na
+  partição pararia a entrega de **todos** os tenants.
+  A DLT sozinha não fecha o buraco (o que está lá é decisão que o cliente não recebeu, e ninguém
+  volta lá), então entra o `DeliveryReconciliationJob`: a cada 15 min relê o tópico numa janela de
+  6h com um consumidor **avulso** (`assign`, sem group management e sem commit — não mexe no offset
+  do consumidor normal) e cria a entrega de todo evento sem uma. A fonte de verdade é o tópico e
+  não uma consulta às `assessments`: elas vivem no schema de outro serviço, e ler de lá trocaria
+  uma lacuna de entrega por acoplamento entre schemas. **O limite é a retenção do Kafka** — a janela
+  precisa caber dentro dela, e é ela que define quanto de indisponibilidade dá para recuperar.
+  *Verificado:* `DeliveryReconciliationIntegrationTest` contra Kafka e Postgres reais, com o
+  listener desligado (`auto-startup=false`) para reproduzir o consumidor fora do ar — duas decisões
+  publicadas e não consumidas viram duas entregas, e a segunda passada da reconciliação recupera
+  zero (não duplica o veredito). `AssessmentCompletedListenerTest` — falha transitória **sobe** em
+  vez de ser engolida; JSON inválido e payload ilegível viram `MalformedEventException`; evento sem
+  `tenantId` segue (quem decide é a resolução de destino).
 
 - [x] **Observabilidade mínima** — `fix/audit-top10`
   O MDC só existia na thread do servlet, então os logs da decisão não tinham `correlationId` nem
@@ -315,6 +410,18 @@ de outro tenant.
   `ceis`**, caminho já validado. Rótulos são resolvidos por alternativas, mas isso é tolerância,
   não garantia.
   *Pronto quando:* uma importação real traz contagem plausível e os campos batem.
+
+- [ ] **CNPJ fica sem bureau real em produção** 🔴
+  A BrasilAPI é da **fase de teste**; o bureau de produção é a BigBoost
+  ([ADR-0014](../adr/0014-bureau-cpf-bigboost.md)). Mas `BigBoostBureauProvider.supports()` cobre
+  **só CPF**, e `BrasilApiBureauProvider` cobre **só CNPJ**. Com a BrasilAPI fora, a cadeia de PJ
+  cai direto no simulado: avaliação de pessoa jurídica vira verificação fictícia, sem que nada
+  falhe. É o padrão que a auditoria nomeou — *falha aberto onde deveria falhar fechado*.
+  Duas saídas: (a) `BigBoostCnpjBureauProvider` sobre o dataset de empresas da BigDataCorp, ou
+  (b) assumir a BrasilAPI como dependência **de produção** — e então registrar que um controle
+  regulatório de PJ depende de uma API pública gratuita, sem SLA e sem contrato.
+  *Pronto quando:* existe bureau real de CNPJ com o `ReadinessGuard` no padrão do
+  `CpfBureauReadinessGuard` impedindo a subida em `prod` sem ele.
 
 - [ ] **CSNU/ONU** — obrigação legal direta (Lei 13.810/19, indisponibilidade imediata de ativos).
   É a lista mais obrigatória de todas e é a que **não** existe.
@@ -430,11 +537,48 @@ de outro tenant.
 - [ ] **Case management e COAF/SISCOAF**
   Um `POST /decision` não é case management: sem fila, SLA, atribuição, anexos, histórico.
 
+- [ ] **Ingestão em massa não tem cota nem isolamento** 🔴 — ver
+  [ADR-0015](../adr/0015-ingestao-em-massa-faixa-separada.md)
+  Medido em teste de carga (k6, ramp até 150 VUs): a ingestão aceita **292 req/s com 0% de erro**
+  enquanto o processamento conclui **~12,5/s** (bureau simulado; ~3/s com bureau real). Em 5 min
+  entraram 70.558 avaliações e saíram ~800 — **69.809 presas em `EM_ANALISE`**, ~92 min só para
+  drenar. Duas consequências que não são "lentidão":
+  - **Sem isolamento entre tenants:** `SELECT_CLAIMABLE` ordena por `created_at` global, sem
+    `tenant_id`. Um cliente tombando 500 mil registros coloca o tempo real de todos os outros
+    atrás da fila dele — dois dias — sem violar nenhuma regra da API.
+  - **Sem autorização de custo:** a R$0,04/consulta da BigBoost, 500 mil = **R$20 mil**, 1 milhão
+    = **R$40 mil**, incorridos por um laço sobre o `POST` que ninguém aprovou. Acelerar o
+    processamento antes de controlar a entrada só queima o mesmo dinheiro mais rápido.
+  *Pronto quando:* lote grande exige cota configurada por tenant (fail-closed sem ela), faixa
+  `BULK` só consome capacidade ociosa, e um teste de concorrência prova que backfill de um tenant
+  não atrasa o tempo real de outro.
+
+- [ ] **Paralelizar o processamento** — depois da cota e do cap de bureau, nesta ordem
+  `AssessmentProcessor.process()` reivindica `BATCH = 50` e processa **sequencialmente numa única
+  thread**; o `pool.size: 4` separa processador, relay e importador, mas não paraleliza o
+  processamento em si. Também não há config de Hikari em nenhum `application.yml` — vale o default
+  de 10 conexões, compartilhado com o Tomcat, então passar de ~8 workers sem dimensionar o pool
+  troca espera por bureau por espera por conexão. Paralelismo **fixo e configurável**
+  (`barrier.assessment.workers`), não autoscaling por profundidade de fila — o racional está na
+  ADR-0015. `SKIP LOCKED` + lease já tornam isso seguro sem locking novo.
+  *Pronto quando:* workers configuráveis, pool dimensionado junto, semáforo de concorrência por
+  bureau com tratamento de `429`, e teste de concorrência sem processamento duplicado.
+
+- [ ] **Métrica de idade da fila**
+  Nada mede há quanto tempo o item mais antigo está em `EM_ANALISE`. Sem isso, "pico absorvido" e
+  "afogando" são indistinguíveis de fora: no teste de carga não houve erro, nem latência ruim, nem
+  alerta — só 69 mil avaliações paradas.
+  *Pronto quando:* idade do item mais antigo exposta por faixa em `/actuator/prometheus`, com
+  alerta.
+
 - [ ] **Chaos e carga**
-  Nenhum teste de banco fora, Kafka fora, provider lento ou retornando lixo. Nenhum teste de
-  carga — por isso ninguém tinha percebido o `findAll()`.
+  Nenhum teste de banco fora, Kafka fora, provider lento ou retornando lixo.
   *Pronto quando:* SLIs/SLOs definidos (hoje **não há requisito não-funcional documentado**) e
   os cenários da auditoria §15 rodam no CI.
+  *Parcial:* o arnês de carga passou a existir (k6, `POST`+`GET` de avaliação com ramp em degraus)
+  e produziu os números dos três itens acima — mas roda à mão e não está no CI. O `findAll()` do
+  match por nome continua sendo o teto: a medição de 12,5/s foi feita com ~67k linhas de watchlist
+  carregadas por avaliação.
 
 ---
 
@@ -442,11 +586,12 @@ de outro tenant.
 
 | Item | Bloqueio | Efeito hoje |
 |---|---|---|
-| Bureau real de CPF | Sem credenciais (BigBoost/Serpro). **Não existe API gratuita legítima** — o que se anuncia como tal é scraping com bypass de captcha ou base vazada | `CpfBureauReadinessGuard` impede prod; PF inviável |
+| Bureau real de CPF | Sem credenciais (BigBoost/Serpro). **Não existe API gratuita legítima** — o que se anuncia como tal é scraping com bypass de captcha ou base vazada | `CpfBureauReadinessGuard` impede prod; PF inviável. Dev usa o `FakeCpfBureauProvider` com cenários por prefixo ([bureau-simulado.md](bureau-simulado.md)); o mapeamento de `TaxIdStatus`/`HasObitIndication` já está implementado e testado contra o JSON documentado, então contratar é só ligar a flag |
 | Validação do CSV de PEP | 403 do ambiente para o Portal da Transparência | Fonte escrita sem verificação |
 | Provedor KYB (UBO) | Contrato | KYB só de 1º grau |
 | Mídia negativa real | Contrato | `StubNegativeMediaProvider` com lista vazia |
-| Volumetria/SLA alvo | Decisão de produto | "Escalável" não é afirmação verificável sem meta |
+| Volumetria/SLA alvo | Decisão de produto | "Escalável" não é afirmação verificável sem meta. A capacidade atual já está medida (ingestão 292 req/s · processamento ~12,5/s simulado, ~3/s com bureau real) — falta o alvo, não o número |
+| Dimensionamento de workers e cap de bureau | Contrato BigBoost | Limite de concorrência, suporte a consulta **em lote** e preço por faixa de volume são desconhecidos. Se a API aceitar lote, a vazão muda mais que qualquer paralelismo. Até lá, default conservador e configurável ([ADR-0015](../adr/0015-ingestao-em-massa-faixa-separada.md)) |
 
 **Caminho sugerido para CPF:** gov.br Login Único (OIDC) devolve CPF e nome já verificados
 (selo prata/ouro implica validação biométrica com o TSE) a custo baixo — exige credenciamento,

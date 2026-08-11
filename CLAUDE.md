@@ -91,8 +91,41 @@ Webhook API (`services/webhook-api`, pacote `com.barrier.webhook`) concluída: c
 `barrier.assessment.completed`, entrega no endpoint do cliente com HMAC (`HmacSigner`),
 retry/backoff (`DeliveryRetryScheduler`), idempotência por `eventId` e rastreio em
 `deliveries`. Usa schema Postgres próprio `webhook` (Flyway `schemas=webhook`); escaneia só
-`com.barrier.webhook` (não puxa os beans de outbox do commons). Endpoint de destino é config
-única (`barrier.webhook.target-url`) — registro por cliente/tenant é evolução futura.
+`com.barrier.webhook` (não puxa os beans de outbox do commons).
+
+Disjuntor por bureau (`com.barrier.riskengine.resilience`): `CircuitBreaker` CLOSED/OPEN/HALF_OPEN
+escrito à mão (sem biblioteca de resiliência), um por provider via `CircuitBreakerRegistry`
+(`barrier.resilience.failure-threshold`=5, `open-duration`=PT30S, estado por instância).
+`IdentityService` chama `allowRequest()` antes de sair para a rede — aberto conta como
+indisponibilidade daquele bureau e a cadeia cai para o próximo; sem próximo, `UNAVAILABLE`.
+Só `BureauUnavailableException` alimenta o disjuntor (erro de programação não é provider fora do
+ar). Meia-abertura libera uma sondagem só. Watchlist e entrega de webhook seguem sem breaker.
+
+Falha no consumo (webhook-api): o listener **não engole mais** exceção. `MalformedEventException`
+(JSON/payload ilegível) não é retentada e vai direto para `<tópico>.DLT`; falha transitória sobe e o
+`DefaultErrorHandler` (`KafkaErrorHandlingConfig`) retenta com backoff exponencial **sem commitar o
+offset**, indo para a DLT só ao esgotar `barrier.webhook.consumer.retry-max-elapsed`.
+`DeliveryReconciliationJob` (@Scheduled, janela `PT6H`) relê o tópico com um consumidor avulso
+(`assign`, sem commit) e cria entrega para toda decisão sem uma — é o que recupera o que ficou na
+DLT ou passou enquanto o consumidor estava fora. Limitado pela retenção do Kafka.
+
+Endpoint de webhook por tenant: o destino sai de `webhook_endpoints` (V004), resolvido pelo
+`tenantId` **do evento** (`WebhookEndpointService.resolveTargetUrl`). Sem registro, não entrega —
+e loga; endpoint desativado (`active=false`) também não cai no destino global.
+`barrier.webhook.target-url` continua existindo só como fallback de dev: em `prod` a aplicação não
+sobe com ele definido (`GlobalTargetUrlReadinessGuard`), porque é um destino único para todos os
+tenants. Registro por `PUT/GET/DELETE /v1/webhook-endpoints/{tenantId}`, protegido por `X-Admin-Key`
+(`AdminApiKeyFilter` do pacote `webhook.web` — cópia deliberada do filtro da risk-engine; serviços
+separados, e mover para o `commons` arrastaria dependência de web). URL validada no domínio: http(s)
+absoluto e TLS obrigatório fora de host local.
+
+Segredo HMAC por tenant (V005): cada registro nasce com segredo próprio (`SecureRandom`, 32 bytes),
+devolvido **uma vez** no `PUT` e no `POST /v1/webhook-endpoints/{tenantId}/rotate-secret` — o
+`GET`/lista só mostram `secretConfigured`. Atualizar a URL preserva o segredo; rotação mantém o
+anterior válido por `barrier.webhook.secret-rotation-overlap` (24h) e, durante a janela, a entrega
+leva duas assinaturas (`X-Barrier-Signature` + `X-Barrier-Signature-Previous`). `barrier.webhook.secret`
+global vira fallback de dev. O segredo fica em texto na coluna (assinar exige o valor) — criptografia
+em repouso é Fase 6.
 
 Fase B (mapeada, parcial): KYB de 1º grau já ativo (ver acima); pendentes: monitoramento
 contínuo, reavaliação periódica, recálculo por transação, navegação do QSA até 3º grau (provedor
@@ -118,13 +151,25 @@ watchlist presente for a `SEED` — evita subir silenciosamente em produção se
 habilitados. `application-prod.yml` já habilita `barrier.watchlist.cgu.enabled` e
 `.ofac.enabled` por padrão nesse profile.
 
+Bureau simulado de CPF: `FakeCpfBureauProvider` (`@Order(100)`, `@Profile("!prod")`,
+`authoritative() == false`) substituiu o stub que aprovava tudo. Qualquer CPF válido é atendido;
+CPF comum é `REGULAR`, e prefixo `999` + dígito seletor escolhe o cenário (falecido, suspensa,
+nula, indisponível...). Tabela em `docs/implementation/bureau-simulado.md`. Não serve de fallback
+para bureau real indisponível.
+
+Situação cadastral do CPF (fecha o "a confirmar" do ADR-0014): `TaxIdStatus` + `HasObitIndication`
+do `basic_data` decidem **antes** da comparação de nome. Titular falecido virou
+`BureauResult.Outcome.DECEASED` → `IdentityStatus.DECEASED` → `IDENTITY_DECEASED` (1000, REJECT),
+com desfecho próprio em vez de `NOT_FOUND` para a trilha não mentir. `NULA` → NOT_FOUND;
+`SUSPENSA`/`CANCELADA`/`PENDENTE` → MISMATCH; status ausente → MISMATCH, nunca MATCH.
+
 Bureau real de CPF (ADR-0014): `BigBoostBureauProvider` (`@Order(20)`, entre `BrasilApiBureauProvider`
-`=10` e `StubBureauProvider` `=100`) chama o dataset `basic_data` da BigBoost/BigDataCorp
+`=10` e `FakeCpfBureauProvider` `=100`) chama o dataset `basic_data` da BigBoost/BigDataCorp
 (`POST /pessoas`, headers `AccessToken`/`TokenId`) — self-service, sem CNPJ necessário para
 contratar (ao contrário do Serpro). Desligado por padrão
 (`barrier.identity.bigboost.enabled=false`); credenciais via `BIGBOOST_ACCESS_TOKEN`/
-`BIGBOOST_TOKEN_ID`. `Result` vazio → NOT_FOUND, não-vazio → MATCH (status do CPF na Receita
-para MISMATCH ainda não mapeado — campo exato não confirmado 
+`BIGBOOST_TOKEN_ID`. `Result` vazio → NOT_FOUND; caso contrário a situação cadastral decide
+primeiro (ver acima) e só CPF regular chega à comparação de nome.
 
 Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
 (`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode
@@ -195,11 +240,24 @@ de completude (`RegistrationCompleteness.evaluate` direto, sem outra query). `Co
 não força recomendação (mudança/portabilidade é comum), só soma ao score. Nome divergente/CPF de
 outro titular já eram cobertos por `IdentityRiskRule` (`IDENTITY_MISMATCH`), não duplicado aqui.
 
-Próximo: Fase 5 (hardening: OpenAPI, idempotência no intake, mascaramento) e o backlog de
+Idempotência do intake: `POST /v1/assessments` aceita o header opcional `Idempotency-Key`
+(escopo por tenant, tabela `idempotency_keys` V029, janela `barrier.assessment.idempotency-window`
+= 24h). Mesma chave + mesmo conteúdo devolve a avaliação original com `Idempotency-Replayed: true`;
+mesma chave + conteúdo diferente = 409; sem header, cada POST cria uma avaliação (comportamento
+anterior). A comparação é por hash SHA-256 (tenant|tipo|documento normalizado|nome) — sem PII
+duplicada na tabela. `IdempotencyService` roda em `REQUIRES_NEW`: a reserva precisa estar commitada
+antes da avaliação (é o índice único que serializa requisições concorrentes) e a liberação precisa
+sobreviver ao rollback da submissão que falhou. `AssessmentService.submit` devolve
+`SubmissionResult(assessment, replayed)`.
+
+Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (78 testes, inclui integração com Testcontainers).
+Build validado: `./mvnw test` verde (275 testes na risk-engine + 16 na webhook-api, inclui
+integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
+formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).
 
 Peculiaridades do Spring Boot 4 (aprendidas na prática):
