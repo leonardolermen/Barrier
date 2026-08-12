@@ -16,9 +16,18 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
 
 - **Fase 1 (motor de risco):** somos **operador**; o cliente é **controlador**. Guardamos
   o mínimo necessário para a trilha de auditoria (input, decisão, evidência).
-- **Fase 2 (plataforma completa):** viramos **controlador/co-controlador** de dado
-  sensível (biometria). Exige KMS, cifragem em repouso, gestão de consentimento e fluxo
-  de direitos do titular.
+- **Fase 2 (plataforma completa, [ADR-0016](../adr/0016-plataforma-completa-modelo-b.md)):**
+  viramos **controlador de dado pessoal** (cadastro, resultados de verificação) — com base legal,
+  consentimento por finalidade, direitos do titular e retenção de 10 anos como obrigação própria.
+  **Não** de dado sensível: documentoscopia e biometria guardam o resultado da verificação, nunca
+  a imagem nem o template biométrico. Biometria é sensível pelo art. 5º, II; resultado de
+  comparação não é. Isso derruba a exigência de tratamento de dado sensível e elimina o pior
+  cenário de vazamento — base biométrica vazada não se revoga.
+  Continua exigindo KMS e cifragem em repouso (dado pessoal comum também vaza), gestão de
+  consentimento e fluxo de direitos do titular.
+  O custo da escolha: sem a imagem, a evidência de uma verificação depende da retenção contratada
+  com o provedor — mitigado por contrato, pelo hash do que foi submetido e pelo registro da versão
+  do algoritmo.
 
 ## Requisitos que a arquitetura já endereça
 

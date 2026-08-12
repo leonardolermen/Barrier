@@ -34,7 +34,8 @@ Collection e environment do Postman para exercitar a Risk Engine localmente.
 | Variável | Default | Uso |
 |---|---|---|
 | `baseUrl` | `http://localhost:8080` | host da API |
-| `clientId` | `default` | header `X-Client-Id` (tenant) |
+| `apiKey` | *(vazio)* | credencial do tenant em `Authorization: Bearer <apiKey>`. Em dev, a chave é emitida no startup e sai no log — procure por **"API key de DESENVOLVIMENTO"** e cole aqui |
+| `adminKey` | *(vazio)* | header `X-Admin-Key` dos endpoints administrativos (registry de regras, config por tenant, endpoints de webhook) |
 | `assessmentId` | *(vazio)* | preenchida pelos scripts de teste após o POST |
 | `document` | `11144477735` | usado no GET de subject |
 

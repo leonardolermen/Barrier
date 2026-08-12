@@ -14,10 +14,17 @@ por **webhook** quando a análise conclui.
 
 ## Modelo de produto
 
-- **Fase 1 (atual):** motor de risco / decisioning. Somos **operador** de dados (LGPD);
-  o cliente é o controlador e dono do cadastro.
-- **Fase 2 (evolução):** plataforma completa (*system of record*) com acervo de documentos,
-  biometria, retenção de 10 anos, monitoramento contínuo e reporting ao COAF.
+- **Fase 1 (o que roda hoje):** motor de risco / decisioning. Somos **operador** de dados
+  (LGPD); o parceiro é o controlador e dono do cadastro.
+- **Fase 2 (decidida, em construção):** plataforma completa, por
+  [ADR-0016](docs/adr/0016-plataforma-completa-modelo-b.md) — verificação de veracidade do
+  cadastro (✅ pronta), cifragem em repouso, documentoscopia + biometria e UBO.
+
+**Não guardamos imagem**: documentoscopia e biometria armazenam o *resultado* da verificação
+(desfecho, score, provedor, referência da consulta), nunca foto, selfie ou template. Base
+biométrica vazada não se revoga — e sem acervo sensível o Barrier trata dado pessoal comum, não
+dado sensível do art. 5º, II. O que se perde com isso (reprocessamento e prova própria) está
+registrado no ADR.
 
 A arquitetura da fase 1 é subconjunto da fase 2 — nada é descartado na evolução.
 
@@ -85,10 +92,13 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 
 ## Status
 
-🏗️ **Fluxo ponta a ponta funcionando** (build verde, 283 testes). Fases 0–8 da
-Risk Engine concluídas + Webhook API. **Ainda não pode ir para produção** — o que falta é
-estrutural (escala, monitoramento contínuo, criptografia em repouso) e está rastreado no
-[plano de remediação](docs/implementation/plano-remediacao-auditoria.md).
+🏗️ **Fluxo ponta a ponta funcionando** (build verde, 443 testes). Fases 0–8 da
+Risk Engine concluídas + Webhook API + monitoramento contínuo. **Ainda não pode ir para
+produção** — falta cifragem em repouso, controle de vazão na entrega de webhook, UBO e contract
+tests, tudo rastreado no [plano de remediação](docs/implementation/plano-remediacao-auditoria.md).
+
+Para o fluxo completo com payloads de cada etapa, e o que está ligado vs. só escrito, ver
+[kyc-flow.md](docs/architecture/kyc-flow.md).
 
 - **Fase 0–1** — scaffolding, intake `202`/`GET`, transactional outbox, `Idempotency-Key`
   opcional no intake (escopo por tenant, janela de 24h, replay devolve a avaliação original).
