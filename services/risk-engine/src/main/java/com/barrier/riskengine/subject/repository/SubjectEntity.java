@@ -6,10 +6,17 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 /** Mapeamento JPA do subject (cliente final). */
 @Entity
 @Table(name = "subjects")
+@Getter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PACKAGE)
 public class SubjectEntity {
 
   @Id
@@ -28,35 +35,4 @@ public class SubjectEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
-  protected SubjectEntity() {
-    // JPA
-  }
-
-  SubjectEntity(UUID id, String documentType, String document, String name, Instant createdAt) {
-    this.id = id;
-    this.documentType = documentType;
-    this.document = document;
-    this.name = name;
-    this.createdAt = createdAt;
-  }
-
-  UUID getId() {
-    return id;
-  }
-
-  String getDocumentType() {
-    return documentType;
-  }
-
-  String getDocument() {
-    return document;
-  }
-
-  String getName() {
-    return name;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
 }

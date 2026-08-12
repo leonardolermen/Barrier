@@ -9,10 +9,17 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /** Mapeamento JPA do resultado de screening; os apontamentos ficam serializados em JSON. */
 @Entity
 @Table(name = "screening_results")
+@Getter(AccessLevel.PACKAGE)
+@Setter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ScreeningResultEntity {
 
   @Id
@@ -36,58 +43,6 @@ public class ScreeningResultEntity {
   @Column(name = "sources_json")
   private String sourcesJson;
 
-  String getSourcesJson() {
-    return sourcesJson;
-  }
-
-  void setSourcesJson(String sourcesJson) {
-    this.sourcesJson = sourcesJson;
-  }
-
   @Column(name = "checked_at", nullable = false)
   private Instant checkedAt;
-
-  protected ScreeningResultEntity() {
-    // JPA
-  }
-
-  UUID getId() {
-    return id;
-  }
-
-  void setId(UUID id) {
-    this.id = id;
-  }
-
-  String getAssessmentId() {
-    return assessmentId;
-  }
-
-  void setAssessmentId(String assessmentId) {
-    this.assessmentId = assessmentId;
-  }
-
-  ScreeningStatus getStatus() {
-    return status;
-  }
-
-  void setStatus(ScreeningStatus status) {
-    this.status = status;
-  }
-
-  String getHitsJson() {
-    return hitsJson;
-  }
-
-  void setHitsJson(String hitsJson) {
-    this.hitsJson = hitsJson;
-  }
-
-  Instant getCheckedAt() {
-    return checkedAt;
-  }
-
-  void setCheckedAt(Instant checkedAt) {
-    this.checkedAt = checkedAt;
-  }
 }

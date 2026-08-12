@@ -6,10 +6,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Vínculo de visibilidade entre um tenant e um subject. */
 @Entity
 @Table(name = "tenant_subjects")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TenantSubjectEntity {
 
   @Id
@@ -27,10 +30,6 @@ public class TenantSubjectEntity {
 
   @Column(name = "last_seen_at", nullable = false)
   private Instant lastSeenAt;
-
-  protected TenantSubjectEntity() {
-    // JPA
-  }
 
   TenantSubjectEntity(UUID id, String tenantId, UUID subjectId, Instant now) {
     this.id = id;

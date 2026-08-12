@@ -10,10 +10,17 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /** Mapeamento JPA da pontuação de risco; os resultados das regras ficam em JSON. */
 @Entity
 @Table(name = "risk_scores")
+@Getter(AccessLevel.PACKAGE)
+@Setter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class RiskScoreEntity {
 
   @Id
@@ -53,98 +60,6 @@ public class RiskScoreEntity {
   @Column(name = "engine_version", nullable = false, length = 40)
   private String engineVersion;
 
-  String getEvaluatedJson() {
-    return evaluatedJson;
-  }
-
-  void setEvaluatedJson(String evaluatedJson) {
-    this.evaluatedJson = evaluatedJson;
-  }
-
-  UUID getIdentityCheckId() {
-    return identityCheckId;
-  }
-
-  void setIdentityCheckId(UUID identityCheckId) {
-    this.identityCheckId = identityCheckId;
-  }
-
-  UUID getScreeningResultId() {
-    return screeningResultId;
-  }
-
-  void setScreeningResultId(UUID screeningResultId) {
-    this.screeningResultId = screeningResultId;
-  }
-
   @Column(name = "scored_at", nullable = false)
   private Instant scoredAt;
-
-  protected RiskScoreEntity() {
-    // JPA
-  }
-
-  UUID getId() {
-    return id;
-  }
-
-  void setId(UUID id) {
-    this.id = id;
-  }
-
-  String getAssessmentId() {
-    return assessmentId;
-  }
-
-  void setAssessmentId(String assessmentId) {
-    this.assessmentId = assessmentId;
-  }
-
-  RiskLevel getLevel() {
-    return level;
-  }
-
-  void setLevel(RiskLevel level) {
-    this.level = level;
-  }
-
-  int getTotalScore() {
-    return totalScore;
-  }
-
-  void setTotalScore(int totalScore) {
-    this.totalScore = totalScore;
-  }
-
-  RiskRecommendation getRecommendation() {
-    return recommendation;
-  }
-
-  void setRecommendation(RiskRecommendation recommendation) {
-    this.recommendation = recommendation;
-  }
-
-  String getResultsJson() {
-    return resultsJson;
-  }
-
-  void setResultsJson(String resultsJson) {
-    this.resultsJson = resultsJson;
-  }
-
-  String getEngineVersion() {
-    return engineVersion;
-  }
-
-  void setEngineVersion(String engineVersion) {
-    this.engineVersion = engineVersion;
-  }
-
-  Instant getScoredAt() {
-    return scoredAt;
-  }
-
-  void setScoredAt(Instant scoredAt) {
-    this.scoredAt = scoredAt;
-  }
 }

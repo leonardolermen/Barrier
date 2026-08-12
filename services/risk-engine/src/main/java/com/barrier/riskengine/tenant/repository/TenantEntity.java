@@ -4,10 +4,15 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 /** Mapeamento JPA de um tenant (cliente da API). */
 @Entity
 @Table(name = "tenants")
+@Getter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TenantEntity {
 
   @Id
@@ -20,19 +25,4 @@ public class TenantEntity {
   @Column(name = "active", nullable = false)
   private boolean active;
 
-  protected TenantEntity() {
-    // JPA
-  }
-
-  String getId() {
-    return id;
-  }
-
-  String getName() {
-    return name;
-  }
-
-  boolean isActive() {
-    return active;
-  }
 }

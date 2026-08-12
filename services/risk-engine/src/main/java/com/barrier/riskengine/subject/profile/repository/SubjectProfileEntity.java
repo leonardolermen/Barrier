@@ -10,10 +10,17 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /** Mapeamento JPA do cadastro do subject (CMN 4.753). */
 @Entity
 @Table(name = "subject_profiles")
+@Getter(AccessLevel.PACKAGE)
+@Setter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SubjectProfileEntity {
 
   @Id
@@ -95,207 +102,4 @@ public class SubjectProfileEntity {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
-  protected SubjectProfileEntity() {
-    // JPA
-  }
-
-  UUID getId() {
-    return id;
-  }
-
-  void setId(UUID id) {
-    this.id = id;
-  }
-
-  UUID getSubjectId() {
-    return subjectId;
-  }
-
-  void setSubjectId(UUID subjectId) {
-    this.subjectId = subjectId;
-  }
-
-  String getTenantId() {
-    return tenantId;
-  }
-
-  void setTenantId(String tenantId) {
-    this.tenantId = tenantId;
-  }
-
-  LocalDate getBirthDate() {
-    return birthDate;
-  }
-
-  void setBirthDate(LocalDate birthDate) {
-    this.birthDate = birthDate;
-  }
-
-  LocalDate getFoundingDate() {
-    return foundingDate;
-  }
-
-  void setFoundingDate(LocalDate foundingDate) {
-    this.foundingDate = foundingDate;
-  }
-
-  String getNationality() {
-    return nationality;
-  }
-
-  void setNationality(String nationality) {
-    this.nationality = nationality;
-  }
-
-  String getOccupation() {
-    return occupation;
-  }
-
-  void setOccupation(String occupation) {
-    this.occupation = occupation;
-  }
-
-  BigDecimal getDeclaredIncome() {
-    return declaredIncome;
-  }
-
-  void setDeclaredIncome(BigDecimal declaredIncome) {
-    this.declaredIncome = declaredIncome;
-  }
-
-  String getAddressStreet() {
-    return addressStreet;
-  }
-
-  void setAddressStreet(String addressStreet) {
-    this.addressStreet = addressStreet;
-  }
-
-  String getAddressNumber() {
-    return addressNumber;
-  }
-
-  void setAddressNumber(String addressNumber) {
-    this.addressNumber = addressNumber;
-  }
-
-  String getAddressComplement() {
-    return addressComplement;
-  }
-
-  void setAddressComplement(String addressComplement) {
-    this.addressComplement = addressComplement;
-  }
-
-  String getAddressDistrict() {
-    return addressDistrict;
-  }
-
-  void setAddressDistrict(String addressDistrict) {
-    this.addressDistrict = addressDistrict;
-  }
-
-  String getAddressCity() {
-    return addressCity;
-  }
-
-  void setAddressCity(String addressCity) {
-    this.addressCity = addressCity;
-  }
-
-  String getAddressState() {
-    return addressState;
-  }
-
-  void setAddressState(String addressState) {
-    this.addressState = addressState;
-  }
-
-  String getAddressZipCode() {
-    return addressZipCode;
-  }
-
-  void setAddressZipCode(String addressZipCode) {
-    this.addressZipCode = addressZipCode;
-  }
-
-  String getPhone() {
-    return phone;
-  }
-
-  void setPhone(String phone) {
-    this.phone = phone;
-  }
-
-  String getEmail() {
-    return email;
-  }
-
-  void setEmail(String email) {
-    this.email = email;
-  }
-
-  String getCnaeCode() {
-    return cnaeCode;
-  }
-
-  void setCnaeCode(String cnaeCode) {
-    this.cnaeCode = cnaeCode;
-  }
-
-  String getCnaeDescription() {
-    return cnaeDescription;
-  }
-
-  void setCnaeDescription(String cnaeDescription) {
-    this.cnaeDescription = cnaeDescription;
-  }
-
-  BigDecimal getShareCapital() {
-    return shareCapital;
-  }
-
-  void setShareCapital(BigDecimal shareCapital) {
-    this.shareCapital = shareCapital;
-  }
-
-  String getLegalRepresentativeName() {
-    return legalRepresentativeName;
-  }
-
-  void setLegalRepresentativeName(String legalRepresentativeName) {
-    this.legalRepresentativeName = legalRepresentativeName;
-  }
-
-  String getLegalRepresentativeDocument() {
-    return legalRepresentativeDocument;
-  }
-
-  void setLegalRepresentativeDocument(String legalRepresentativeDocument) {
-    this.legalRepresentativeDocument = legalRepresentativeDocument;
-  }
-
-  String getPartnersJson() {
-    return partnersJson;
-  }
-
-  void setPartnersJson(String partnersJson) {
-    this.partnersJson = partnersJson;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  void setCreatedAt(Instant createdAt) {
-    this.createdAt = createdAt;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  void setUpdatedAt(Instant updatedAt) {
-    this.updatedAt = updatedAt;
-  }
 }

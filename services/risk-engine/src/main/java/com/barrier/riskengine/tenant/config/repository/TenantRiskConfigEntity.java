@@ -6,10 +6,21 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-/** Mapeamento JPA de um override de config de risco por tenant. */
+/**
+ * Mapeamento JPA de um override de config de risco por tenant.
+ *
+ * <p>Sem {@code @Setter}: o estado muda por {@link #update}, não por setter solto.
+ */
 @Entity
 @Table(name = "tenant_risk_config")
+@Getter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PACKAGE)
 class TenantRiskConfigEntity {
 
   @Id
@@ -33,55 +44,6 @@ class TenantRiskConfigEntity {
 
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
-
-  protected TenantRiskConfigEntity() {
-    // JPA
-  }
-
-  TenantRiskConfigEntity(
-      UUID id,
-      String tenantId,
-      String ruleCode,
-      String paramKey,
-      String paramValue,
-      String updatedBy,
-      Instant updatedAt) {
-    this.id = id;
-    this.tenantId = tenantId;
-    this.ruleCode = ruleCode;
-    this.paramKey = paramKey;
-    this.paramValue = paramValue;
-    this.updatedBy = updatedBy;
-    this.updatedAt = updatedAt;
-  }
-
-  UUID getId() {
-    return id;
-  }
-
-  String getTenantId() {
-    return tenantId;
-  }
-
-  String getRuleCode() {
-    return ruleCode;
-  }
-
-  String getParamKey() {
-    return paramKey;
-  }
-
-  String getParamValue() {
-    return paramValue;
-  }
-
-  String getUpdatedBy() {
-    return updatedBy;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
 
   void update(String paramValue, String updatedBy, Instant updatedAt) {
     this.paramValue = paramValue;

@@ -5,10 +5,21 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-/** Mapeamento JPA de uma linha do registry de regras de risco. */
+/**
+ * Mapeamento JPA de uma linha do registry de regras de risco.
+ *
+ * <p>Sem {@code @Setter}: o estado muda por {@link #update}, não por setter solto.
+ */
 @Entity
 @Table(name = "risk_rule_registry")
+@Getter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PACKAGE)
 public class RiskRuleRegistryEntity {
 
   @Id
@@ -32,55 +43,6 @@ public class RiskRuleRegistryEntity {
 
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
-
-  protected RiskRuleRegistryEntity() {
-    // JPA
-  }
-
-  RiskRuleRegistryEntity(
-      String ruleCode,
-      String description,
-      String criticality,
-      boolean enabled,
-      Instant validFrom,
-      Instant validUntil,
-      Instant updatedAt) {
-    this.ruleCode = ruleCode;
-    this.description = description;
-    this.criticality = criticality;
-    this.enabled = enabled;
-    this.validFrom = validFrom;
-    this.validUntil = validUntil;
-    this.updatedAt = updatedAt;
-  }
-
-  String getRuleCode() {
-    return ruleCode;
-  }
-
-  String getDescription() {
-    return description;
-  }
-
-  String getCriticality() {
-    return criticality;
-  }
-
-  boolean isEnabled() {
-    return enabled;
-  }
-
-  Instant getValidFrom() {
-    return validFrom;
-  }
-
-  Instant getValidUntil() {
-    return validUntil;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
 
   void update(
       String description,
