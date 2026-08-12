@@ -68,7 +68,7 @@ class RiskRuleRegistryServiceImplTest {
   @Test
   void naoPermiteDesabilitarRegraRegulatoria() {
     assertThatThrownBy(
-            () -> service().upsert("SANCTION", "desc", "BLOCK", false, null, null))
+            () -> service().upsert("SANCTION", "desc", "BLOCK", false, null, null, "ana"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("SANCTION");
   }
@@ -77,19 +77,31 @@ class RiskRuleRegistryServiceImplTest {
   @Test
   void naoPermiteLimitarVigenciaDeRegraRegulatoria() {
     assertThatThrownBy(
-            () -> service().upsert("PEP", "desc", "REVIEW", true, null, NOW.plusSeconds(60)))
+            () -> service().upsert("PEP", "desc", "REVIEW", true, null, NOW.plusSeconds(60), "ana"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("vigência");
   }
 
   @Test
   void permiteDesabilitarRegraDeApetite() {
-    when(repository.upsert("NEW_COMPANY", "desc", "ALERT", false, null, null))
+    when(repository.upsert("NEW_COMPANY", "desc", "ALERT", false, null, null, "ana"))
         .thenReturn(
             new RiskRuleRegistryEntry(
                 "NEW_COMPANY", "desc", RiskRuleCriticality.ALERT, false, null, null, NOW));
 
-    assertThat(service().upsert("NEW_COMPANY", "desc", "ALERT", false, null, null).enabled())
+    assertThat(service().upsert("NEW_COMPANY", "desc", "ALERT", false, null, null, "ana").enabled())
         .isFalse();
+  }
+
+  /**
+   * Desligar uma regra de risco é a operação mais sensível do sistema. O {@code X-Admin-Key} prova
+   * que quem chamou tinha a chave, não quem decidiu — sem autoria a trilha não responde a pergunta
+   * que o regulador faz.
+   */
+  @Test
+  void exigeAutoriaParaMudarORegistry() {
+    assertThatThrownBy(() -> service().upsert("NEW_COMPANY", "desc", "ALERT", false, null, null, " "))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("updatedBy");
   }
 }

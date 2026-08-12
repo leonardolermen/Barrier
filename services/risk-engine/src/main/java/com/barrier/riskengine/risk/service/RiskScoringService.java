@@ -88,9 +88,14 @@ public class RiskScoringService {
                     return EvaluatedRule.suppressed(rule.code());
                   }
                   RiskResult result = rule.evaluate(context);
+                  // Parâmetros efetivos junto do desfecho, para toda regra que rodou — inclusive
+                  // as que passaram. É o que permite responder, meses depois, por que a regra não
+                  // pegou este cliente: o valor de hoje em `tenant_risk_config` pode não ser o de
+                  // então, e sem isso a pergunta não tem resposta.
+                  java.util.Map<String, String> parameters = rule.effectiveParameters(context);
                   return result.triggered()
-                      ? EvaluatedRule.triggered(rule.code(), result)
-                      : EvaluatedRule.passed(rule.code(), result);
+                      ? EvaluatedRule.triggered(rule.code(), result, parameters)
+                      : EvaluatedRule.passed(rule.code(), result, parameters);
                 })
             .toList();
 

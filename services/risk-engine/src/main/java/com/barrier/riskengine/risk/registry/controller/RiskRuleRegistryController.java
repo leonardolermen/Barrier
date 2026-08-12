@@ -50,7 +50,8 @@ public class RiskRuleRegistryController {
             request.criticality(),
             request.enabled(),
             request.validFrom(),
-            request.validUntil());
+            request.validUntil(),
+            request.updatedBy());
     return ResponseEntity.ok(RiskRuleRegistryEntryResponse.of(saved));
   }
 

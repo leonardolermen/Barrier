@@ -587,15 +587,36 @@ de outro tenant.
   criptografia em repouso (Fase 6) valem por linha. E o cadastro segue **sem histórico** — quem
   mudou o quê e quando é o item de histórico versionado, logo abaixo.
 
-- [ ] **Histórico versionado de configuração** — *parcialmente fechado*
-  Já resolvido: **quais regras estavam ativas** (`evaluated_json` distingue `SUPPRESSED` de
-  `NOT_TRIGGERED`) e **contra qual lista** (`sources_json`).
-  Aberto: `tenant_risk_config`, `risk_rule_registry` e `subject_profiles` seguem mutáveis sem
-  histórico. O parâmetro efetivo aparece na evidência da regra que disparou (`config:months=`), mas
-  não o de uma regra que passou — então "com que parâmetros" ainda não é respondível em geral.
-  `risk_rule_registry` nem tem coluna `updated_by`, que `tenant_risk_config` tem.
-  *Pronto quando:* uma decisão antiga é reproduzível a partir do que está gravado, incluindo os
-  parâmetros efetivos de todas as regras.
+- [x] **Histórico versionado de configuração**
+  Já vinha resolvido: **quais regras estavam ativas** (`evaluated_json` distingue `SUPPRESSED` de
+  `NOT_TRIGGERED`) e **contra qual lista** (`sources_json`). Faltavam as duas metades abaixo, que
+  são complementares — uma responde sobre a decisão, a outra sobre a configuração.
+  **1. Parâmetro efetivo de toda regra que rodou**, inclusive das que passaram:
+  `RiskRule.effectiveParameters(context)` (default vazio — regra sem configuração não polui a
+  trilha) entra no `evaluated_json` junto do desfecho. Antes, o valor só aparecia na evidência da
+  regra que *disparou*; uma regra que passou não deixava rastro do valor usado, e como
+  `tenant_risk_config` é sobrescrito no lugar, "por que a regra de empresa nova não pegou este
+  cliente em março?" era respondido com a janela de hoje, que pode nunca ter valido em março.
+  Implementado em `NewCompanyRiskRule` (`months`/`score`) e `SensitiveCnaeRiskRule` (`cnae-codes`
+  como lista ordenada, `score`) — as duas configuráveis por tenant.
+  **2. Linha do tempo da configuração** (V033): `tenant_risk_config_history` e
+  `risk_rule_registry_history`, append-only, escritas pelo mesmo repositório que faz a alteração e
+  **na mesma transação** — histórico gravado à parte falta exatamente quando a mudança aconteceu.
+  Sem trigger de banco de propósito: esconderia a escrita de quem lê o serviço. `param_value` nulo
+  no histórico significa "voltou ao default global", que é uma mudança de controle como outra
+  qualquer. O caso que mais precisava disso é o kill switch — regra desligada por uma semana e
+  religada não deixava nenhum vestígio da semana em que não rodou.
+  **3. `updated_by` no registry**, que `tenant_risk_config` já tinha e era obrigatório lá:
+  desligar uma regra de risco é a operação mais sensível do sistema e era a única sem autoria. O
+  `X-Admin-Key` prova que quem chamou tinha a chave, não quem decidiu. Agora é exigido no `PUT`.
+  *Verificado:* `ConfigHistoryIntegrationTest` (Postgres real — o que se testa aqui é o SQL, e um
+  mock confirmaria a chamada, não a linha: duas alterações de override viram duas entradas com
+  autores distintos e a tabela viva mantém o valor corrente; desligar e religar deixa os dois
+  estados), `RiskScoringServiceTest` (parâmetro efetivo presente em regra que passou; regra sem
+  configuração não registra nada) e `RiskRuleRegistryServiceImplTest` (registry exige autoria).
+  ⚠️ Fica aberto o histórico de `subject_profiles`: é dado pessoal, e versionar cadastro multiplica
+  o volume sujeito a retenção de 10 anos e criptografia em repouso (Fase 6) — decidir junto com
+  aquele item, não antes.
 
 - [ ] **Fila de EDD separada e 4-eyes** — *parcialmente fechado*
   Fechado: **`SOLICITAR_DOCUMENTO`** (`fix/audit-top10`). "Falta um campo cadastral" e "é PEP"

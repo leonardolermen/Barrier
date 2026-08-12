@@ -9,6 +9,7 @@ import com.barrier.riskengine.tenant.config.service.TenantRiskConfigService;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -65,6 +66,20 @@ public class NewCompanyRiskRule implements RiskRule {
 
   @Override
   public String code() {
-    return "NEW_COMPANY";
+    return RULE_CODE;
+  }
+
+  /**
+   * Registrados mesmo quando a regra passa: sem isso, "por que a empresa aberta em fevereiro não
+   * foi pega em março?" fica sem resposta — a janela vigente em março pode ter sido outra, e
+   * {@code tenant_risk_config} é sobrescrito no lugar.
+   */
+  @Override
+  public Map<String, String> effectiveParameters(RiskContext context) {
+    return Map.of(
+        "months",
+        String.valueOf(tenantConfig.getInt(context.tenantId(), RULE_CODE, "months", defaultMonths)),
+        "score",
+        String.valueOf(tenantConfig.getInt(context.tenantId(), RULE_CODE, "score", defaultScore)));
   }
 }

@@ -44,13 +44,19 @@ public class RiskRuleRegistryEntity {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
+  /** Quem fez a última alteração; o histórico guarda as anteriores (V033). */
+  @Column(name = "updated_by", length = 120)
+  private String updatedBy;
+
   void update(
       String description,
       String criticality,
       boolean enabled,
       Instant validFrom,
       Instant validUntil,
-      Instant updatedAt) {
+      Instant updatedAt,
+      String updatedBy) {
+    this.updatedBy = updatedBy;
     this.description = description;
     this.criticality = criticality;
     this.enabled = enabled;
