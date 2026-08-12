@@ -62,15 +62,17 @@ persistido; `IdentityService.verify` devolve `IdentityResult(check, company)` e 
 até o motor de risco pelo `RiskContext`. Regras de PJ que consomem isso: `NewCompanyRiskRule`
 (empresa recém-aberta), `SensitiveCnaeRiskRule` (CNAE sensível a PLD-FT) e
 `CorporateStructureRiskRule` (KYB — sócio estrangeiro/PJ no QSA de 1º grau; árvore até 3º grau
-ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.1.0`.
+ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.6.0`.
 
 Watchlists (screening): **ingeridas** (ADR-0010) — `WatchlistImporter` (ApplicationRunner +
 @Scheduled) carrega `WatchlistSource`s numa tabela `watchlist_entries`; `LocalWatchlistProvider`
 casa por documento (exato). Fontes: semente `resources/watchlists/ceis-seed.csv`; CGU real
 (`CeisWatchlistSource`/`CnepWatchlistSource` — baixam o ZIP do Portal da Transparência, parseiam
 CSV ISO-8859-1 `;`); OFAC (`OfacWatchlistSource` — `sdn.csv` + `alt.csv`, entradas por nome sem
-documento, apelidos viram linhas próprias). Fontes que baixam são gated por config
-(`barrier.watchlist.cgu.enabled` / `.ofac.enabled`, **off por padrão** — dev/testes não baixam).
+documento, apelidos viram linhas próprias). CSNU/ONU (`UnWatchlistSource` — XML consolidado, INDIVIDUALS+ENTITIES, cada alias vira entrada,
+sem documento; obrigação da Lei 13.810/19, **ligada por padrão em prod**). Fontes que baixam são
+gated por config (`barrier.watchlist.cgu.enabled` / `.ofac.enabled` / `.un.enabled`, off por padrão
+em dev). Cobertura de SANCTION em prod vem de OFAC + CSNU (CEIS/CNEP agora são DEBARMENT).
 Match por **nome (fuzzy)**: `FuzzyNameWatchlistProvider` (Jaro-Winkler + `NameNormalizer` sobre
 as entradas sem documento; limiar/`min-name-length` configuráveis). Evolução: índice/blocking
 para volumes grandes do OFAC.
@@ -131,6 +133,21 @@ Fase B (mapeada, parcial): KYB de 1º grau já ativo (ver acima); pendentes: mon
 contínuo, reavaliação periódica, recálculo por transação, navegação do QSA até 3º grau (provedor
 KYB dedicado), e registro multi-tenant de endpoints.
 
+Cadastro de PF vindo do bureau: `PersonProfile` (identity/domain) é o simétrico do `CompanyProfile`
+— nascimento, nacionalidade e endereço saem do bureau e o `AssessmentProcessor` os persiste no
+`SubjectProfile` por patch (campo ausente preserva o que o parceiro declarou). Ocupação continua
+sendo declaração do cliente: bureau nenhum a fornece. O `FakeCpfBureauProvider` devolve o perfil
+completo, e o cenário `9998…` responde SEM cadastro para o gate da CMN 4.753 continuar exercitável.
+
+Rastro da consulta ao bureau (V031): `identity_checks.provider_reference` (o `QueryId` da
+BigDataCorp; nulo quando a fonte não fornece) e `raw_response` JSONB com **redação** de
+`MotherName` — ver `BureauTrace`. Desligável em `barrier.identity.store-raw-response`. ⚠️ dado
+pessoal: retenção e criptografia em repouso são pendências da Fase 6.
+
+Status `SOLICITAR_DOCUMENTO`: risco aprovado + cadastro incompleto sai da fila de EDD (não é
+reprovação — reprovar por falta de dado mentiria na trilha e contaminaria a taxa de recusa).
+`Assessment.decide` segue exigindo `EM_REVISAO`.
+
 Cadastro (CMN 4.753, ADR-0012): `SubjectProfile` (pacote `subject.profile`) é o cadastro
 completo do subject — 1:1 (`subject_profiles.subject_id UNIQUE`), separado do `Subject` (que
 continua sendo só a identidade mínima para dedup). Campos nullable divididos por tipo (PF:
@@ -170,6 +187,14 @@ contratar (ao contrário do Serpro). Desligado por padrão
 (`barrier.identity.bigboost.enabled=false`); credenciais via `BIGBOOST_ACCESS_TOKEN`/
 `BIGBOOST_TOKEN_ID`. `Result` vazio → NOT_FOUND; caso contrário a situação cadastral decide
 primeiro (ver acima) e só CPF regular chega à comparação de nome.
+
+Inidoneidade ≠ sanção (Onda 2): `MatchType.DEBARMENT` separa CEIS/CNEP de sanção financeira —
+inidoneidade em licitação não impede relacionamento bancário e gerava `REJECT` automático.
+`DebarmentMatchRule` (screening) + `DebarmentRiskRule` (risco, 200+REVIEW por documento no titular,
+100 sem recomendação por nome, nunca REJECT, sócio não escala). **Não** é `RegulatoryRiskRule` — é
+apetite de risco, desligável pelo registry (V030). Consequência: a CGU não conta mais como cobertura
+de `SANCTION`; a única fonte é a OFAC, então habilitar só a CGU em prod falha o
+`WatchlistReadinessGuard`. `ENGINE_VERSION` = `barrier-risk-rules/1.6.0`.
 
 Bureau real de CNPJ (Onda 2): `BigBoostCnpjBureauProvider` (`@Order(20)`, dataset `basic_data` da
 API de Empresas, mesma flag `barrier.identity.bigboost.enabled`) tira a cadeia de PJ do fail-open —

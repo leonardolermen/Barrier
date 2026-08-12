@@ -45,6 +45,27 @@ class ScreeningRulesTest {
     assertThat(hits.get(0).type()).isEqualTo(MatchType.SANCTION);
   }
 
+  /**
+   * CEIS/CNEP não podem entrar como sanção: assim geravam recusa automática de empresa que a lei
+   * não impede de ser cliente. São categoria própria, com peso de alerta.
+   */
+  @Test
+  void debarmentEUmaCategoriaSeparadaDeSancao() {
+    var context =
+        contextWith(
+            new WatchlistEntry(MatchType.DEBARMENT, MatchBasis.DOCUMENT, TITULAR, "CEIS", "F", "inidônea"),
+            new WatchlistEntry(MatchType.SANCTION, MatchBasis.DOCUMENT, TITULAR, "OFAC", "F", "sdn"));
+
+    var debarment = new DebarmentMatchRule().evaluate(context);
+    var sancao = new SanctionMatchRule().evaluate(context);
+
+    assertThat(debarment).hasSize(1);
+    assertThat(debarment.get(0).type()).isEqualTo(MatchType.DEBARMENT);
+    assertThat(debarment.get(0).source()).isEqualTo("CEIS");
+    assertThat(sancao).hasSize(1);
+    assertThat(sancao.get(0).source()).isEqualTo("OFAC");
+  }
+
   @Test
   void semRegistrosNaoGeraApontamento() {
     var hits = new PepMatchRule().evaluate(contextWith());

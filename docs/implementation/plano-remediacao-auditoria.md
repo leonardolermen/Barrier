@@ -435,14 +435,61 @@ de outro tenant.
   dataset de relacionamentos — vira item do UBO, abaixo.
 
 
-- [ ] **CSNU/ONU** — obrigação legal direta (Lei 13.810/19, indisponibilidade imediata de ativos).
-  É a lista mais obrigatória de todas e é a que **não** existe.
-  *Pronto quando:* nova `WatchlistSource` ativa e coberta pelo readiness guard.
+- [x] **CSNU/ONU** — obrigação legal direta (Lei 13.810/19, indisponibilidade imediata de ativos)
+  — `fix/audit-top10`
+  Era a lista mais obrigatória de todas e a única que **não** existia: o motor decidia PLD-FT sem
+  nunca consultá-la. `UnWatchlistSource` ingere a lista consolidada (XML único, pessoas em
+  `INDIVIDUALS` e entidades em `ENTITIES`), declara `provides() = SANCTION` — então entra
+  automaticamente na cobertura exigida pelo `WatchlistReadinessGuard` — e está **ligada por padrão
+  no profile `prod`**, porque não é decisão de apetite.
+  O nome vem quebrado em até quatro campos e é remontado; **cada alias vira entrada própria**, como
+  os `aka` da OFAC: a ONU publica grafias alternativas porque transliteração do árabe/cirílico
+  varia, e casar só o nome principal perde o apontamento por diferença de grafia.
+  Sem documento: o CSNU identifica por nome, nacionalidade e data de nascimento, e não publica
+  CPF/CNPJ. O casamento é sempre por nome, ou seja, sempre `MatchBasis.NAME` — pontua alto e escala
+  para revisão humana, sem reprovar sozinho, que é o comportamento já existente da
+  `SanctionRiskRule`.
+  *Verificado:* `UnWatchlistSourceTest` — nome remontado dos quatro campos, alias virando entrada,
+  alias vazio ignorado, ausência de documento, classificação como `SANCTION`, e o detalhe trazendo
+  referência (`TAi.004`) e regime para o analista achar a entrada na fonte. Inclui **recusa de XML
+  com DOCTYPE**: lista de terceiro é entrada não confiável, e com entidades externas habilitadas um
+  arquivo publicado ou interceptado leria arquivo local ou faria o serviço bater em endereço interno
+  (XXE).
+  ⚠️ Como CEIS/CNEP saíram de `SANCTION` (item acima), a cobertura de sanção em produção agora vem
+  de **OFAC + CSNU** — as duas precisam estar habilitadas.
 
-- [ ] **Separar CEIS/CNEP de sanção financeira**
-  Inidoneidade em licitação **não** impede relacionamento bancário, e hoje gera `REJECT`
-  automático — negação de serviço a empresa legalmente apta.
-  *Pronto quando:* `MatchType.DEBARMENT` com peso de alerta, não de bloqueio.
+- [ ] **Sem limite de vazão na entrega de webhook** *(achado ao rodar carga)*
+  Observado com k6: o intake sustenta o ramp, mas cada avaliação concluída vira uma entrega, e o
+  retry com backoff não tem teto **por tenant**. Com 1004 avaliações na fila e 2800 entregas
+  falhadas, o serviço passou a metralhar o endpoint do cliente — 1818 vencidas simultaneamente,
+  reivindicadas de 100 em 100 a cada 5s. Um parceiro com endpoint lento ou fora do ar vira alvo do
+  próprio backlog: o retry que existe para ajudá-lo é o que o derruba.
+  Não é o problema de escala da Onda 3 (aquele é o custo por avaliação); é ausência de controle de
+  vazão na saída.
+  *Pronto quando:* existe teto de entregas por minuto por tenant, e o backoff é global por endpoint
+  e não por linha.
+
+- [x] **Separar CEIS/CNEP de sanção financeira** — `fix/audit-top10`
+  Inidoneidade em licitação **não** impede relacionamento bancário, e gerava `REJECT` automático —
+  negação de serviço a empresa legalmente apta. `MatchType.DEBARMENT` é categoria própria;
+  `CeisWatchlistSource`/`CnepWatchlistSource` passaram a produzi-la, `DebarmentMatchRule` a
+  transforma em apontamento e `DebarmentRiskRule` dá **peso de alerta**: 200 + REVIEW para match por
+  documento no titular (CNPJ exato, sem ambiguidade — o analista decide com o contexto do negócio),
+  100 e sem recomendação para match por nome. Nunca recusa automática, e nunca escala por
+  apontamento de sócio: a entidade punida é ele, não a empresa avaliada.
+  O apontamento **continua na trilha e continua pesando** — é informação reputacional legítima para
+  PLD-FT e pode levar à revisão pela banda de score somado a outros fatores. O que deixou de existir
+  é o caminho direto para a recusa.
+  `DEBARMENT` **não** entra em `RegulatoryRiskRules`, de propósito: nenhuma norma do Bacen manda
+  recusar conta por inidoneidade em licitação, então é regra de apetite de risco e pode ser
+  desligada pelo registry como qualquer outra (V030).
+  ⚠️ **Consequência operacional:** a CGU deixa de contar como cobertura de `SANCTION`. A única fonte
+  de sanção financeira passa a ser a OFAC — habilitar só a CGU em `prod` agora falha no
+  `WatchlistReadinessGuard`, o que é a verdade que antes ficava escondida.
+  `ENGINE_VERSION` → `1.6.0` (mudou o que é decidido, não só o que é registrado).
+  *Verificado:* `DebarmentRiskRuleTest` (documento no titular → REVIEW e nunca REJECT; nome → só
+  pontua; sócio não escala; evidência identifica parte e fonte) e `ScreeningRulesTest` — CEIS e OFAC
+  no mesmo screening produzem apontamentos de categorias diferentes.
 
 - [x] **Screening dos sócios PF e do representante legal** — `fix/audit-top10`
   O screening consultava só o titular: PJ com situação ATIVA, CNAE inócuo e um sócio na SDN saía
@@ -505,10 +552,59 @@ de outro tenant.
   *Pronto quando:* uma decisão antiga é reproduzível a partir do que está gravado, incluindo os
   parâmetros efetivos de todas as regras.
 
-- [ ] **Fila de EDD separada e 4-eyes**
-  "Falta um campo cadastral" e "é PEP" caem na mesma fila, com a mesma severidade e o mesmo
-  fluxo de decisão. Faltam `SOLICITAR_DOCUMENTO`, `BLOQUEIO_TEMPORARIO`, `ESCALADO_AML`.
+- [ ] **Fila de EDD separada e 4-eyes** — *parcialmente fechado*
+  Fechado: **`SOLICITAR_DOCUMENTO`** (`fix/audit-top10`). "Falta um campo cadastral" e "é PEP"
+  caíam na mesma fila, com a mesma severidade — e o volume que o time de operações mais via era
+  justamente o que menos precisava dele: numa base de teste, **7501 de 7529** avaliações em
+  `EM_REVISAO` eram `APPROVE · score 0` rebaixadas por cadastro incompleto. Agora risco aprovado +
+  cadastro incompleto vira status próprio, fora da fila de análise.
+  **Não virou reprovação**, e a escolha é deliberada: reprovar por falta de dado mentiria na trilha
+  (a recusa não teria fator de risco que a justificasse pelo nome — a mesma regra que a correção da
+  banda de score estabeleceu), contaminaria a taxa de recusa que o regulador lê como indicador de
+  PLD-FT, e seria terminal. Sai do estado completando o cadastro e submetendo nova avaliação;
+  `Assessment.decide` continua exigindo `EM_REVISAO`, para ninguém "aprovar" cadastro que segue
+  incompleto.
+  Junto veio a redução do volume na origem: o bureau agora **preenche** o cadastro de PF (ver
+  `PersonProfile`), então nascimento, nacionalidade e endereço deixam de ser cobrados do parceiro.
+  Sobra ocupação, que bureau nenhum fornece.
+  *Verificado:* `AssessmentProcessorTest` — aprovado com cadastro incompleto vai para
+  `SOLICITAR_DOCUMENTO` e não para `EM_REVISAO`/`REPROVADO`; o que já era revisão por risco continua
+  em revisão.
+  Aberto: `BLOQUEIO_TEMPORARIO`, `ESCALADO_AML` e o 4-eyes.
   *Pronto quando:* PEP/mídia negativa exigem aprovação de dois revisores distintos.
+
+- [x] **Cadastro de PF vinha do bureau e era descartado** — `fix/audit-top10`
+  `BureauResult` só carregava `CompanyProfile`: os dados objetivos de PJ eram persistidos no
+  cadastro, os de PF não tinham por onde entrar. O efeito era que **toda** avaliação de pessoa
+  física era rebaixada por cadastro incompleto, mesmo com o bureau tendo respondido — e nem o
+  bureau real resolveria, porque o `BigBoostBureauProvider` mapeava só nome e situação cadastral.
+  `PersonProfile` fecha a simetria (nascimento, nacionalidade, endereço), persistido por patch —
+  campo que o bureau não trouxe preserva o que o parceiro declarou. O bureau simulado devolve o
+  perfil completo, e ganhou o cenário `9998…` = "responde sem dados cadastrais", para o gate da
+  CMN 4.753 continuar exercitável em dev: mock que sempre completa o cadastro esconderia o
+  rebaixamento, que é o mesmo erro do stub que aprovava tudo.
+  *Verificado:* `FakeCpfBureauPersonProfileTest` — o perfil do bureau sozinho deixa faltando
+  **exatamente** `ocupação`, e com ela declarada o cadastro fecha.
+
+- [x] **Consulta ao bureau não deixava rastro verificável** — `fix/audit-top10`
+  `identity_checks` guardava provider, status, detail e instante — tudo afirmação nossa sobre nós
+  mesmos. Não dava para conferir contra o extrato do provedor numa inspeção, reconciliar a fatura
+  (cada consulta é paga) nem investigar uma contestação sem refazer a consulta, que hoje
+  responderia outra coisa. É a mesma lacuna que `sources_json` fechou para as listas, deixada
+  aberta só no bureau.
+  `provider_reference` (o `QueryId` da BigDataCorp) e `raw_response` em JSONB (V031). O payload vai
+  **com redação** dos campos que o projeto já decidiu não guardar — nome da mãe é fator de
+  autenticação, e a decisão de guardar só o resultado da comparação estava documentada no DTO desde
+  que ele existe; gravar o bruto a desfaria em silêncio. O `QueryId` é o ponteiro para a cópia
+  íntegra que o provedor mantém sob o controle de acesso dele.
+  Fonte sem identificador de consulta (BrasilAPI) fica com `provider_reference` nulo — registrar a
+  ausência é mais honesto que inventar um id nosso.
+  *Verificado:* `BureauTraceTest` — extrai o id, redige o nome da mãe preservando o que sustentou a
+  decisão, guarda só o ponteiro com a persistência desligada, e corpo ilegível não derruba a
+  verificação (rastro é evidência, não decisão).
+  ⚠️ Isto passa a guardar dado pessoal por avaliação: **retenção de 10 anos e criptografia em
+  repouso (Fase 6) valem explicitamente para `raw_response`**. Até lá é desligável em
+  `barrier.identity.store-raw-response`.
 
 - [ ] **Contract tests + golden dataset**
   Nenhum teste valida o schema de BrasilAPI/CGU/OFAC: mudança de coluna quebra em produção, em

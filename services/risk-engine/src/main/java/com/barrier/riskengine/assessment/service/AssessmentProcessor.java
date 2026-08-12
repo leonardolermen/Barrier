@@ -5,6 +5,7 @@ import com.barrier.riskengine.assessment.domain.AssessmentId;
 import com.barrier.riskengine.assessment.domain.AssessmentStatus;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
+import com.barrier.riskengine.identity.domain.PersonProfile;
 import com.barrier.riskengine.identity.service.IdentityResult;
 import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
@@ -177,6 +178,12 @@ public class AssessmentProcessor {
     if (identity.company() != null) {
       persistCompanyProfile(subjectId, assessment.tenantId(), identity.company());
     }
+    // Simétrico do de PJ. Sem isto, os dados objetivos de pessoa física que o bureau já devolveu
+    // eram descartados, e TODA avaliação de PF era rebaixada para revisão por cadastro incompleto —
+    // enchendo a fila de EDD com casos que não pedem julgamento humano nenhum.
+    if (identity.person() != null) {
+      persistPersonProfile(subjectId, assessment.tenantId(), identity.person());
+    }
     // O cadastro é lido ANTES do screening: é dele que sai o representante legal a consultar.
     SubjectProfile profile = subjectProfileService.find(subjectId, assessment.tenantId());
 
@@ -204,7 +211,10 @@ public class AssessmentProcessor {
     RegistrationCompleteness completeness =
         RegistrationCompleteness.evaluate(assessment.documentType().name(), profile);
     if (!completeness.complete() && finalStatus == AssessmentStatus.APROVADO) {
-      finalStatus = AssessmentStatus.EM_REVISAO;
+      // Fila própria, não EDD: falta de campo cadastral não pede analista, pede o campo. Enquanto
+      // isso virava EM_REVISAO, o que o time de operações mais via era justamente o que menos
+      // precisava dele. Também não vira reprovação — ver AssessmentStatus.SOLICITAR_DOCUMENTO.
+      finalStatus = AssessmentStatus.SOLICITAR_DOCUMENTO;
       factors.add("Cadastro incompleto: " + String.join(", ", completeness.missingFields()));
     }
 
@@ -325,6 +335,46 @@ public class AssessmentProcessor {
             null,
             null,
             partners));
+  }
+
+  /**
+   * Persiste os dados objetivos de PF vindos do bureau (nascimento, nacionalidade, endereço).
+   *
+   * <p>É um {@code patch}: campo que o bureau não trouxe preserva o que o parceiro já declarou, e
+   * nunca sobrescreve com nulo. Ocupação não entra porque bureau não a fornece — segue sendo
+   * declaração do cliente, e é correto que o gate de completude continue cobrando-a.
+   */
+  private void persistPersonProfile(UUID subjectId, String tenantId, PersonProfile person) {
+    PersonProfile.Address from = person.address();
+    SubjectProfile.Address address =
+        from == null
+            ? null
+            : new SubjectProfile.Address(
+                from.street(),
+                from.number(),
+                from.complement(),
+                from.district(),
+                from.city(),
+                from.state(),
+                from.zipCode());
+    subjectProfileService.upsert(
+        subjectId,
+        tenantId,
+        new SubjectProfilePatch(
+            person.birthDate(),
+            null,
+            person.nationality(),
+            null,
+            null,
+            address,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null));
   }
 
   private static AssessmentStatus toStatus(RiskRecommendation recommendation) {

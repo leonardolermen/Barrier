@@ -58,7 +58,7 @@ public class RiskScoringService {
   //
   // 1.2.0: IDENTITY_UNAVAILABLE passou a forçar REVIEW (era fail-open para APPROVE) e SANCTION
   // separou match por documento (REJECT) de match por nome (REVIEW).
-  static final String ENGINE_VERSION = "barrier-risk-rules/1.5.0";
+  static final String ENGINE_VERSION = "barrier-risk-rules/1.6.0";
   private static final int MAX_SCORE = 1000;
 
   private final List<RiskRule> rules;

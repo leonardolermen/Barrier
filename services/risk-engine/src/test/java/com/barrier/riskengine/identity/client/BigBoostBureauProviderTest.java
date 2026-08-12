@@ -23,7 +23,7 @@ class BigBoostBureauProviderTest {
 
   private final RestClient.Builder builder = RestClient.builder();
   private final MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-  private final BigBoostBureauProvider provider = new BigBoostBureauProvider(builder.build(), 0.85);
+  private final BigBoostBureauProvider provider = new BigBoostBureauProvider(builder.build(), new tools.jackson.databind.ObjectMapper(), 0.85, true);
 
   @Test
   void cpfEncontradoComNomeCompativelRetornaMatch() {

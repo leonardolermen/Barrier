@@ -7,6 +7,8 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -34,6 +36,15 @@ class IdentityCheckEntity {
 
   @Column(name = "checked_at", nullable = false)
   private Instant checkedAt;
+
+  /** Id da consulta no provedor (QueryId); nulo quando a fonte não fornece. Ver V031. */
+  @Column(name = "provider_reference", length = 120)
+  private String providerReference;
+
+  /** Resposta do bureau, com redação dos campos sensíveis. JSONB — ver V031. */
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "raw_response", columnDefinition = "jsonb")
+  private String rawResponse;
 
   protected IdentityCheckEntity() {
     // JPA
@@ -77,6 +88,22 @@ class IdentityCheckEntity {
 
   void setDetail(String detail) {
     this.detail = detail;
+  }
+
+  String getProviderReference() {
+    return providerReference;
+  }
+
+  void setProviderReference(String providerReference) {
+    this.providerReference = providerReference;
+  }
+
+  String getRawResponse() {
+    return rawResponse;
+  }
+
+  void setRawResponse(String rawResponse) {
+    this.rawResponse = rawResponse;
   }
 
   Instant getCheckedAt() {
