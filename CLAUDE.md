@@ -149,8 +149,15 @@ reprovação — reprovar por falta de dado mentiria na trilha e contaminaria a 
 `Assessment.decide` segue exigindo `EM_REVISAO`.
 
 Cadastro (CMN 4.753, ADR-0012): `SubjectProfile` (pacote `subject.profile`) é o cadastro
-completo do subject — 1:1 (`subject_profiles.subject_id UNIQUE`), separado do `Subject` (que
-continua sendo só a identidade mínima para dedup). Campos nullable divididos por tipo (PF:
+completo do subject — **um por (subject, tenant declarante)**
+(`subject_profiles UNIQUE (subject_id, tenant_id)`, V024), separado do `Subject` (que
+continua sendo só a identidade mínima para dedup e segue global). O dossiê **não** é
+compartilhado entre parceiros: cadastro global era lido e escrito por qualquer tenant com
+vínculo — e vínculo nasce de um `POST` —, o que vazava o dossiê do cliente alheio e permitia
+induzir aprovação automática completando o cadastro de outro. Por isso nem
+`SubjectProfileRepository` nem `SubjectProfileService` têm assinatura que aceite só o
+`subjectId`: o tipo do método é a defesa. Enriquecimento pelo bureau grava sob o tenant da
+avaliação. Campos nullable divididos por tipo (PF:
 `birthDate`/`nationality`/`occupation`; PJ: `foundingDate`/`cnaeCode`/`shareCapital`/
 `legalRepresentative*`/`partners`); `partners` serializado em `partners_json` (mesmo padrão de
 `hits_json`/`results_json`). Cadastro é progressivo: `PUT /v1/subjects/{document}/profile`
@@ -284,6 +291,16 @@ duplicada na tabela. `IdempotencyService` roda em `REQUIRES_NEW`: a reserva prec
 antes da avaliação (é o índice único que serializa requisições concorrentes) e a liberação precisa
 sobreviver ao rollback da submissão que falhou. `AssessmentService.submit` devolve
 `SubmissionResult(assessment, replayed)`.
+
+Monitoramento contínuo (Circular 3.978): `RescreeningService` (pacote `rescreening`) reavalia
+clientes quando uma lista passa a apontá-los. O gatilho é o **delta** da importação
+(`WatchlistDelta`, calculado dentro do `replaceSource`); casa por documento e por nome (OFAC/CSNU
+não publicam documento), com o mesmo limiar do screening. Reavaliar = submeter avaliação nova pelo
+pipeline normal, com `origin = RESCREENING` e `origin_detail = fonte@versão` (V032) — não há
+caminho paralelo de decisão. Travas: importação sobre base vazia é linha de base e não dispara;
+teto `barrier.rescreening.max-subjects-per-import` aborta e grita (delta gigante = fonte que mudou
+de layout); uma avaliação por (subject, tenant) por importação. Desligável em
+`barrier.rescreening.enabled`.
 
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do

@@ -40,6 +40,8 @@ final class AssessmentEntityMapper {
     e.setLastError(a.lastError());
     e.setNextAttemptAt(a.nextAttemptAt());
     e.setCorrelationId(a.correlationId());
+    e.setOrigin(a.origin());
+    e.setOriginDetail(a.originDetail());
   }
 
   static Assessment toDomain(AssessmentEntity e) {
@@ -64,7 +66,9 @@ final class AssessmentEntityMapper {
         e.getLastError(),
         e.getNextAttemptAt(),
         e.getVersion(),
-        e.getCorrelationId());
+        e.getCorrelationId(),
+        e.getOrigin(),
+        e.getOriginDetail());
   }
 
   private static List<String> parseFactors(String factors) {

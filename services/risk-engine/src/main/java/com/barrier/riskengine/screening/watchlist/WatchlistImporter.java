@@ -1,5 +1,7 @@
 package com.barrier.riskengine.screening.watchlist;
 
+import com.barrier.riskengine.rescreening.service.RescreeningService;
+import com.barrier.riskengine.screening.domain.WatchlistDelta;
 import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import java.util.List;
 
@@ -36,14 +38,17 @@ public class WatchlistImporter implements ApplicationRunner {
   private final List<WatchlistSource> sources;
   private final WatchlistEntryRepository repository;
   private final WatchlistImportStatus status;
+  private final RescreeningService rescreening;
 
   public WatchlistImporter(
       List<WatchlistSource> sources,
       WatchlistEntryRepository repository,
-      WatchlistImportStatus status) {
+      WatchlistImportStatus status,
+      RescreeningService rescreening) {
     this.sources = sources;
     this.repository = repository;
     this.status = status;
+    this.rescreening = rescreening;
   }
 
   @Override
@@ -78,16 +83,34 @@ public class WatchlistImporter implements ApplicationRunner {
         log.error("Watchlist {}: {}", source.source(), problem);
         return;
       }
-      repository.replaceSource(source.source(), batch.version(), batch.records());
+      WatchlistDelta delta =
+          repository.replaceSource(source.source(), batch.version(), batch.records());
       status.recordSuccess(source, batch.records().size());
       log.info(
-          "Watchlist {} importada: {} entradas (versão {})",
+          "Watchlist {} importada: {} entradas (versão {}), {} nova(s)",
           source.source(),
           batch.records().size(),
-          batch.version());
+          batch.version(),
+          delta.baseline() ? "linha de base — 0" : delta.added().size());
+      triggerRescreening(source.source(), batch.version(), delta);
     } catch (RuntimeException e) {
       status.recordFailure(source, e.getMessage());
       log.error("Falha ao importar a watchlist {}; mantendo a versão anterior", source.source(), e);
+    }
+  }
+
+  /**
+   * Roda depois de registrar o sucesso e <b>fora</b> do catch da importação: a lista já está
+   * gravada e utilizável pelo screening, e o monitoramento contínuo é consequência dela, não
+   * condição. Dentro do bloco anterior, uma falha ao reavaliar clientes marcaria a importação
+   * como falha — a lista boa que acabou de entrar sumiria da cobertura, e o
+   * {@code WatchlistReadinessGuard} passaria a acusar ausência de uma fonte que está lá.
+   */
+  private void triggerRescreening(String source, String version, WatchlistDelta delta) {
+    try {
+      rescreening.onImported(source, version, delta);
+    } catch (RuntimeException e) {
+      log.error("Monitoramento contínuo falhou após importar {}; a lista segue válida", source, e);
     }
   }
 }

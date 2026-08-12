@@ -1,5 +1,6 @@
 package com.barrier.riskengine.screening.repository.interfaces;
 
+import com.barrier.riskengine.screening.domain.WatchlistDelta;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.util.List;
 import java.util.Map;
@@ -7,8 +8,15 @@ import java.util.Map;
 /** Repositório de domínio das entradas de watchlist ingeridas. */
 public interface WatchlistEntryRepository {
 
-  /** Substitui todas as entradas de uma fonte pelo novo lote (importação idempotente). */
-  void replaceSource(String source, String version, List<WatchlistRecord> records);
+  /**
+   * Substitui todas as entradas de uma fonte pelo novo lote (importação idempotente) e devolve o
+   * que mudou.
+   *
+   * <p>O delta é calculado <b>dentro</b> da substituição porque é o único ponto onde as duas
+   * versões da lista coexistem: logo depois do {@code DELETE} a anterior deixou de existir, e
+   * reconstruí-la exigiria versionar a tabela inteira.
+   */
+  WatchlistDelta replaceSource(String source, String version, List<WatchlistRecord> records);
 
   /** Entradas que casam com o documento (match exato por CPF/CNPJ). */
   List<WatchlistRecord> findByDocument(String document);

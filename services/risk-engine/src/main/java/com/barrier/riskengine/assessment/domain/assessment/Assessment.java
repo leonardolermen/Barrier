@@ -39,6 +39,12 @@ public class Assessment {
   private String reviewReason;
   private Instant reviewedAt;
 
+  /** Por que esta avaliação existe; ver {@link AssessmentOrigin}. */
+  private AssessmentOrigin origin = AssessmentOrigin.ONBOARDING;
+
+  /** Fonte e versão da lista que disparou o rescreening; nulo em avaliação de onboarding. */
+  private String originDetail;
+
   /**
    * Versão da linha no momento em que o agregado foi carregado. O domínio não usa este número para
    * nada — ele existe porque, sem carregá-lo, a checagem de concorrência otimista era feita contra
@@ -86,6 +92,25 @@ public class Assessment {
     return assessment;
   }
 
+  /**
+   * Avaliação criada pelo monitoramento contínuo. Mesmo agregado e mesmo pipeline do onboarding —
+   * só a trilha registra que quem pediu foi o motor, e por causa de qual mudança de lista.
+   *
+   * @param originDetail fonte e versão da lista que disparou (ex.: {@code OFAC@2026-08-12})
+   */
+  public static Assessment rescreen(
+      String tenantId,
+      String subjectId,
+      DocumentType documentType,
+      String rawDocument,
+      String name,
+      String originDetail) {
+    Assessment assessment = submit(tenantId, subjectId, documentType, rawDocument, name);
+    assessment.origin = AssessmentOrigin.RESCREENING;
+    assessment.originDetail = originDetail;
+    return assessment;
+  }
+
   /** Reconstrói o agregado a partir da persistência. */
   public static Assessment rehydrate(
       AssessmentId id,
@@ -108,10 +133,14 @@ public class Assessment {
       String lastError,
       Instant nextAttemptAt,
       long version,
-      String correlationId) {
+      String correlationId,
+      AssessmentOrigin origin,
+      String originDetail) {
     Assessment a =
         new Assessment(id, tenantId, subjectId, documentType, documentDigits, name, createdAt);
     a.correlationId = correlationId;
+    a.origin = origin == null ? AssessmentOrigin.ONBOARDING : origin;
+    a.originDetail = originDetail;
     a.version = version;
     a.reviewedByKey = reviewedByKey;
     a.attempts = attempts;
@@ -233,6 +262,14 @@ public class Assessment {
 
   public AssessmentId id() {
     return id;
+  }
+
+  public AssessmentOrigin origin() {
+    return origin;
+  }
+
+  public String originDetail() {
+    return originDetail;
   }
 
   public String tenantId() {

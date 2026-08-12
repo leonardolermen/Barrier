@@ -525,22 +525,67 @@ de outro tenant.
 - [ ] **UBO ≥25%** — provedor KYB com percentual de participação; QSA da BrasilAPI não traz.
   *Pronto quando:* UBO indeterminado força REVIEW.
 
-- [ ] **Rescreening / monitoramento contínuo**
-  O motor roda **uma vez, no onboarding**. Cliente aprovado em janeiro e sancionado em março
-  nunca é reavaliado. Exigência direta da Circular 3.978, e o gap mais silencioso de todos —
-  não falha, simplesmente nunca acontece.
-  *Pronto quando:* delta de cada importação dispara reavaliação dos subjects ativos.
+- [x] **Rescreening / monitoramento contínuo** 🔴
+  O motor rodava **uma vez, no onboarding**: cliente aprovado em janeiro e sancionado em março
+  seguia aprovado para sempre. Não falhava — simplesmente nunca acontecia, que é por que não
+  aparecia em log nem em métrica.
+  O gatilho é o **delta** de cada importação (`WatchlistDelta`, calculado dentro do
+  `replaceSource` — único ponto onde as duas versões da lista coexistem, já que a base é
+  substituída inteira). Quem casa com uma entrada nova é reavaliado: **por documento** (CEIS/CNEP
+  e parte da OFAC) e **por nome** (OFAC e CSNU não publicam documento — sem esse caminho o
+  monitoramento cobriria só inidoneidade e ignoraria sanção financeira, que é a obrigação legal).
+  O limiar e o piso de tamanho de nome são os mesmos do screening da avaliação: divergir produziria
+  cliente que o monitoramento levanta e a avaliação resultante não confirma.
+  Reavaliar é **submeter uma avaliação nova pelo mesmo pipeline** (`AssessmentService.submit`, com
+  `origin = RESCREENING` e `origin_detail = fonte@versão`, migration V032). Um caminho paralelo que
+  só refizesse o screening decidiria diferente do onboarding sobre o mesmo cliente e não produziria
+  decisão, evento nem webhook — o parceiro fica sabendo pelo canal de sempre. Sem
+  `Idempotency-Key`: reaproveitar a decisão anterior devolveria exatamente o resultado tomado antes
+  de o cliente estar na lista.
+  Três travas contra a avalanche: **linha de base** (importação sobre fonte vazia não dispara nada
+  — senão subir o sistema ou ligar uma fonte nova reavaliaria toda a base), **teto por importação**
+  (acima dele aborta e grita, porque delta gigante é fonte que mudou de layout e cada reavaliação
+  custa uma consulta de bureau paga) e **uma avaliação por (subject, tenant) por importação**.
+  Reavaliação é por tenant, não por subject: o subject é global, a decisão não.
+  *Verificado:* `RescreeningServiceTest` (9 casos — documento; nome invertido `SILVA, JOSE ANTONIO`
+  casando com `Jose Antonio da Silva`; homônimo parcial que não casa; um por tenant vinculado;
+  cliente afetado por duas entradas gerando uma avaliação só; linha de base; teto; falha em um
+  cliente não interrompe os demais; desligado não toca na base) e `WatchlistImporterTest` (delta
+  repassado com fonte e versão; falha do rescreening não invalida a importação).
+  ⚠️ Custo: o match por nome é entradas novas × clientes, uma vez por importação. A base de
+  clientes é percorrida em páginas, mas continua sendo varredura sem índice — é o mesmo problema
+  do `findNameEntries()` listado na Onda 3, e escala junto com ele.
+  ⚠️ Cobre quem **entra** na lista. Quem sai dela não dispara nada, e reavaliação periódica de
+  quem nunca casou com nada (revisão cadastral por prazo) continua aberta.
 
 - [ ] **Verificar dados, não só presença**
   `RegistrationCompleteness` checa se o campo está preenchido, não se é verdadeiro: preencher
   com dados plausíveis satisfaz o gate e libera aprovação automática.
   *Pronto quando:* OTP de telefone/e-mail, validação de endereço, nascimento contra bureau.
 
-- [ ] **Proveniência por tenant no `SubjectProfile`**
-  O cadastro é **global e gravável por qualquer tenant vinculado** — e o vínculo nasce de um
-  simples `POST`. Um tenant pode completar o cadastro de um subject alheio e **induzir aprovação
-  automática** em outro parceiro.
-  *Pronto quando:* escrita é atribuída ao tenant; um tenant não altera o que outro declarou.
+- [x] **Proveniência por tenant no `SubjectProfile`** 🔴 — `fix/audit-top10`
+  O cadastro era **global e gravável por qualquer tenant vinculado**, e o vínculo nasce de um
+  simples `POST /v1/assessments`. Isso furava nas duas direções:
+  **escrita** — um tenant completava o cadastro de um subject alheio e satisfazia o gate de
+  `RegistrationCompleteness` de outro parceiro, induzindo aprovação automática numa avaliação que
+  deveria cair em revisão; **leitura** — o `PUT .../profile` devolvia o cadastro depois do merge e
+  patch vazio não altera nada, então duas chamadas (POST para criar o vínculo, `PUT {}` para ler)
+  entregavam endereço, telefone, e-mail, nascimento, renda declarada e representante legal do
+  cliente de outro parceiro.
+  A chave virou `(subject_id, tenant_id)` (V024, com backfill atribuindo cada perfil ao tenant que
+  primeiro se vinculou ao subject). O `Subject` continua global — é o que sustenta a deduplicação
+  por documento; o que deixou de ser compartilhado é o dossiê. `SubjectProfileRepository` e
+  `SubjectProfileService` **não têm assinatura que aceite só o `subjectId`**: o tipo do método é a
+  defesa, um endpoint novo não tem como esquecer de passar o tenant. O enriquecimento pelo bureau
+  (`persistPersonProfile`/`persistCompanyProfile`) grava sob o tenant da avaliação, e o
+  `ProfileResponse` passou a devolver só completude, não o cadastro.
+  *Verificado:* `TenantIsolationIntegrationTest` — `cadastroDeclaradoPorUmTenantNaoVazaParaOutro`
+  (a asserção é sobre a completude do tenant B, não sobre o formato da resposta: se B enxergasse o
+  cadastro de A, o checklist de B viria completo sem B ter declarado nada) e
+  `escritaDeUmTenantNaoAlteraOCadastroDoOutro`.
+  ⚠️ Consequência: o mesmo dado pessoal passa a existir uma vez por tenant declarante. Retenção e
+  criptografia em repouso (Fase 6) valem por linha. E o cadastro segue **sem histórico** — quem
+  mudou o quê e quando é o item de histórico versionado, logo abaixo.
 
 - [ ] **Histórico versionado de configuração** — *parcialmente fechado*
   Já resolvido: **quais regras estavam ativas** (`evaluated_json` distingue `SUPPRESSED` de

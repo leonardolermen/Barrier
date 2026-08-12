@@ -99,12 +99,23 @@ public class AssessmentService {
     subjectService.link(command.tenantId(), subject.id());
 
     Assessment assessment =
-        Assessment.submit(
-            command.tenantId(),
-            subject.id().toString(),
-            command.documentType(),
-            command.document(),
-            command.name());
+        switch (command.origin()) {
+          case ONBOARDING ->
+              Assessment.submit(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name());
+          case RESCREENING ->
+              Assessment.rescreen(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name(),
+                  command.originDetail());
+        };
     return repository.save(assessment);
   }
 

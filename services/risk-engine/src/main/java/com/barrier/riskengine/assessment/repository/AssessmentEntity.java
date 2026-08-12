@@ -1,5 +1,6 @@
 package com.barrier.riskengine.assessment.repository;
 
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
@@ -98,5 +99,12 @@ public class AssessmentEntity {
 
   @Column(name = "correlation_id", length = 64)
   private String correlationId;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "origin", nullable = false, length = 20)
+  private AssessmentOrigin origin;
+
+  @Column(name = "origin_detail", length = 200)
+  private String originDetail;
 
 }
