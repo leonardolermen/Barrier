@@ -3,11 +3,11 @@ package com.barrier.riskengine.assessment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.barrier.riskengine.assessment.controller.AssessmentResponse;
-import com.barrier.riskengine.assessment.controller.SubmitAssessmentRequest;
-import com.barrier.riskengine.assessment.domain.DocumentType;
-import com.barrier.riskengine.subject.profile.controller.ProfileResponse;
-import com.barrier.riskengine.subject.profile.controller.UpdateProfileRequest;
+import com.barrier.riskengine.assessment.controller.dto.AssessmentResponse;
+import com.barrier.riskengine.assessment.controller.dto.SubmitAssessmentRequest;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
+import com.barrier.riskengine.subject.profile.controller.dto.ProfileResponse;
+import com.barrier.riskengine.subject.profile.controller.dto.UpdateProfileRequest;
 import com.barrier.riskengine.tenant.repository.TenantRepository;
 import com.barrier.riskengine.tenant.service.ApiKeyService;
 import java.math.BigDecimal;

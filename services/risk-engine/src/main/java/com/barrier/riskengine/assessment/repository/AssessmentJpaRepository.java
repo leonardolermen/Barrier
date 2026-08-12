@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 
 /** Spring Data JPA — acesso técnico à tabela {@code assessments}. */
-interface AssessmentJpaRepository extends JpaRepository<AssessmentEntity, UUID> {
+public interface AssessmentJpaRepository extends JpaRepository<AssessmentEntity, UUID> {
 
   /**
    * Carrega a linha com {@code SELECT ... FOR UPDATE}, para que a comparação de versão feita em

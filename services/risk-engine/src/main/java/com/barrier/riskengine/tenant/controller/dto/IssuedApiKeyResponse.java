@@ -1,4 +1,4 @@
-package com.barrier.riskengine.tenant.controller;
+package com.barrier.riskengine.tenant.controller.dto;
 
 /**
  * Credencial recém-emitida.

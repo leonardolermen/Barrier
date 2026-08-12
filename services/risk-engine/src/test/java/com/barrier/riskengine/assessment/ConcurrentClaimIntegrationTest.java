@@ -2,8 +2,8 @@ package com.barrier.riskengine.assessment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.barrier.riskengine.assessment.domain.AssessmentId;
-import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.assessment.service.AssessmentService;
 import com.barrier.riskengine.assessment.service.SubmitAssessmentCommand;

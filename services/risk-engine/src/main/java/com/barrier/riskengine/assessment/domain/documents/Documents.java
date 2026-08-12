@@ -1,4 +1,6 @@
-package com.barrier.riskengine.assessment.domain;
+package com.barrier.riskengine.assessment.domain.documents;
+
+import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
 
 /** Normalização/validação de documento em um só lugar (usado pelo agregado e pelo subject). */
 public final class Documents {

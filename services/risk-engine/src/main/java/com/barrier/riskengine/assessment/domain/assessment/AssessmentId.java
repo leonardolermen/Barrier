@@ -1,4 +1,4 @@
-package com.barrier.riskengine.assessment.domain;
+package com.barrier.riskengine.assessment.domain.assessment;
 
 import java.util.Objects;
 import java.util.UUID;

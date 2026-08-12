@@ -1,5 +1,7 @@
 package com.barrier.riskengine.assessment.domain;
 
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+
 /**
  * Estado de uma chave de idempotência do intake.
  *

@@ -1,4 +1,4 @@
-package com.barrier.riskengine.assessment.controller;
+package com.barrier.riskengine.assessment.controller.dto;
 
 import java.time.Instant;
 import java.util.List;

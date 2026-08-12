@@ -1,13 +1,14 @@
 package com.barrier.riskengine.assessment.repository;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
-import com.barrier.riskengine.assessment.domain.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;

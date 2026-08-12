@@ -1,4 +1,4 @@
-package com.barrier.riskengine.assessment.controller;
+package com.barrier.riskengine.assessment.controller.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

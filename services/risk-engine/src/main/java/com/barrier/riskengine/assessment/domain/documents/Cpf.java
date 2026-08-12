@@ -1,4 +1,6 @@
-package com.barrier.riskengine.assessment.domain;
+package com.barrier.riskengine.assessment.domain.documents;
+
+import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
 
 /**
  * CPF válido (dígitos verificadores conferidos). Armazenado apenas com os 11 dígitos.

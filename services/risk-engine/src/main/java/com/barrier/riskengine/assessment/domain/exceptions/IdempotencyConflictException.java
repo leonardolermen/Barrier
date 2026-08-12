@@ -1,4 +1,4 @@
-package com.barrier.riskengine.assessment.domain;
+package com.barrier.riskengine.assessment.domain.exceptions;
 
 /**
  * A chave de idempotência não pode ser honrada como repetição: ou está sendo usada por uma

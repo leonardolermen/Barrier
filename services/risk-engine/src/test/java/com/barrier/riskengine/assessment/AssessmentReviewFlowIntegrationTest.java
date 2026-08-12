@@ -3,10 +3,10 @@ package com.barrier.riskengine.assessment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.barrier.riskengine.assessment.controller.AssessmentResponse;
-import com.barrier.riskengine.assessment.controller.ReviewDecisionRequest;
-import com.barrier.riskengine.assessment.controller.SubmitAssessmentRequest;
-import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.assessment.controller.dto.AssessmentResponse;
+import com.barrier.riskengine.assessment.controller.dto.ReviewDecisionRequest;
+import com.barrier.riskengine.assessment.controller.dto.SubmitAssessmentRequest;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentProcessor;
 import com.barrier.riskengine.tenant.service.ApiKeyService;
 import org.junit.jupiter.api.Test;

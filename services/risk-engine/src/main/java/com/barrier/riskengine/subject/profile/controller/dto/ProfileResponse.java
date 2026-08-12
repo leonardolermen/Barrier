@@ -1,4 +1,4 @@
-package com.barrier.riskengine.subject.profile.controller;
+package com.barrier.riskengine.subject.profile.controller.dto;
 
 import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import java.util.List;

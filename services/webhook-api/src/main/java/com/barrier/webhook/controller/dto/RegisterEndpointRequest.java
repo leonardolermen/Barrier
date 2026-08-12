@@ -1,4 +1,4 @@
-package com.barrier.webhook.controller;
+package com.barrier.webhook.controller.dto;
 
 /**
  * Corpo do registro de endpoint.

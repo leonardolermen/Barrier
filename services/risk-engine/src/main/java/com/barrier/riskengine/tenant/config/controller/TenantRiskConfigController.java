@@ -1,5 +1,8 @@
 package com.barrier.riskengine.tenant.config.controller;
 
+import com.barrier.riskengine.tenant.config.controller.dto.UpsertRiskConfigRequest;
+import com.barrier.riskengine.tenant.config.controller.dto.RiskConfigEntryResponse;
+
 import com.barrier.riskengine.tenant.config.domain.TenantRiskConfigEntry;
 import com.barrier.riskengine.tenant.config.repository.TenantRiskConfigRepository;
 import com.barrier.riskengine.tenant.config.validation.TenantRiskConfigValidator;

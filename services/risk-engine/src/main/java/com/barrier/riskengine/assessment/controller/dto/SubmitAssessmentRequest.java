@@ -1,6 +1,6 @@
-package com.barrier.riskengine.assessment.controller;
+package com.barrier.riskengine.assessment.controller.dto;
 
-import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

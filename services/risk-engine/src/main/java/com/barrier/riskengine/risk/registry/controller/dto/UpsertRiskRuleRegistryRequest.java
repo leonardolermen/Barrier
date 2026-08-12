@@ -1,4 +1,4 @@
-package com.barrier.riskengine.risk.registry.controller;
+package com.barrier.riskengine.risk.registry.controller.dto;
 
 import java.time.Instant;
 

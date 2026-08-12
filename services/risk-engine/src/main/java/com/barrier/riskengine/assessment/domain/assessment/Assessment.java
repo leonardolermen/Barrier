@@ -1,6 +1,11 @@
-package com.barrier.riskengine.assessment.domain;
+package com.barrier.riskengine.assessment.domain.assessment;
 
 import com.barrier.commons.observability.Correlation;
+import com.barrier.riskengine.assessment.domain.documents.Cnpj;
+import com.barrier.riskengine.assessment.domain.documents.Cpf;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
+import com.barrier.riskengine.assessment.domain.documents.Documents;
+import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import java.time.Instant;
 import java.util.List;

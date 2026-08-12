@@ -1,7 +1,7 @@
 package com.barrier.riskengine.assessment.repository;
 
-import com.barrier.riskengine.assessment.domain.AssessmentStatus;
-import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -1,4 +1,4 @@
-package com.barrier.riskengine.assessment.domain;
+package com.barrier.riskengine.assessment.domain.assessment;
 
 /** Estado do ciclo de vida de uma avaliação. */
 public enum AssessmentStatus {

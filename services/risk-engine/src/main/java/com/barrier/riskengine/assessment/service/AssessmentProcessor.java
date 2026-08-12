@@ -1,8 +1,8 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
-import com.barrier.riskengine.assessment.domain.AssessmentId;
-import com.barrier.riskengine.assessment.domain.AssessmentStatus;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
 import com.barrier.riskengine.assessment.repository.AssessmentRepository;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.domain.PersonProfile;

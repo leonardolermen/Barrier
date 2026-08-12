@@ -1,6 +1,6 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;

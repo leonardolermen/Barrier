@@ -1,4 +1,4 @@
-package com.barrier.riskengine.tenant.config.controller;
+package com.barrier.riskengine.tenant.config.controller.dto;
 
 import com.barrier.riskengine.tenant.config.domain.TenantRiskConfigEntry;
 import java.time.Instant;
@@ -12,13 +12,13 @@ public record RiskConfigEntryResponse(
     String updatedBy,
     Instant updatedAt) {
 
-  static RiskConfigEntryResponse override(TenantRiskConfigEntry entry) {
+  public static RiskConfigEntryResponse override(TenantRiskConfigEntry entry) {
     return new RiskConfigEntryResponse(
         entry.ruleCode(), entry.paramKey(), entry.paramValue(), true, entry.updatedBy(),
         entry.updatedAt());
   }
 
-  static RiskConfigEntryResponse fromDefault(String ruleCode, String paramKey, String value) {
+  public static RiskConfigEntryResponse fromDefault(String ruleCode, String paramKey, String value) {
     return new RiskConfigEntryResponse(ruleCode, paramKey, value, false, null, null);
   }
 }

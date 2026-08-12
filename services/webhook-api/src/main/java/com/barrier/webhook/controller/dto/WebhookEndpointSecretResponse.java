@@ -1,4 +1,4 @@
-package com.barrier.webhook.controller;
+package com.barrier.webhook.controller.dto;
 
 import com.barrier.webhook.domain.WebhookEndpoint;
 import java.time.Instant;
@@ -25,7 +25,7 @@ public record WebhookEndpointSecretResponse(
   private static final String AVISO =
       "Guarde agora e configure no parceiro: este valor não é recuperável.";
 
-  static WebhookEndpointSecretResponse from(WebhookEndpoint endpoint) {
+  public static WebhookEndpointSecretResponse from(WebhookEndpoint endpoint) {
     return new WebhookEndpointSecretResponse(
         endpoint.tenantId(),
         endpoint.targetUrl(),

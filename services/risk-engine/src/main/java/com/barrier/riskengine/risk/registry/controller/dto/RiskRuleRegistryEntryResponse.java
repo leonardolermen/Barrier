@@ -1,4 +1,4 @@
-package com.barrier.riskengine.risk.registry.controller;
+package com.barrier.riskengine.risk.registry.controller.dto;
 
 import com.barrier.riskengine.risk.registry.domain.RiskRuleRegistryEntry;
 import java.time.Instant;
@@ -12,7 +12,7 @@ public record RiskRuleRegistryEntryResponse(
     Instant validUntil,
     Instant updatedAt) {
 
-  static RiskRuleRegistryEntryResponse of(RiskRuleRegistryEntry entry) {
+  public static RiskRuleRegistryEntryResponse of(RiskRuleRegistryEntry entry) {
     return new RiskRuleRegistryEntryResponse(
         entry.ruleCode(),
         entry.description(),

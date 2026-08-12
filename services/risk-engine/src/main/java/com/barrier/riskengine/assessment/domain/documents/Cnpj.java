@@ -1,4 +1,6 @@
-package com.barrier.riskengine.assessment.domain;
+package com.barrier.riskengine.assessment.domain.documents;
+
+import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
 
 /** CNPJ válido (dígitos verificadores conferidos). Armazenado apenas com os 14 dígitos. */
 public record Cnpj(String digits) {

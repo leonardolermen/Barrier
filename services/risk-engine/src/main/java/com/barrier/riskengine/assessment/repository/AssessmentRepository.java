@@ -1,7 +1,7 @@
 package com.barrier.riskengine.assessment.repository;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
-import com.barrier.riskengine.assessment.domain.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;

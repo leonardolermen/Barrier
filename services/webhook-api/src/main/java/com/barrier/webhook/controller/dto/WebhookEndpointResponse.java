@@ -1,4 +1,4 @@
-package com.barrier.webhook.controller;
+package com.barrier.webhook.controller.dto;
 
 import com.barrier.webhook.domain.WebhookEndpoint;
 import java.time.Instant;
@@ -20,7 +20,7 @@ public record WebhookEndpointResponse(
     Instant createdAt,
     Instant updatedAt) {
 
-  static WebhookEndpointResponse from(WebhookEndpoint endpoint) {
+  public static WebhookEndpointResponse from(WebhookEndpoint endpoint) {
     return new WebhookEndpointResponse(
         endpoint.tenantId(),
         endpoint.targetUrl(),
