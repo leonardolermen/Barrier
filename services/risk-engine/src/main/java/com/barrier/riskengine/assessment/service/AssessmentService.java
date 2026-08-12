@@ -115,6 +115,14 @@ public class AssessmentService {
                   command.document(),
                   command.name(),
                   command.originDetail());
+          case ASSURANCE ->
+              Assessment.assurance(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name(),
+                  command.originDetail());
         };
     return repository.save(assessment);
   }

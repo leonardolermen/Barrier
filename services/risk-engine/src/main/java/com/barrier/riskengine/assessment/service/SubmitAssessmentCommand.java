@@ -63,6 +63,22 @@ public record SubmitAssessmentCommand(
         tenantId, documentType, document, name, null, AssessmentOrigin.RESCREENING, originDetail);
   }
 
+  /**
+   * Reavaliação pedida por uma verificação de documentoscopia/biometria (assurance).
+   *
+   * <p>Sem {@code Idempotency-Key} pelo mesmo motivo do rescreening: quem pede é o próprio motor,
+   * e o ponto é decidir de novo a partir do que a verificação encontrou.
+   */
+  public static SubmitAssessmentCommand assurance(
+      String tenantId,
+      DocumentType documentType,
+      String document,
+      String name,
+      String originDetail) {
+    return new SubmitAssessmentCommand(
+        tenantId, documentType, document, name, null, AssessmentOrigin.ASSURANCE, originDetail);
+  }
+
   public boolean hasIdempotencyKey() {
     return idempotencyKey != null && !idempotencyKey.isBlank();
   }

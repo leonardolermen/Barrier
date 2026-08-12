@@ -111,6 +111,27 @@ public class Assessment {
     return assessment;
   }
 
+  /**
+   * Avaliação criada por uma verificação de documentoscopia/biometria (assurance). Mesmo agregado
+   * e mesmo pipeline do onboarding — só a trilha registra que o pedido veio de uma checagem de
+   * identidade, e qual.
+   *
+   * @param originDetail tipo e referência da verificação que disparou (ex.: {@code
+   *     DOCUMENT@abc-123})
+   */
+  public static Assessment assurance(
+      String tenantId,
+      String subjectId,
+      DocumentType documentType,
+      String rawDocument,
+      String name,
+      String originDetail) {
+    Assessment assessment = submit(tenantId, subjectId, documentType, rawDocument, name);
+    assessment.origin = AssessmentOrigin.ASSURANCE;
+    assessment.originDetail = originDetail;
+    return assessment;
+  }
+
   /** Reconstrói o agregado a partir da persistência. */
   public static Assessment rehydrate(
       AssessmentId id,
