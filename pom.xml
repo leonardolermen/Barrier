@@ -29,7 +29,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- versões não gerenciadas pelo BOM do Spring Boot -->
         <mapstruct.version>1.6.3</mapstruct.version>
-        <archunit.version>1.4.0</archunit.version>
+        <archunit.version>1.5.0</archunit.version>
         <spotless.version>2.44.0</spotless.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <!-- Testes de carga ficam fora do build; rode com -DexcludedGroups= -Dgroups=load -->

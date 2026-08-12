@@ -60,7 +60,7 @@ class RescreeningServiceTest {
   void clienteQueEntrouNaListaPorDocumentoEReavaliado() {
     when(subjects.findByDocuments(java.util.Set.of(CPF))).thenReturn(List.of(subject("Fulano de Tal", "t1")));
 
-    int criadas = service().onImported("CEIS", "v2", delta(porDocumento(CPF)));
+    int criadas = service().rescreen("CEIS", "v2", delta(porDocumento(CPF)));
 
     assertThat(criadas).isEqualTo(1);
     ArgumentCaptor<SubmitAssessmentCommand> cmd =
@@ -84,7 +84,7 @@ class RescreeningServiceTest {
         .thenReturn(List.of(subject("Jose Antonio da Silva", "t1")))
         .thenReturn(List.of());
 
-    int criadas = service().onImported("OFAC", "2026-08-12", delta(porNome("SILVA, JOSE ANTONIO")));
+    int criadas = service().rescreen("OFAC", "2026-08-12", delta(porNome("SILVA, JOSE ANTONIO")));
 
     assertThat(criadas).isEqualTo(1);
   }
@@ -96,7 +96,7 @@ class RescreeningServiceTest {
         .thenReturn(List.of(subject("Carlos Eduardo Nunes", "t1")))
         .thenReturn(List.of());
 
-    int criadas = service().onImported("OFAC", "2026-08-12", delta(porNome("CARLOS ROBERTO MENDES")));
+    int criadas = service().rescreen("OFAC", "2026-08-12", delta(porNome("CARLOS ROBERTO MENDES")));
 
     assertThat(criadas).isZero();
     verify(assessments, never()).submit(any());
@@ -111,7 +111,7 @@ class RescreeningServiceTest {
     when(subjects.findByDocuments(java.util.Set.of(CPF)))
         .thenReturn(List.of(subject("Fulano de Tal", "t1", "t2")));
 
-    int criadas = service().onImported("CEIS", "v2", delta(porDocumento(CPF)));
+    int criadas = service().rescreen("CEIS", "v2", delta(porDocumento(CPF)));
 
     assertThat(criadas).isEqualTo(2);
   }
@@ -124,7 +124,7 @@ class RescreeningServiceTest {
     when(subjects.findLinkedPage(anyInt(), anyInt())).thenReturn(List.of(fulano)).thenReturn(List.of());
 
     int criadas =
-        service().onImported("CEIS", "v2", delta(porDocumento(CPF), porNome("FULANO DE TAL")));
+        service().rescreen("CEIS", "v2", delta(porDocumento(CPF), porNome("FULANO DE TAL")));
 
     assertThat(criadas).isEqualTo(1);
   }
@@ -135,7 +135,7 @@ class RescreeningServiceTest {
    */
   @Test
   void linhaDeBaseNaoDisparaNada() {
-    int criadas = service().onImported("OFAC", "2026-08-12", WatchlistDelta.firstLoad());
+    int criadas = service().rescreen("OFAC", "2026-08-12", WatchlistDelta.firstLoad());
 
     assertThat(criadas).isZero();
     verify(subjects, never()).findByDocuments(any());
@@ -151,7 +151,7 @@ class RescreeningServiceTest {
     when(subjects.findByDocuments(any()))
         .thenReturn(List.of(subject("Fulano de Tal", "t1"), subject("Beltrano", "t1")));
 
-    int criadas = service(true, 1).onImported("CEIS", "v2", delta(porDocumento(CPF)));
+    int criadas = service(true, 1).rescreen("CEIS", "v2", delta(porDocumento(CPF)));
 
     assertThat(criadas).isZero();
     verify(assessments, never()).submit(any());
@@ -166,14 +166,14 @@ class RescreeningServiceTest {
         .thenThrow(new RuntimeException("bureau fora"))
         .thenReturn(null);
 
-    int criadas = service().onImported("CEIS", "v2", delta(porDocumento(CPF)));
+    int criadas = service().rescreen("CEIS", "v2", delta(porDocumento(CPF)));
 
     assertThat(criadas).isEqualTo(1);
   }
 
   @Test
   void desligadoNaoTocaNaBase() {
-    int criadas = service(false, 500).onImported("CEIS", "v2", delta(porDocumento(CPF)));
+    int criadas = service(false, 500).rescreen("CEIS", "v2", delta(porDocumento(CPF)));
 
     assertThat(criadas).isZero();
     verify(subjects, never()).findByDocuments(any());

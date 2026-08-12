@@ -33,13 +33,13 @@ class WatchlistImporterTest {
   @Mock
   WatchlistSource source;
   @Mock WatchlistEntryRepository repository;
-  @Mock com.barrier.riskengine.rescreening.service.RescreeningService rescreening;
+  @Mock WatchlistImportListener listener;
 
   private final WatchlistImportStatus status =
       new WatchlistImportStatus(FIXED, Duration.ofHours(48));
 
   private WatchlistImporter importer() {
-    return new WatchlistImporter(List.of(source), repository, status, rescreening);
+    return new WatchlistImporter(List.of(source), repository, status, List.of(listener));
   }
 
   private WatchlistBatch batchCom(int registros) {
@@ -120,7 +120,7 @@ class WatchlistImporterTest {
     when(repository.replaceSource(eq("CEIS"), eq("v1"), anyList())).thenReturn(WatchlistDelta.firstLoad());
 
     WatchlistImportStatus curto = new WatchlistImportStatus(FIXED, Duration.ofSeconds(-1));
-    new WatchlistImporter(List.of(source), repository, curto, rescreening).importAll();
+    new WatchlistImporter(List.of(source), repository, curto, List.of(listener)).importAll();
 
     assertThat(curto.coverage()).isEmpty();
   }
@@ -141,7 +141,7 @@ class WatchlistImporterTest {
 
     importer().importAll();
 
-    verify(rescreening).onImported("CEIS", "v1", delta);
+    verify(listener).onImported("CEIS", "v1", delta);
   }
 
   /** Rescreening é consequência da importação, não condição: falha dele não desfaz a lista. */
@@ -152,7 +152,7 @@ class WatchlistImporterTest {
     when(source.fetch()).thenReturn(batchCom(2));
     when(repository.replaceSource(eq("CEIS"), eq("v1"), anyList())).thenReturn(WatchlistDelta.firstLoad());
     org.mockito.Mockito.doThrow(new RuntimeException("banco fora"))
-        .when(rescreening)
+        .when(listener)
         .onImported(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
 
     importer().importAll();

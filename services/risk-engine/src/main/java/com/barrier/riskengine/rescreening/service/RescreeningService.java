@@ -9,6 +9,7 @@ import com.barrier.riskengine.rescreening.domain.MonitoredSubject;
 import com.barrier.riskengine.rescreening.repository.interfaces.MonitoredSubjectRepository;
 import com.barrier.riskengine.screening.domain.WatchlistDelta;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
+import com.barrier.riskengine.screening.watchlist.WatchlistImportListener;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,7 +51,7 @@ import org.springframework.stereotype.Service;
  * </ul>
  */
 @Service
-public class RescreeningService {
+public class RescreeningService implements WatchlistImportListener {
 
   private static final Logger log = LoggerFactory.getLogger(RescreeningService.class);
 
@@ -81,13 +82,21 @@ public class RescreeningService {
     this.minNameLength = minNameLength;
   }
 
+  @Override
+  public void onImported(String source, String listVersion, WatchlistDelta delta) {
+    rescreen(source, listVersion, delta);
+  }
+
   /**
    * Reage ao resultado de uma importação. Nunca lança: o rescreening é consequência da importação,
    * e derrubá-la por falha aqui trocaria "não reavaliei" por "a lista também não atualizou".
    *
+   * <p>Mesmo corpo do {@link #onImported}, mas devolvendo a contagem — a interface de listener não
+   * tem por que conhecer quantas avaliações saíram, e os testes precisam desse número.
+   *
    * @return quantas avaliações foram criadas
    */
-  public int onImported(String source, String listVersion, WatchlistDelta delta) {
+  public int rescreen(String source, String listVersion, WatchlistDelta delta) {
     if (!enabled) {
       return 0;
     }

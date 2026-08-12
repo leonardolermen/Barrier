@@ -1,6 +1,5 @@
 package com.barrier.riskengine.screening.watchlist;
 
-import com.barrier.riskengine.rescreening.service.RescreeningService;
 import com.barrier.riskengine.screening.domain.WatchlistDelta;
 import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import java.util.List;
@@ -38,17 +37,17 @@ public class WatchlistImporter implements ApplicationRunner {
   private final List<WatchlistSource> sources;
   private final WatchlistEntryRepository repository;
   private final WatchlistImportStatus status;
-  private final RescreeningService rescreening;
+  private final List<WatchlistImportListener> listeners;
 
   public WatchlistImporter(
       List<WatchlistSource> sources,
       WatchlistEntryRepository repository,
       WatchlistImportStatus status,
-      RescreeningService rescreening) {
+      List<WatchlistImportListener> listeners) {
     this.sources = sources;
     this.repository = repository;
     this.status = status;
-    this.rescreening = rescreening;
+    this.listeners = listeners;
   }
 
   @Override
@@ -92,7 +91,7 @@ public class WatchlistImporter implements ApplicationRunner {
           batch.records().size(),
           batch.version(),
           delta.baseline() ? "linha de base — 0" : delta.added().size());
-      triggerRescreening(source.source(), batch.version(), delta);
+      notifyListeners(source.source(), batch.version(), delta);
     } catch (RuntimeException e) {
       status.recordFailure(source, e.getMessage());
       log.error("Falha ao importar a watchlist {}; mantendo a versão anterior", source.source(), e);
@@ -101,16 +100,26 @@ public class WatchlistImporter implements ApplicationRunner {
 
   /**
    * Roda depois de registrar o sucesso e <b>fora</b> do catch da importação: a lista já está
-   * gravada e utilizável pelo screening, e o monitoramento contínuo é consequência dela, não
-   * condição. Dentro do bloco anterior, uma falha ao reavaliar clientes marcaria a importação
-   * como falha — a lista boa que acabou de entrar sumiria da cobertura, e o
-   * {@code WatchlistReadinessGuard} passaria a acusar ausência de uma fonte que está lá.
+   * gravada e utilizável pelo screening, e o que reage à importação (hoje, o monitoramento
+   * contínuo) é consequência dela, não condição. Dentro do bloco anterior, uma falha ao reavaliar
+   * clientes marcaria a importação como falha — a lista boa que acabou de entrar sumiria da
+   * cobertura, e o {@code WatchlistReadinessGuard} passaria a acusar ausência de uma fonte que
+   * está lá.
+   *
+   * <p>O isolamento é <b>por listener</b> pelo mesmo motivo que é por fonte: um consumidor que
+   * quebra não pode levar junto os outros.
    */
-  private void triggerRescreening(String source, String version, WatchlistDelta delta) {
-    try {
-      rescreening.onImported(source, version, delta);
-    } catch (RuntimeException e) {
-      log.error("Monitoramento contínuo falhou após importar {}; a lista segue válida", source, e);
+  private void notifyListeners(String source, String version, WatchlistDelta delta) {
+    for (WatchlistImportListener listener : listeners) {
+      try {
+        listener.onImported(source, version, delta);
+      } catch (RuntimeException e) {
+        log.error(
+            "Listener {} falhou após importar {}; a lista segue válida",
+            listener.getClass().getSimpleName(),
+            source,
+            e);
+      }
     }
   }
 }

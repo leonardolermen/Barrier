@@ -1,5 +1,8 @@
 package com.barrier.riskengine.architecture;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -19,6 +22,20 @@ import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
     importOptions = ImportOption.DoNotIncludeTests.class)
 // público para poder ser referenciado por @SelectClasses na AllTestsSuite
 public class LayeredArchitectureTest {
+
+  /**
+   * Guarda contra o modo de falha silencioso: quando o ASM empacotado no ArchUnit não lê o bytecode
+   * do JDK em uso, o import falha classe a classe num WARN e a suíte inteira passa **vacuamente**
+   * sobre zero classes — controle verde sem verificar nada. Todas as outras regras deste arquivo só
+   * valem alguma coisa se esta passar. O piso é deliberadamente muito abaixo do total real (280+):
+   * o que precisa ser detectado é o colapso para zero, não a variação normal do módulo.
+   */
+  @ArchTest
+  static void o_import_enxerga_as_classes_do_modulo(JavaClasses classes) {
+    assertThat(classes.size())
+        .as("ArchUnit importou classes de menos — as regras abaixo passariam vacuamente")
+        .isGreaterThan(100);
+  }
 
   @ArchTest
   static final ArchRule camadas_respeitam_a_direcao =
