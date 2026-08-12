@@ -1,5 +1,8 @@
 package com.barrier.riskengine.subject.profile.controller;
 
+import com.barrier.riskengine.subject.profile.controller.dto.UpdateProfileRequest;
+import com.barrier.riskengine.subject.profile.controller.dto.ProfileResponse;
+
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;

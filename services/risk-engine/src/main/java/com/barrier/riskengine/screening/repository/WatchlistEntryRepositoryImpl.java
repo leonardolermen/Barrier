@@ -6,6 +6,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+
+import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryJpaRepository;
+import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;

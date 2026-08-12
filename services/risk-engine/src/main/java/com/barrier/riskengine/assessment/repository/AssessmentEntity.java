@@ -1,7 +1,7 @@
 package com.barrier.riskengine.assessment.repository;
 
-import com.barrier.riskengine.assessment.domain.AssessmentStatus;
-import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,11 +12,18 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /** Mapeamento JPA da avaliação. Não vaza para fora da camada de repositório. */
 @Entity
 @Table(name = "assessments")
-class AssessmentEntity {
+@Getter(AccessLevel.PACKAGE)
+@Setter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class AssessmentEntity {
 
   @Id
   @Column(name = "id", nullable = false)
@@ -59,8 +66,10 @@ class AssessmentEntity {
   @Column(name = "completed_at")
   private Instant completedAt;
 
+  /** Quem escreve é o Hibernate — daí o {@code @Setter(NONE)}. */
   @Version
   @Column(name = "version", nullable = false)
+  @Setter(AccessLevel.NONE)
   private long version;
 
   @Column(name = "claimed_at")
@@ -90,171 +99,4 @@ class AssessmentEntity {
   @Column(name = "correlation_id", length = 64)
   private String correlationId;
 
-  String getCorrelationId() {
-    return correlationId;
-  }
-
-  void setCorrelationId(String correlationId) {
-    this.correlationId = correlationId;
-  }
-
-  protected AssessmentEntity() {
-    // JPA
-  }
-
-  long getVersion() {
-    return version;
-  }
-
-  UUID getId() {
-    return id;
-  }
-
-  void setId(UUID id) {
-    this.id = id;
-  }
-
-  String getTenantId() {
-    return tenantId;
-  }
-
-  void setTenantId(String tenantId) {
-    this.tenantId = tenantId;
-  }
-
-  UUID getSubjectId() {
-    return subjectId;
-  }
-
-  void setSubjectId(UUID subjectId) {
-    this.subjectId = subjectId;
-  }
-
-  DocumentType getDocumentType() {
-    return documentType;
-  }
-
-  void setDocumentType(DocumentType documentType) {
-    this.documentType = documentType;
-  }
-
-  String getDocumentValue() {
-    return documentValue;
-  }
-
-  void setDocumentValue(String documentValue) {
-    this.documentValue = documentValue;
-  }
-
-  String getName() {
-    return name;
-  }
-
-  void setName(String name) {
-    this.name = name;
-  }
-
-  AssessmentStatus getStatus() {
-    return status;
-  }
-
-  void setStatus(AssessmentStatus status) {
-    this.status = status;
-  }
-
-  RiskLevel getRiskLevel() {
-    return riskLevel;
-  }
-
-  void setRiskLevel(RiskLevel riskLevel) {
-    this.riskLevel = riskLevel;
-  }
-
-  String getDecision() {
-    return decision;
-  }
-
-  void setDecision(String decision) {
-    this.decision = decision;
-  }
-
-  String getFactors() {
-    return factors;
-  }
-
-  void setFactors(String factors) {
-    this.factors = factors;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  void setCreatedAt(Instant createdAt) {
-    this.createdAt = createdAt;
-  }
-
-  Instant getCompletedAt() {
-    return completedAt;
-  }
-
-  void setCompletedAt(Instant completedAt) {
-    this.completedAt = completedAt;
-  }
-
-  int getAttempts() {
-    return attempts;
-  }
-
-  void setAttempts(int attempts) {
-    this.attempts = attempts;
-  }
-
-  String getLastError() {
-    return lastError;
-  }
-
-  void setLastError(String lastError) {
-    this.lastError = lastError;
-  }
-
-  Instant getNextAttemptAt() {
-    return nextAttemptAt;
-  }
-
-  void setNextAttemptAt(Instant nextAttemptAt) {
-    this.nextAttemptAt = nextAttemptAt;
-  }
-
-  String getReviewedByKey() {
-    return reviewedByKey;
-  }
-
-  void setReviewedByKey(String reviewedByKey) {
-    this.reviewedByKey = reviewedByKey;
-  }
-
-  String getReviewedBy() {
-    return reviewedBy;
-  }
-
-  void setReviewedBy(String reviewedBy) {
-    this.reviewedBy = reviewedBy;
-  }
-
-  String getReviewReason() {
-    return reviewReason;
-  }
-
-  void setReviewReason(String reviewReason) {
-    this.reviewReason = reviewReason;
-  }
-
-  Instant getReviewedAt() {
-    return reviewedAt;
-  }
-
-  void setReviewedAt(Instant reviewedAt) {
-    this.reviewedAt = reviewedAt;
-  }
 }

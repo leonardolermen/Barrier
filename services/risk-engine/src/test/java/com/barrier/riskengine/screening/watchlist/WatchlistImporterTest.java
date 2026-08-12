@@ -7,15 +7,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
-import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
+import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
+
+import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -27,7 +29,8 @@ class WatchlistImporterTest {
   private static final Clock FIXED =
       Clock.fixed(Instant.parse("2026-08-07T10:00:00Z"), ZoneOffset.UTC);
 
-  @Mock WatchlistSource source;
+  @Mock
+  WatchlistSource source;
   @Mock WatchlistEntryRepository repository;
 
   private final WatchlistImportStatus status =

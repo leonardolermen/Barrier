@@ -10,7 +10,8 @@ import com.tngtech.archunit.library.Architectures;
 @AnalyzeClasses(
     packages = "com.barrier.webhook",
     importOptions = ImportOption.DoNotIncludeTests.class)
-class LayeredArchitectureTest {
+// público para poder ser referenciado por @SelectClasses na AllTestsSuite
+public class LayeredArchitectureTest {
 
   @ArchTest
   static final ArchRule camadas_respeitam_a_direcao =

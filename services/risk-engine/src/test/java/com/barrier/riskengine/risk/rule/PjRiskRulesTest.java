@@ -8,6 +8,7 @@ import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.tenant.config.service.TenantRiskConfigService;
 import java.time.Clock;

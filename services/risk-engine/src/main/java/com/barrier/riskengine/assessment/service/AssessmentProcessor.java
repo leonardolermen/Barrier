@@ -1,9 +1,9 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
-import com.barrier.riskengine.assessment.domain.AssessmentId;
-import com.barrier.riskengine.assessment.domain.AssessmentStatus;
-import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.domain.PersonProfile;
 import com.barrier.riskengine.identity.service.IdentityResult;
@@ -11,7 +11,7 @@ import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
-import com.barrier.riskengine.risk.rule.RiskContext;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.commons.name.NameNormalizer;
 import com.barrier.commons.observability.Correlation;

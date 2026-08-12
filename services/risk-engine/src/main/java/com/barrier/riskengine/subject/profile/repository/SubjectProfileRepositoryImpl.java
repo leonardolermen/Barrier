@@ -4,6 +4,9 @@ import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.barrier.riskengine.subject.profile.repository.interfaces.SubjectProfileJpaRepository;
+import com.barrier.riskengine.subject.profile.repository.interfaces.SubjectProfileRepository;
 import org.springframework.stereotype.Repository;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;

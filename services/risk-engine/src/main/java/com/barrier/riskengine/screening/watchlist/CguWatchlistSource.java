@@ -1,7 +1,7 @@
 package com.barrier.riskengine.screening.watchlist;
 
 import com.barrier.commons.name.NameNormalizer;
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -14,6 +14,8 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
+import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.client.HttpClientErrorException;

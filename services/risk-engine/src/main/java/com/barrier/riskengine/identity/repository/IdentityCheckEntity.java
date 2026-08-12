@@ -7,15 +7,28 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Mapeamento JPA de uma verificação de identidade. */
+/**
+ * Mapeamento JPA de uma verificação de identidade.
+ *
+ * <p>Acessores gerados pelo Lombok em nível de pacote — a entidade não vaza da camada de
+ * repositório. Sem {@code @Data}/{@code @EqualsAndHashCode}/{@code @ToString}: em entidade JPA
+ * eles disparam lazy loading e quebram o contrato de identidade do Hibernate.
+ */
 @Entity
 @Table(name = "identity_checks")
-class IdentityCheckEntity {
+@Getter(AccessLevel.PACKAGE)
+@Setter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class IdentityCheckEntity {
 
   @Id
   @Column(name = "id", nullable = false)
@@ -46,71 +59,4 @@ class IdentityCheckEntity {
   @Column(name = "raw_response", columnDefinition = "jsonb")
   private String rawResponse;
 
-  protected IdentityCheckEntity() {
-    // JPA
-  }
-
-  UUID getId() {
-    return id;
-  }
-
-  void setId(UUID id) {
-    this.id = id;
-  }
-
-  String getAssessmentId() {
-    return assessmentId;
-  }
-
-  void setAssessmentId(String assessmentId) {
-    this.assessmentId = assessmentId;
-  }
-
-  IdentityStatus getStatus() {
-    return status;
-  }
-
-  void setStatus(IdentityStatus status) {
-    this.status = status;
-  }
-
-  String getProvider() {
-    return provider;
-  }
-
-  void setProvider(String provider) {
-    this.provider = provider;
-  }
-
-  String getDetail() {
-    return detail;
-  }
-
-  void setDetail(String detail) {
-    this.detail = detail;
-  }
-
-  String getProviderReference() {
-    return providerReference;
-  }
-
-  void setProviderReference(String providerReference) {
-    this.providerReference = providerReference;
-  }
-
-  String getRawResponse() {
-    return rawResponse;
-  }
-
-  void setRawResponse(String rawResponse) {
-    this.rawResponse = rawResponse;
-  }
-
-  Instant getCheckedAt() {
-    return checkedAt;
-  }
-
-  void setCheckedAt(Instant checkedAt) {
-    this.checkedAt = checkedAt;
-  }
 }

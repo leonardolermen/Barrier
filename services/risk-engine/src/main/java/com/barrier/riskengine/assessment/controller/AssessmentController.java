@@ -1,7 +1,12 @@
 package com.barrier.riskengine.assessment.controller;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
-import com.barrier.riskengine.assessment.domain.AssessmentId;
+import com.barrier.riskengine.assessment.controller.dto.SubmitAssessmentRequest;
+import com.barrier.riskengine.assessment.controller.dto.ReviewDecisionRequest;
+import com.barrier.riskengine.assessment.controller.dto.AssessmentResponse;
+import com.barrier.riskengine.assessment.controller.dto.AssessmentDtoMapper;
+
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.service.AssessmentService;
 import com.barrier.riskengine.assessment.service.SubmissionResult;
 import com.barrier.riskengine.assessment.service.SubmitAssessmentCommand;
@@ -74,13 +79,13 @@ public class AssessmentController {
    */
   @PostMapping("/{id}/decision")
   public ResponseEntity<AssessmentResponse> decide(
-      AuthenticatedTenant tenant,
-      @PathVariable String id,
-      @Valid @RequestBody ReviewDecisionRequest req) {
+          AuthenticatedTenant tenant,
+          @PathVariable String id,
+          @Valid @RequestBody ReviewDecisionRequest req) {
     boolean approve = req.decision() == ReviewDecisionRequest.Decision.APPROVE;
     Assessment decided =
-        service.decide(
-            AssessmentId.of(id), tenant.id(), approve, req.reviewedBy(), tenant.keyName(), req.reason());
+            service.decide(
+                    AssessmentId.of(id), tenant.id(), approve, req.reviewedBy(), tenant.keyName(), req.reason());
     return ResponseEntity.ok(AssessmentDtoMapper.toResponse(decided));
   }
 }

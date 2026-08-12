@@ -1,5 +1,7 @@
 package com.barrier.riskengine.risk.domain.model;
 
+import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
+
 /**
  * O que aconteceu com <b>cada</b> regra do motor numa decisão — inclusive as que não dispararam.
  *
@@ -9,7 +11,7 @@ package com.barrier.riskengine.risk.domain.model;
  * uma delas é aceitável. Provar que um controle <i>rodou e passou</i> é o núcleo da auditabilidade
  * — a ausência de evidência não pode ser lida como evidência de ausência.
  *
- * @param ruleCode família da regra ({@link com.barrier.riskengine.risk.rule.RiskRule#code()})
+ * @param ruleCode família da regra ({@link RiskRule#code()})
  * @param outcome o que aconteceu com ela
  * @param result resultado produzido; {@code null} quando a regra não chegou a ser executada
  */

@@ -1,6 +1,6 @@
 package com.barrier.riskengine.screening.watchlist;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -10,6 +10,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 

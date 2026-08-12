@@ -1,6 +1,6 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 
 /**
  * Desfecho de uma submissão.

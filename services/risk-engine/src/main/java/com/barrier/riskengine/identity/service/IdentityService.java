@@ -8,7 +8,7 @@ import com.barrier.riskengine.identity.client.BureauTrace;
 import com.barrier.riskengine.identity.client.BureauUnavailableException;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
-import com.barrier.riskengine.identity.repository.IdentityCheckRepository;
+import com.barrier.riskengine.identity.repository.interfaces.IdentityCheckRepository;
 import com.barrier.riskengine.resilience.CircuitBreaker;
 import com.barrier.riskengine.resilience.CircuitBreakerRegistry;
 import java.util.List;

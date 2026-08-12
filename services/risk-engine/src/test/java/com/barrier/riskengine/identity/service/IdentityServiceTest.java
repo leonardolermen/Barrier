@@ -13,7 +13,7 @@ import com.barrier.riskengine.identity.client.BureauResult;
 import com.barrier.riskengine.identity.client.BureauUnavailableException;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
-import com.barrier.riskengine.identity.repository.IdentityCheckRepository;
+import com.barrier.riskengine.identity.repository.interfaces.IdentityCheckRepository;
 import com.barrier.riskengine.resilience.CircuitBreakerRegistry;
 import java.time.Duration;
 import java.util.List;

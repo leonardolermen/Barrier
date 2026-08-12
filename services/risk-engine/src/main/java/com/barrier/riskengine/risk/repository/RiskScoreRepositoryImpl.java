@@ -4,6 +4,9 @@ import com.barrier.riskengine.risk.domain.model.EvaluatedRule;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
 import java.util.List;
+
+import com.barrier.riskengine.risk.repository.interfaces.RiskScoreJpaRepository;
+import com.barrier.riskengine.risk.repository.interfaces.RiskScoreRepository;
 import org.springframework.stereotype.Repository;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;

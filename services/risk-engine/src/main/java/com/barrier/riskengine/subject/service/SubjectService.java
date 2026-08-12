@@ -2,7 +2,7 @@ package com.barrier.riskengine.subject.service;
 
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
-import com.barrier.riskengine.subject.repository.SubjectRepository;
+import com.barrier.riskengine.subject.repository.interfaces.SubjectRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import java.time.Instant;

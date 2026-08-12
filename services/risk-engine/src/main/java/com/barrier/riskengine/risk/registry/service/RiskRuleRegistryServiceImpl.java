@@ -2,7 +2,7 @@ package com.barrier.riskengine.risk.registry.service;
 
 import com.barrier.riskengine.risk.registry.domain.RegulatoryRiskRules;
 import com.barrier.riskengine.risk.registry.domain.RiskRuleRegistryEntry;
-import com.barrier.riskengine.risk.registry.repository.RiskRuleRegistryRepository;
+import com.barrier.riskengine.risk.registry.repository.interfaces.RiskRuleRegistryRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;

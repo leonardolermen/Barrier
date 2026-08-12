@@ -3,9 +3,9 @@ package com.barrier.webhook;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.barrier.webhook.controller.RegisterEndpointRequest;
-import com.barrier.webhook.controller.WebhookEndpointResponse;
-import com.barrier.webhook.controller.WebhookEndpointSecretResponse;
+import com.barrier.webhook.controller.dto.RegisterEndpointRequest;
+import com.barrier.webhook.controller.dto.WebhookEndpointResponse;
+import com.barrier.webhook.controller.dto.WebhookEndpointSecretResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;

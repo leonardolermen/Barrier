@@ -6,11 +6,22 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-/** Mapeamento JPA de uma API key de tenant. Guarda o hash do segredo, nunca o segredo. */
+/**
+ * Mapeamento JPA de uma API key de tenant. Guarda o hash do segredo, nunca o segredo.
+ *
+ * <p>Sem {@code @ToString}: imprimiria o {@code secretHash} em log.
+ */
 @Entity
 @Table(name = "tenant_api_keys")
-class ApiKeyEntity {
+@Getter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PACKAGE)
+public class ApiKeyEntity {
 
   @Id
   @Column(name = "id", nullable = false)
@@ -34,52 +45,4 @@ class ApiKeyEntity {
   @Column(name = "revoked_at")
   private Instant revokedAt;
 
-  protected ApiKeyEntity() {
-    // JPA
-  }
-
-  ApiKeyEntity(
-      UUID id,
-      String tenantId,
-      String keyId,
-      String secretHash,
-      String name,
-      Instant createdAt,
-      Instant revokedAt) {
-    this.id = id;
-    this.tenantId = tenantId;
-    this.keyId = keyId;
-    this.secretHash = secretHash;
-    this.name = name;
-    this.createdAt = createdAt;
-    this.revokedAt = revokedAt;
-  }
-
-  UUID getId() {
-    return id;
-  }
-
-  String getTenantId() {
-    return tenantId;
-  }
-
-  String getKeyId() {
-    return keyId;
-  }
-
-  String getSecretHash() {
-    return secretHash;
-  }
-
-  String getName() {
-    return name;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  Instant getRevokedAt() {
-    return revokedAt;
-  }
 }

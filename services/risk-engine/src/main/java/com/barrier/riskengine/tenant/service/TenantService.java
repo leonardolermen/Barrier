@@ -2,7 +2,7 @@ package com.barrier.riskengine.tenant.service;
 
 import com.barrier.riskengine.tenant.domain.Tenant;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
-import com.barrier.riskengine.tenant.repository.TenantRepository;
+import com.barrier.riskengine.tenant.repository.interfaces.TenantRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

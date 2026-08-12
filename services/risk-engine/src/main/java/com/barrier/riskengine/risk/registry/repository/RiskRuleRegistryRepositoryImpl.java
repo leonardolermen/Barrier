@@ -5,6 +5,9 @@ import com.barrier.riskengine.risk.registry.domain.RiskRuleRegistryEntry;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+
+import com.barrier.riskengine.risk.registry.repository.interfaces.RiskRuleRegistryJpaRepository;
+import com.barrier.riskengine.risk.registry.repository.interfaces.RiskRuleRegistryRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository

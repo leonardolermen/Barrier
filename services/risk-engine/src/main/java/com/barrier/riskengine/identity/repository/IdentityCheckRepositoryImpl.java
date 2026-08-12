@@ -2,6 +2,9 @@ package com.barrier.riskengine.identity.repository;
 
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import java.util.List;
+
+import com.barrier.riskengine.identity.repository.interfaces.IdentityCheckJpaRepository;
+import com.barrier.riskengine.identity.repository.interfaces.IdentityCheckRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository

@@ -5,10 +5,10 @@ import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.screening.client.WatchlistEntry;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
-import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
+import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

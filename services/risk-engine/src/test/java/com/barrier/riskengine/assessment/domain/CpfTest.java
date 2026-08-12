@@ -3,6 +3,8 @@ package com.barrier.riskengine.assessment.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.barrier.riskengine.assessment.domain.documents.Cpf;
+import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
 import org.junit.jupiter.api.Test;
 
 class CpfTest {

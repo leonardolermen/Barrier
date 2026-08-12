@@ -3,7 +3,7 @@ package com.barrier.riskengine.subject.profile.service;
 import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfilePatch;
-import com.barrier.riskengine.subject.profile.repository.SubjectProfileRepository;
+import com.barrier.riskengine.subject.profile.repository.interfaces.SubjectProfileRepository;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

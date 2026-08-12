@@ -6,14 +6,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.screening.client.WatchlistEntry;
-import com.barrier.riskengine.screening.client.WatchlistProvider;
+import com.barrier.riskengine.screening.client.interfaces.WatchlistProvider;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
-import com.barrier.riskengine.screening.domain.MatchBasis;
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
-import com.barrier.riskengine.screening.domain.ScreeningStatus;
-import com.barrier.riskengine.screening.repository.ScreeningResultRepository;
+import com.barrier.riskengine.screening.domain.enums.ScreeningStatus;
+import com.barrier.riskengine.screening.repository.interfaces.ScreeningResultRepository;
+import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import com.barrier.riskengine.screening.rule.PepMatchRule;
 import com.barrier.riskengine.screening.rule.SanctionMatchRule;
 import java.util.List;
@@ -29,7 +30,8 @@ class ScreeningServiceTest {
 
   @Mock WatchlistProvider provider;
   @Mock ScreeningResultRepository repository;
-  @Mock com.barrier.riskengine.screening.repository.WatchlistEntryRepository watchlistEntries;
+  @Mock
+  WatchlistEntryRepository watchlistEntries;
 
   private ScreeningService service;
 

@@ -1,7 +1,9 @@
 package com.barrier.riskengine.screening.watchlist;
 
-import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
+import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import java.util.List;
+
+import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;

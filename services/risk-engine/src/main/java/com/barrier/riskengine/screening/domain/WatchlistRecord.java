@@ -1,5 +1,7 @@
 package com.barrier.riskengine.screening.domain;
 
+import com.barrier.riskengine.screening.domain.enums.MatchType;
+
 /**
  * Um registro de uma lista restritiva, já ingerido na base local.
  *

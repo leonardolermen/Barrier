@@ -8,13 +8,21 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 /**
  * Evento pendente de publicação, gravado na mesma transação da mudança de estado
  * (transactional outbox). Um relay publica no Kafka e marca como {@link OutboxStatus#SENT}.
+ *
+ * <p>Só leitura de fora: o estado muda por {@link #markSent}, {@link #markClaimed} e
+ * {@link #markFailedAttempt} — nada de setter.
  */
 @Entity
 @Table(name = "outbox")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OutboxEvent {
 
   @Id
@@ -59,10 +67,6 @@ public class OutboxEvent {
   /** Correlação da requisição que originou o evento; viaja até o consumidor. */
   @Column(name = "correlation_id", length = 64)
   private String correlationId;
-
-  protected OutboxEvent() {
-    // JPA
-  }
 
   private OutboxEvent(
       UUID id,
@@ -116,45 +120,5 @@ public class OutboxEvent {
   public void markFailedAttempt() {
     this.attempts++;
     this.claimedAt = null;
-  }
-
-  public UUID getId() {
-    return id;
-  }
-
-  public String getAggregateId() {
-    return aggregateId;
-  }
-
-  public String getType() {
-    return type;
-  }
-
-  public String getPayload() {
-    return payload;
-  }
-
-  public int getVersion() {
-    return version;
-  }
-
-  public OutboxStatus getStatus() {
-    return status;
-  }
-
-  public int getAttempts() {
-    return attempts;
-  }
-
-  public Instant getOccurredAt() {
-    return occurredAt;
-  }
-
-  public Instant getClaimedAt() {
-    return claimedAt;
-  }
-
-  public String getCorrelationId() {
-    return correlationId;
   }
 }

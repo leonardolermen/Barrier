@@ -4,6 +4,9 @@ import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import java.util.List;
 import java.util.Map;
+
+import com.barrier.riskengine.screening.repository.interfaces.ScreeningResultJpaRepository;
+import com.barrier.riskengine.screening.repository.interfaces.ScreeningResultRepository;
 import org.springframework.stereotype.Repository;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;

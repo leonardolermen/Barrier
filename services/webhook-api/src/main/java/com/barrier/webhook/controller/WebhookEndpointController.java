@@ -1,5 +1,8 @@
 package com.barrier.webhook.controller;
 
+import com.barrier.webhook.controller.dto.WebhookEndpointSecretResponse;
+import com.barrier.webhook.controller.dto.WebhookEndpointResponse;
+import com.barrier.webhook.controller.dto.RegisterEndpointRequest;
 import com.barrier.webhook.domain.WebhookEndpoint;
 import com.barrier.webhook.service.WebhookEndpointService;
 import java.util.List;

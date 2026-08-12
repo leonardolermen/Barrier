@@ -5,10 +5,21 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-/** Mapeamento JPA do endpoint de callback de um tenant. */
+/**
+ * Mapeamento JPA do endpoint de callback de um tenant.
+ *
+ * <p>Sem {@code @ToString}: imprimiria o segredo de HMAC em log.
+ */
 @Entity
 @Table(name = "webhook_endpoints")
+@Getter(AccessLevel.PACKAGE)
+@Setter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 class WebhookEndpointEntity {
 
   @Id
@@ -40,71 +51,4 @@ class WebhookEndpointEntity {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
-  protected WebhookEndpointEntity() {
-    // JPA
-  }
-
-  String getTenantId() {
-    return tenantId;
-  }
-
-  void setTenantId(String tenantId) {
-    this.tenantId = tenantId;
-  }
-
-  String getTargetUrl() {
-    return targetUrl;
-  }
-
-  void setTargetUrl(String targetUrl) {
-    this.targetUrl = targetUrl;
-  }
-
-  String getSecret() {
-    return secret;
-  }
-
-  void setSecret(String secret) {
-    this.secret = secret;
-  }
-
-  String getPreviousSecret() {
-    return previousSecret;
-  }
-
-  void setPreviousSecret(String previousSecret) {
-    this.previousSecret = previousSecret;
-  }
-
-  Instant getPreviousSecretUntil() {
-    return previousSecretUntil;
-  }
-
-  void setPreviousSecretUntil(Instant previousSecretUntil) {
-    this.previousSecretUntil = previousSecretUntil;
-  }
-
-  boolean isActive() {
-    return active;
-  }
-
-  void setActive(boolean active) {
-    this.active = active;
-  }
-
-  Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  void setCreatedAt(Instant createdAt) {
-    this.createdAt = createdAt;
-  }
-
-  Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  void setUpdatedAt(Instant updatedAt) {
-    this.updatedAt = updatedAt;
-  }
 }
