@@ -10,7 +10,7 @@ import java.util.UUID;
 /** Mapeamento JPA de uma API key de tenant. Guarda o hash do segredo, nunca o segredo. */
 @Entity
 @Table(name = "tenant_api_keys")
-class ApiKeyEntity {
+public class ApiKeyEntity {
 
   @Id
   @Column(name = "id", nullable = false)

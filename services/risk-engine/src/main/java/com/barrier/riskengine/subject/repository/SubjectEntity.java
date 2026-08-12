@@ -10,7 +10,7 @@ import java.util.UUID;
 /** Mapeamento JPA do subject (cliente final). */
 @Entity
 @Table(name = "subjects")
-class SubjectEntity {
+public class SubjectEntity {
 
   @Id
   @Column(name = "id", nullable = false)

@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentJpaRepository;
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;

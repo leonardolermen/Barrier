@@ -14,7 +14,7 @@ import java.util.UUID;
 /** Mapeamento JPA do cadastro do subject (CMN 4.753). */
 @Entity
 @Table(name = "subject_profiles")
-class SubjectProfileEntity {
+public class SubjectProfileEntity {
 
   @Id
   @Column(name = "id", nullable = false)

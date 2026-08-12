@@ -1,6 +1,6 @@
 package com.barrier.riskengine.screening.watchlist;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 

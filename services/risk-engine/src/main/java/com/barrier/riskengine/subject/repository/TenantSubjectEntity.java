@@ -10,7 +10,7 @@ import java.util.UUID;
 /** Vínculo de visibilidade entre um tenant e um subject. */
 @Entity
 @Table(name = "tenant_subjects")
-class TenantSubjectEntity {
+public class TenantSubjectEntity {
 
   @Id
   @Column(name = "id", nullable = false)

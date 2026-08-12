@@ -9,7 +9,7 @@ import java.time.Instant;
 /** Mapeamento JPA de uma linha do registry de regras de risco. */
 @Entity
 @Table(name = "risk_rule_registry")
-class RiskRuleRegistryEntity {
+public class RiskRuleRegistryEntity {
 
   @Id
   @Column(name = "rule_code", nullable = false, length = 60)

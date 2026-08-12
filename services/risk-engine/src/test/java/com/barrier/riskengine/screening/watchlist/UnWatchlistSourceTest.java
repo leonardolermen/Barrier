@@ -3,7 +3,7 @@ package com.barrier.riskengine.screening.watchlist;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.nio.charset.StandardCharsets;
 import java.util.List;

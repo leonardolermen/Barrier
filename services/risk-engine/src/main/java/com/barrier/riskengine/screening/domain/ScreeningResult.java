@@ -1,5 +1,7 @@
 package com.barrier.riskengine.screening.domain;
 
+import com.barrier.riskengine.screening.domain.enums.ScreeningStatus;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;

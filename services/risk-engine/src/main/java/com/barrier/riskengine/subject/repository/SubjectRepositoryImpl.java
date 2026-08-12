@@ -4,6 +4,10 @@ import com.barrier.riskengine.subject.domain.Subject;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.barrier.riskengine.subject.repository.interfaces.SubjectJpaRepository;
+import com.barrier.riskengine.subject.repository.interfaces.SubjectRepository;
+import com.barrier.riskengine.subject.repository.interfaces.TenantSubjectJpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository

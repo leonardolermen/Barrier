@@ -1,6 +1,6 @@
 package com.barrier.riskengine.screening.repository;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,7 +13,7 @@ import java.util.UUID;
 /** Mapeamento JPA de uma entrada de lista restritiva ingerida. */
 @Entity
 @Table(name = "watchlist_entries")
-class WatchlistEntryEntity {
+public class WatchlistEntryEntity {
 
   @Id
   @Column(name = "id", nullable = false)

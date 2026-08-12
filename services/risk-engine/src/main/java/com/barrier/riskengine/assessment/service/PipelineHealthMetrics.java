@@ -1,6 +1,6 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;

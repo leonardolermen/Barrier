@@ -2,7 +2,7 @@ package com.barrier.riskengine.assessment.service;
 
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.domain.IdempotencyReservation;
-import com.barrier.riskengine.assessment.repository.IdempotencyKeyRepositoryImpl;
+import com.barrier.riskengine.assessment.repository.interfaces.IdempotencyKeyRepository;
 
 import java.time.Duration;
 import org.slf4j.Logger;
@@ -26,11 +26,11 @@ public class IdempotencyService {
 
   private static final Logger log = LoggerFactory.getLogger(IdempotencyService.class);
 
-  private final IdempotencyKeyRepositoryImpl.IdempotencyKeyRepository repository;
+  private final IdempotencyKeyRepository repository;
   private final Duration window;
 
   public IdempotencyService(
-      IdempotencyKeyRepositoryImpl.IdempotencyKeyRepository repository,
+      IdempotencyKeyRepository repository,
       @Value("${barrier.assessment.idempotency-window}") Duration window) {
     this.repository = repository;
     this.window = window;

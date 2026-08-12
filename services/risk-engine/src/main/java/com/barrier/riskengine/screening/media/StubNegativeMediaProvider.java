@@ -1,10 +1,10 @@
 package com.barrier.riskengine.screening.media;
 
-import com.barrier.riskengine.screening.client.NegativeMediaProvider;
+import com.barrier.riskengine.screening.client.interfaces.NegativeMediaProvider;
 import com.barrier.riskengine.screening.client.WatchlistEntry;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
-import com.barrier.riskengine.screening.domain.MatchBasis;
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import java.util.List;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;

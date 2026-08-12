@@ -1,10 +1,10 @@
 package com.barrier.riskengine.screening.watchlist;
 
 import com.barrier.riskengine.screening.client.WatchlistEntry;
-import com.barrier.riskengine.screening.client.WatchlistProvider;
+import com.barrier.riskengine.screening.client.interfaces.WatchlistProvider;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
-import com.barrier.riskengine.screening.domain.MatchBasis;
-import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
+import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import java.util.List;
 import org.springframework.stereotype.Component;
 

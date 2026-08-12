@@ -6,7 +6,7 @@ import com.barrier.riskengine.assessment.domain.exceptions.AssessmentNotFoundExc
 import com.barrier.riskengine.assessment.domain.documents.Documents;
 import com.barrier.riskengine.assessment.domain.exceptions.IdempotencyConflictException;
 import com.barrier.riskengine.assessment.domain.IdempotencyReservation;
-import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
 import java.util.Optional;

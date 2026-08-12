@@ -40,8 +40,8 @@ public record BureauTrace(String providerReference, String rawResponse) {
    * @param storeRaw se {@code false}, guarda só o identificador — o payload é dado pessoal, e
    *     retenção e criptografia em repouso ainda são pendências da Fase 6
    */
-  static BureauTrace from(
-      ObjectMapper mapper, String body, String referenceField, boolean storeRaw) {
+  public static BureauTrace from(
+          ObjectMapper mapper, String body, String referenceField, boolean storeRaw) {
     if (body == null || body.isBlank()) {
       return new BureauTrace(null, null);
     }

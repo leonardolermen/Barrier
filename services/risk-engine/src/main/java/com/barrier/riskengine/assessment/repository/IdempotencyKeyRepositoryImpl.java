@@ -6,12 +6,13 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.barrier.riskengine.assessment.repository.interfaces.IdempotencyKeyRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /** Implementação JDBC — a reserva é uma operação de linha, sem agregado a mapear. */
 @Repository
-class IdempotencyKeyRepositoryImpl implements IdempotencyKeyRepositoryImpl.IdempotencyKeyRepository {
+public class IdempotencyKeyRepositoryImpl implements IdempotencyKeyRepository {
 
   /**
    * Toma a posse da chave em uma única instrução: insere se não existe e reaproveita se a existente
@@ -106,31 +107,5 @@ class IdempotencyKeyRepositoryImpl implements IdempotencyKeyRepositoryImpl.Idemp
     return jdbc.update(
         "DELETE FROM idempotency_keys WHERE created_at < now() - (? * interval '1 second')",
         age.toSeconds());
-  }
-
-  /** Chaves de idempotência do intake, por tenant. */
-  public static interface IdempotencyKeyRepository {
-
-    /**
-     * Tenta tomar a posse da chave para esta requisição.
-     *
-     * <p>Devolve uma reserva {@code fresh} quando a chave não existia ou já estava fora da janela — a
-     * requisição deve então criar a avaliação e chamar {@link #bind}. Caso contrário devolve a
-     * reserva existente, para o chamador decidir entre repetir a resposta e recusar.
-     *
-     * @param window por quanto tempo uma chave usada continua valendo como repetição
-     */
-    IdempotencyReservation reserve(String tenantId, String key, String requestHash, Duration window);
-
-    /** Liga a chave à avaliação criada; a partir daí a repetição tem o que devolver. */
-    void bind(String tenantId, String key, AssessmentId assessmentId);
-
-    /** Devolve a chave ao estado livre — a submissão que a reservou não completou. */
-    void release(String tenantId, String key);
-
-    Optional<IdempotencyReservation> find(String tenantId, String key);
-
-    /** Remove chaves fora da janela. Só higiene de tabela: a janela já é aplicada na reserva. */
-    int purgeOlderThan(Duration age);
   }
 }

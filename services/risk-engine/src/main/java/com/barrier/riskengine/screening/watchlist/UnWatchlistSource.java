@@ -1,6 +1,6 @@
 package com.barrier.riskengine.screening.watchlist;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.io.ByteArrayInputStream;
 import java.time.LocalDate;
@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.stream.Stream;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
+
+import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;

@@ -8,6 +8,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.time.LocalDate;
+
+import com.barrier.riskengine.identity.client.bigboost.BigBoostCnpjBureauProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;

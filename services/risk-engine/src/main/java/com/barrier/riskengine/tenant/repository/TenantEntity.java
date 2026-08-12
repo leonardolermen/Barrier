@@ -8,7 +8,7 @@ import jakarta.persistence.Table;
 /** Mapeamento JPA de um tenant (cliente da API). */
 @Entity
 @Table(name = "tenants")
-class TenantEntity {
+public class TenantEntity {
 
   @Id
   @Column(name = "id", nullable = false, length = 40)

@@ -9,7 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
-import com.barrier.riskengine.subject.repository.SubjectRepository;
+import com.barrier.riskengine.subject.repository.interfaces.SubjectRepository;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;

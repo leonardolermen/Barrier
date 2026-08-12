@@ -1,6 +1,6 @@
 package com.barrier.riskengine.screening.repository;
 
-import com.barrier.riskengine.screening.domain.ScreeningStatus;
+import com.barrier.riskengine.screening.domain.enums.ScreeningStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,7 +13,7 @@ import java.util.UUID;
 /** Mapeamento JPA do resultado de screening; os apontamentos ficam serializados em JSON. */
 @Entity
 @Table(name = "screening_results")
-class ScreeningResultEntity {
+public class ScreeningResultEntity {
 
   @Id
   @Column(name = "id", nullable = false)

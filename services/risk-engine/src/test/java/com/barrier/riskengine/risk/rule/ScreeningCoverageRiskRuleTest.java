@@ -5,7 +5,8 @@ import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.watchlist.WatchlistImportStatus;
 import java.util.Set;
 import org.junit.jupiter.api.Test;

@@ -14,7 +14,7 @@ import java.util.UUID;
 /** Mapeamento JPA da pontuação de risco; os resultados das regras ficam em JSON. */
 @Entity
 @Table(name = "risk_scores")
-class RiskScoreEntity {
+public class RiskScoreEntity {
 
   @Id
   @Column(name = "id", nullable = false)

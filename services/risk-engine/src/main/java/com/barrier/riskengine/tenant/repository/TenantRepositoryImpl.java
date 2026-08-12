@@ -2,6 +2,9 @@ package com.barrier.riskengine.tenant.repository;
 
 import com.barrier.riskengine.tenant.domain.Tenant;
 import java.util.Optional;
+
+import com.barrier.riskengine.tenant.repository.interfaces.TenantJpaRepository;
+import com.barrier.riskengine.tenant.repository.interfaces.TenantRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository

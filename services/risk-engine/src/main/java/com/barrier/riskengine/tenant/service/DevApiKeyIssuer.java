@@ -1,7 +1,7 @@
 package com.barrier.riskengine.tenant.service;
 
 import com.barrier.riskengine.tenant.domain.ApiKeyMaterial;
-import com.barrier.riskengine.tenant.repository.ApiKeyRepository;
+import com.barrier.riskengine.tenant.repository.interfaces.ApiKeyRepository;
 import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

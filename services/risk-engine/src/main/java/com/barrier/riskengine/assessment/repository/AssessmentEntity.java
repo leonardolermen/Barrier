@@ -16,7 +16,7 @@ import java.util.UUID;
 /** Mapeamento JPA da avaliação. Não vaza para fora da camada de repositório. */
 @Entity
 @Table(name = "assessments")
-class AssessmentEntity {
+public class AssessmentEntity {
 
   @Id
   @Column(name = "id", nullable = false)

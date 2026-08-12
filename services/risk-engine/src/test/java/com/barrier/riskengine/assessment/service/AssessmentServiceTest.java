@@ -17,7 +17,7 @@ import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.domain.exceptions.IdempotencyConflictException;
 import com.barrier.riskengine.assessment.domain.IdempotencyReservation;
 import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
-import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;

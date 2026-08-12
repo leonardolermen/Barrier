@@ -15,7 +15,7 @@ import java.util.UUID;
 /** Mapeamento JPA de uma verificação de identidade. */
 @Entity
 @Table(name = "identity_checks")
-class IdentityCheckEntity {
+public class IdentityCheckEntity {
 
   @Id
   @Column(name = "id", nullable = false)
