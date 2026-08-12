@@ -54,6 +54,7 @@ class AssessmentProcessorTest {
   @Mock ScreeningService screeningService;
   @Mock RiskScoringService riskScoringService;
   @Mock SubjectProfileService subjectProfileService;
+  @Mock com.barrier.riskengine.subject.profile.service.FieldVerificationService fieldVerificationService;
   @Mock AssessmentEventPublisher eventPublisher;
 
   private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -65,12 +66,14 @@ class AssessmentProcessorTest {
         screeningService,
         riskScoringService,
         subjectProfileService,
+        fieldVerificationService,
         eventPublisher,
         new AssessmentMetrics(registry),
         transactionTemplate(),
         Duration.ofMinutes(5),
         5,
-        Duration.ofSeconds(30));
+        Duration.ofSeconds(30),
+        true);
   }
 
   /**
@@ -110,6 +113,14 @@ class AssessmentProcessorTest {
     lenient()
         .when(subjectProfileService.find(any(UUID.class), anyString()))
         .thenReturn(completeCpfProfile());
+    // Cadastro verificado: o gate de veracidade tem teste próprio, e deixá-lo implícito aqui faria
+    // estes casos falharem por um motivo que não é o que eles provam.
+    lenient()
+        .when(fieldVerificationService.verifiedFields(any(UUID.class), anyString(), any()))
+        .thenReturn(
+            java.util.Set.of(
+                com.barrier.riskengine.subject.profile.domain.VerifiableField.BIRTH_DATE,
+                com.barrier.riskengine.subject.profile.domain.VerifiableField.PHONE));
     return a;
   }
 
@@ -155,6 +166,26 @@ class AssessmentProcessorTest {
     assertThat(pending.riskLevel()).isEqualTo(RiskLevel.LOW);
     verify(repository).save(pending);
     verify(eventPublisher).publishCompleted(pending);
+  }
+
+  /**
+   * O furo que a verificação fecha: cadastro preenchido com dado plausível e inventado liberava
+   * aprovação automática. Agora cai na mesma fila de "falta o campo" — não é reprovação, porque
+   * dado não verificado não é dado falso.
+   */
+  @Test
+  void cadastroNaoVerificadoNaoLiberaAprovacaoAutomatica() {
+    var processor = newProcessor();
+    Assessment pending = pendingAssessment();
+    when(fieldVerificationService.verifiedFields(any(UUID.class), anyString(), any()))
+        .thenReturn(java.util.Set.of());
+    stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
+
+    processor.process();
+
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.SOLICITAR_DOCUMENTO);
+    assertThat(pending.factors())
+        .anySatisfy(f -> assertThat(f).contains("telefone ou e-mail verificado"));
   }
 
   @Test

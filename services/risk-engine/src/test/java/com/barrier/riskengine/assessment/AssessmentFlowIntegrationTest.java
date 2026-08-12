@@ -43,7 +43,12 @@ import org.testcontainers.utility.DockerImageName;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
       "barrier.assessment.processor-delay-ms=3600000",
-      "barrier.outbox.relay-delay-ms=3600000"
+      "barrier.outbox.relay-delay-ms=3600000",
+      // O que este teste prova é o fluxo ponta a ponta (intake → processamento → evento → GET).
+      // Com a exigência de verificação ligada, toda PF sem OTP para em SOLICITAR_DOCUMENTO e o
+      // fluxo deixaria de ser exercitável até o fim — o gate de veracidade tem cobertura própria
+      // em AssessmentProcessorTest e FieldVerificationServiceTest.
+      "barrier.verification.required=false"
     })
 @Testcontainers
 class AssessmentFlowIntegrationTest {
@@ -134,7 +139,9 @@ class AssessmentFlowIntegrationTest {
         client().get().uri("/v1/assessments/" + id).retrieve().toEntity(AssessmentResponse.class);
     assertThat(fetched.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(fetched.getBody()).isNotNull();
-    assertThat(fetched.getBody().status()).isEqualTo("APROVADO");
+    assertThat(fetched.getBody().status())
+        .withFailMessage("fatores: %s", fetched.getBody().factors())
+        .isEqualTo("APROVADO");
     assertThat(fetched.getBody().riskLevel()).isEqualTo("LOW");
 
     // evento foi efetivamente publicado (outbox marcada como SENT)

@@ -1,6 +1,7 @@
 # ADR-0005: Modelo de produto — motor de risco (A), evoluindo para plataforma (B)
 
-- **Status:** Aceito
+- **Status:** Aceito — a parte "quando ir para o Modelo B" foi substituída por
+  [ADR-0016](0016-plataforma-completa-modelo-b.md)
 - **Data:** 2026-07-04
 
 ## Contexto

@@ -22,6 +22,56 @@ class RegistrationCompletenessTest {
         .contains("data de nascimento", "nacionalidade", "ocupação", "endereço");
   }
 
+  /**
+   * O furo que esta mudança fecha: todos os campos preenchidos com dados plausíveis e inventados
+   * satisfaziam o gate e liberavam aprovação automática. Preenchido não é verificado.
+   */
+  @Test
+  void cpfPreenchidoMasNaoVerificadoNaoEstaCompleto() {
+    RegistrationCompleteness completeness =
+        RegistrationCompleteness.evaluate("CPF", cpfPreenchido(), java.util.Set.of());
+
+    assertThat(completeness.complete()).isFalse();
+    assertThat(completeness.missingFields())
+        .containsExactlyInAnyOrder(
+            "data de nascimento não conferida com o bureau", "telefone ou e-mail verificado");
+  }
+
+  /** Um canal basta: cobrar telefone E e-mail travaria cliente legítimo que só tem um. */
+  @Test
+  void umCanalVerificadoBastaJuntoComONascimentoConferido() {
+    RegistrationCompleteness completeness =
+        RegistrationCompleteness.evaluate(
+            "CPF",
+            cpfPreenchido(),
+            java.util.Set.of(VerifiableField.BIRTH_DATE, VerifiableField.EMAIL));
+
+    assertThat(completeness.complete()).isTrue();
+  }
+
+  private SubjectProfile cpfPreenchido() {
+    return new SubjectProfile(
+        UUID.randomUUID(),
+        subjectId,
+        TENANT,
+        LocalDate.of(1990, 1, 1),
+        null,
+        "Brasileira",
+        "Engenheira",
+        null,
+        new SubjectProfile.Address("Rua A", "10", null, "Centro", "São Paulo", "SP", "01000-000"),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
   @Test
   void cpfCompletoComTodosOsCamposMinimos() {
     SubjectProfile profile =
@@ -46,7 +96,11 @@ class RegistrationCompletenessTest {
             null,
             null);
 
-    RegistrationCompleteness completeness = RegistrationCompleteness.evaluate("CPF", profile);
+    RegistrationCompleteness completeness =
+        RegistrationCompleteness.evaluate(
+            "CPF",
+            profile,
+            java.util.Set.of(VerifiableField.BIRTH_DATE, VerifiableField.PHONE));
 
     assertThat(completeness.complete()).isTrue();
     assertThat(completeness.missingFields()).isEmpty();

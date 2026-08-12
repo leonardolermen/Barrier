@@ -229,7 +229,10 @@ class TenantIsolationIntegrationTest {
 
     submete(com(tenantA), CPF_ALVO, "Fulano de Tal");
     ProfileResponse deA = atualizaCadastro(tenantA, cadastroCompletoPf());
-    assertThat(deA.complete()).isTrue();
+    // A asserção é sobre os campos DECLARADOS: com a exigência de verificação, nenhum cadastro é
+    // "completo" só por estar preenchido — e o que este teste prova é isolamento, não veracidade.
+    assertThat(deA.missingFields())
+        .doesNotContain("data de nascimento", "nacionalidade", "ocupação", "endereço");
 
     // B cria o próprio vínculo com o mesmo CPF e tenta ler o cadastro com um patch vazio
     submete(com(tenantB), CPF_ALVO, "Fulano de Tal");
@@ -241,7 +244,7 @@ class TenantIsolationIntegrationTest {
 
     assertThat(deB.complete()).isFalse();
     assertThat(deB.missingFields())
-        .containsExactlyInAnyOrder("data de nascimento", "nacionalidade", "ocupação", "endereço");
+        .contains("data de nascimento", "nacionalidade", "ocupação", "endereço");
   }
 
   /** E a escrita de um tenant não altera o cadastro do outro (o vetor de indução de aprovação). */
@@ -260,12 +263,13 @@ class TenantIsolationIntegrationTest {
             LocalDate.of(1999, 9, 9), null, "Outra", "Outra", null, null, null, null, null, null,
             null, null, null, null));
 
-    // o cadastro de A continua o que A declarou: patch vazio de A segue completo
+    // o cadastro de A continua o que A declarou: patch vazio de A não reabre nenhuma lacuna
     ProfileResponse deA =
         atualizaCadastro(
             tenantA,
             new UpdateProfileRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null));
-    assertThat(deA.complete()).isTrue();
+    assertThat(deA.missingFields())
+        .doesNotContain("data de nascimento", "nacionalidade", "ocupação", "endereço");
   }
 }

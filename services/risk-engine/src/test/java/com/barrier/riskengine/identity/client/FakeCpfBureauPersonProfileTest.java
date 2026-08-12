@@ -43,7 +43,8 @@ class FakeCpfBureauPersonProfileTest {
   void perfilDoBureauSozinhoNaoCompletaOCadastroDePf() {
     SubjectProfile profile = comPerfilDoBureau(provider.check(cpf("11144477735")), null);
 
-    RegistrationCompleteness completeness = RegistrationCompleteness.evaluate("CPF", profile);
+    RegistrationCompleteness completeness =
+        RegistrationCompleteness.evaluate("CPF", profile, verificado());
 
     assertThat(completeness.complete()).isFalse();
     assertThat(completeness.missingFields()).containsExactly("ocupação");
@@ -54,7 +55,7 @@ class FakeCpfBureauPersonProfileTest {
   void comOcupacaoDeclaradaOCadastroFica() {
     SubjectProfile profile = comPerfilDoBureau(provider.check(cpf("11144477735")), "Engenheira");
 
-    assertThat(RegistrationCompleteness.evaluate("CPF", profile).complete()).isTrue();
+    assertThat(RegistrationCompleteness.evaluate("CPF", profile, verificado()).complete()).isTrue();
   }
 
   /** O caminho de cadastro incompleto continua exercitável — senão o mock esconderia o gate. */
@@ -93,5 +94,18 @@ class FakeCpfBureauPersonProfileTest {
             null,
             null)
         .applyTo(SubjectProfile.blank(UUID.randomUUID(), "default"));
+  }
+
+  /**
+   * O que este teste isola é a lacuna do <b>bureau</b> (ocupação, que bureau nenhum fornece), não a
+   * de verificação — essa tem cobertura própria. Sem fixar os campos verificados, o teste passaria
+   * a falhar por um motivo que não é o que ele prova.
+   */
+  private static java.util.Set<
+          com.barrier.riskengine.subject.profile.domain.VerifiableField>
+      verificado() {
+    return java.util.Set.of(
+        com.barrier.riskengine.subject.profile.domain.VerifiableField.BIRTH_DATE,
+        com.barrier.riskengine.subject.profile.domain.VerifiableField.PHONE);
   }
 }

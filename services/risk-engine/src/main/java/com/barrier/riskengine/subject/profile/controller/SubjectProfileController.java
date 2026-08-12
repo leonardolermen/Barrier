@@ -6,6 +6,7 @@ import com.barrier.riskengine.subject.profile.controller.dto.ProfileResponse;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
+import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import com.barrier.riskengine.subject.service.SubjectService;
 import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
@@ -26,11 +27,15 @@ public class SubjectProfileController {
 
   private final SubjectService subjectService;
   private final SubjectProfileService profileService;
+  private final FieldVerificationService verificationService;
 
   public SubjectProfileController(
-      SubjectService subjectService, SubjectProfileService profileService) {
+      SubjectService subjectService,
+      SubjectProfileService profileService,
+      FieldVerificationService verificationService) {
     this.subjectService = subjectService;
     this.profileService = profileService;
+    this.verificationService = verificationService;
   }
 
   /** Cria ou atualiza (parcialmente) o cadastro do subject. Cadastro é progressivo. */
@@ -49,8 +54,14 @@ public class SubjectProfileController {
     Subject subject = subjectService.getForTenant(tenant.id(), documentType, digits);
 
     SubjectProfile profile = profileService.upsert(subject.id(), tenant.id(), request.toPatch());
+    // A resposta precisa incluir as lacunas de verificação, não só as de preenchimento: senão o
+    // parceiro lê "cadastro completo" aqui e recebe SOLICITAR_DOCUMENTO na avaliação, sem nada que
+    // explique a contradição.
     RegistrationCompleteness completeness =
-        RegistrationCompleteness.evaluate(documentType, profile);
+        RegistrationCompleteness.evaluate(
+            documentType,
+            profile,
+            verificationService.verifiedFields(subject.id(), tenant.id(), profile));
     return ResponseEntity.ok(ProfileResponse.of(completeness));
   }
 }
