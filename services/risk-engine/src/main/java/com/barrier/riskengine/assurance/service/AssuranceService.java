@@ -51,7 +51,7 @@ public class AssuranceService {
   @Transactional
   public AssuranceCheck verifyDocument(
       UUID subjectId, String tenantId, DocumentSubmission submission, AssuranceConsent consent) {
-    consent.validate();
+    requireConsent(consent);
     AssuranceCheck check = documentProvider.verify(subjectId, tenantId, submission);
     return persist(check.withConsent(consent));
   }
@@ -60,9 +60,23 @@ public class AssuranceService {
   @Transactional
   public AssuranceCheck verifyBiometrics(
       UUID subjectId, String tenantId, BiometricSubmission submission, AssuranceConsent consent) {
-    consent.validate();
+    requireConsent(consent);
     AssuranceCheck check = biometricProvider.verify(subjectId, tenantId, submission);
     return persist(check.withConsent(consent));
+  }
+
+  /**
+   * Consentimento ausente é tão inválido quanto um consentimento sem finalidade, e tem de recusar
+   * do mesmo jeito — mensagem clara, antes de acionar o provedor — em vez de estourar
+   * {@code NullPointerException} no meio de {@code consent.validate()}. Quem chama esta assinatura
+   * é o controller (Task 5): lá, "esqueceram de mandar o consentimento" é o caminho normal de um
+   * cliente mal-implementado, não uma situação excepcional de programação.
+   */
+  private void requireConsent(AssuranceConsent consent) {
+    if (consent == null) {
+      throw new IllegalArgumentException("consentimento é obrigatório para esta verificação");
+    }
+    consent.validate();
   }
 
   /**
