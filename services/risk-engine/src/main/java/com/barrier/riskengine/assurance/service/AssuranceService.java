@@ -5,6 +5,7 @@ import com.barrier.riskengine.assurance.client.DocumentSubmission;
 import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationProvider;
 import com.barrier.riskengine.assurance.client.interfaces.DocumentVerificationProvider;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
+import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
 import java.util.Optional;
@@ -41,18 +42,27 @@ public class AssuranceService {
     this.repository = repository;
   }
 
+  /**
+   * O consentimento entra pela assinatura do serviço, não do provedor: é obrigação legal do
+   * tratamento, não parte da verificação técnica do documento. O provedor não sabe — nem precisa
+   * saber — que existe consentimento; quem carimba o {@code AssuranceCheck} devolvido é o serviço,
+   * imediatamente antes de persistir.
+   */
   @Transactional
   public AssuranceCheck verifyDocument(
-      UUID subjectId, String tenantId, DocumentSubmission submission) {
+      UUID subjectId, String tenantId, DocumentSubmission submission, AssuranceConsent consent) {
+    consent.validate();
     AssuranceCheck check = documentProvider.verify(subjectId, tenantId, submission);
-    return persist(check);
+    return persist(check.withConsent(consent));
   }
 
+  /** Ver {@link #verifyDocument}: mesmo motivo para o consentimento entrar aqui. */
   @Transactional
   public AssuranceCheck verifyBiometrics(
-      UUID subjectId, String tenantId, BiometricSubmission submission) {
+      UUID subjectId, String tenantId, BiometricSubmission submission, AssuranceConsent consent) {
+    consent.validate();
     AssuranceCheck check = biometricProvider.verify(subjectId, tenantId, submission);
-    return persist(check);
+    return persist(check.withConsent(consent));
   }
 
   /**

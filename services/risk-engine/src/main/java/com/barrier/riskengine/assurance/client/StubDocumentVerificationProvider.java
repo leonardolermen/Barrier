@@ -58,7 +58,8 @@ public class StubDocumentVerificationProvider implements DocumentVerificationPro
         "stub/1.0.0",
         submission.submittedHash(),
         "documentoscopia simulada (" + submission.documentType() + ")",
-        now);
+        now,
+        null);
   }
 
   @Override

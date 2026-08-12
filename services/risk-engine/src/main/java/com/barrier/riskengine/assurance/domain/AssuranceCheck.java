@@ -16,6 +16,9 @@ import java.util.UUID;
  *     meses atrás são réguas diferentes comparadas como se fossem a mesma
  * @param submittedHash SHA-256 do que foi submetido. Não reconstrói rosto nem documento, e é o que
  *     permite provar depois que a imagem apresentada numa contestação é a que foi analisada
+ * @param consent prova de consentimento do titular para esta verificação, nesta finalidade.
+ *     Anexado pelo serviço, não pelo provedor: consentimento é obrigação legal do tratamento,
+ *     não parte da verificação técnica de documento/biometria
  */
 public record AssuranceCheck(
     UUID id,
@@ -29,7 +32,8 @@ public record AssuranceCheck(
     String algorithmVersion,
     String submittedHash,
     String detail,
-    Instant checkedAt) {
+    Instant checkedAt,
+    AssuranceConsent consent) {
 
   /** Verificação que sustenta aprovação automática: só o desfecho positivo serve. */
   public boolean passed() {
@@ -42,5 +46,26 @@ public record AssuranceCheck(
    */
   public boolean inconclusive() {
     return outcome == AssuranceOutcome.INCONCLUSIVE || outcome == AssuranceOutcome.UNAVAILABLE;
+  }
+
+  /**
+   * Devolve uma cópia com o consentimento anexado. O provedor devolve o {@code AssuranceCheck}
+   * sem saber de consentimento; é o serviço que carimba antes de persistir.
+   */
+  public AssuranceCheck withConsent(AssuranceConsent consent) {
+    return new AssuranceCheck(
+        id,
+        subjectId,
+        tenantId,
+        kind,
+        outcome,
+        score,
+        provider,
+        providerReference,
+        algorithmVersion,
+        submittedHash,
+        detail,
+        checkedAt,
+        consent);
   }
 }
