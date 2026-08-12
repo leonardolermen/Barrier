@@ -22,7 +22,7 @@ Formato baseado em [Michael Nygard](https://cognitect.com/blog/2011/11/15/docume
 | [0013](0013-watchlist-fontes-producao.md) | Watchlist em produção: fail-fast sem CGU/OFAC habilitados | Aceito |
 | [0014](0014-bureau-cpf-bigboost.md) | Bureau real de CPF via BigBoost (self-service, sem CNPJ) | Aceito |
 | [0015](0015-ingestao-em-massa-faixa-separada.md) | Ingestão em massa como faixa separada, com cota por tenant | Proposto |
-| [0016](0016-plataforma-completa-modelo-b.md) | Virada para plataforma completa (Modelo B), em três frentes sequenciadas | Proposto |
+| [0016](0016-plataforma-completa-modelo-b.md) | Plataforma completa: verificação de veracidade, documentoscopia e biometria guardando **resultado, não acervo** | Proposto |
 
 ## Status possíveis
 

@@ -16,6 +16,8 @@ import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
  * @param screening resultado do screening em listas restritivas
  * @param company perfil da PJ; {@code null} para CPF ou quando o bureau não o forneceu
  * @param profile cadastro do subject (endereço/telefone/etc.); pode estar em branco
+ * @param assurance resultados de documentoscopia e biometria; {@code null} quando o parceiro não
+ *     usa essa etapa. Ausência é diferente de falha, e as regras tratam as duas de forma diferente
  */
 public record RiskContext(
     String assessmentId,
@@ -23,4 +25,17 @@ public record RiskContext(
     IdentityCheck identity,
     ScreeningResult screening,
     CompanyProfile company,
-    SubjectProfile profile) {}
+    SubjectProfile profile,
+    AssuranceSummary assurance) {
+
+  /** Compatibilidade para os caminhos que ainda não passam pela etapa de documentoscopia. */
+  public RiskContext(
+      String assessmentId,
+      String tenantId,
+      IdentityCheck identity,
+      ScreeningResult screening,
+      CompanyProfile company,
+      SubjectProfile profile) {
+    this(assessmentId, tenantId, identity, screening, company, profile, null);
+  }
+}
