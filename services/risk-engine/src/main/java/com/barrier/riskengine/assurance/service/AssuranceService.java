@@ -2,6 +2,7 @@ package com.barrier.riskengine.assurance.service;
 
 import com.barrier.riskengine.assurance.client.BiometricSubmission;
 import com.barrier.riskengine.assurance.client.DocumentSubmission;
+import com.barrier.riskengine.assurance.client.DocumentVerificationResult;
 import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationProvider;
 import com.barrier.riskengine.assurance.client.interfaces.DocumentVerificationProvider;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
@@ -49,11 +50,12 @@ public class AssuranceService {
    * imediatamente antes de persistir.
    */
   @Transactional
-  public AssuranceCheck verifyDocument(
+  public DocumentVerificationResult verifyDocument(
       UUID subjectId, String tenantId, DocumentSubmission submission, AssuranceConsent consent) {
     requireConsent(consent);
-    AssuranceCheck check = documentProvider.verify(subjectId, tenantId, submission);
-    return persist(check.withConsent(consent));
+    DocumentVerificationResult result = documentProvider.verify(subjectId, tenantId, submission);
+    AssuranceCheck persisted = persist(result.check().withConsent(consent));
+    return new DocumentVerificationResult(persisted, result.extracted());
   }
 
   /** Ver {@link #verifyDocument}: mesmo motivo para o consentimento entrar aqui. */
