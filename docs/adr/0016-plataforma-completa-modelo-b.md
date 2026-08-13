@@ -133,13 +133,22 @@ ser bloqueio para a etapa 3 poder ser construída e ligada. O risco que a sequê
 (capturar biometria antes de cifrar) segue evitado por outro mecanismo: **a imagem nunca é
 armazenada**, então não existe acervo biométrico para cifrar em primeiro lugar.
 
-**2. A etapa 1 (veracidade do dado declarado) consta como concluída.**
+**2. A etapa 1 (veracidade do dado declarado) consta como substancialmente implementada — não
+concluída.**
 
 `subject_field_verifications` (migration V034), `FieldVerification`, `VerificationMethod` e
 `FieldVerificationService` implementam a distinção entre campo declarado e campo verificado; OTP
-cobre telefone/e-mail e o gate de completude passou a exigir verificação nos campos que a
-sustentam. O furo que motivou a etapa 1 — cadastro plausível e inventado satisfazendo o gate — está
-fechado.
+cobre telefone/e-mail, nascimento é verificável tanto contra o bureau (`recordBirthDateFromBureau`)
+quanto contra a documentoscopia (`recordBirthDateFromDocument`, etapa 3), e o gate de completude
+passou a exigir verificação nos campos que essas fontes sustentam.
+
+> **Correção (revisão final):** esta seção afirmava a etapa 1 concluída; é otimista. Falta
+> **validação de endereço** — `VerifiableField.ADDRESS` e `VerificationMethod.ADDRESS_LOOKUP` estão
+> definidos e nunca usados, e `FieldVerificationService.challenge` recusa `ADDRESS` explicitamente.
+> Cadastro plausível e inventado ainda satisfaz o gate **para o campo endereço** especificamente —
+> o furo original está fechado para telefone, e-mail e nascimento, não para todo campo verificável.
+> Por isso `docs/implementation/plano-remediacao-auditoria.md` mantém o item "Verificar dados, não
+> só presença" **aberto**: o plano de remediação está certo, este ADR estava otimista.
 
 **3. O bloqueio por consentimento passa a estar atendido.**
 

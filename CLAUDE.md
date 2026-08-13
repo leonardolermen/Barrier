@@ -309,10 +309,12 @@ score, provedor e referência da consulta, mesmo padrão de `BureauTrace`. Conse
 por verificação, na assinatura do serviço (`AssuranceConsent`, colunas em V036) — ausência recusa
 com 400 antes de acionar o provedor, nunca depois. Os campos que a documentoscopia extrai são
 comparados contra o cadastro (CMN 4.753) e o `Subject`: nascimento que confere vira
-`FieldVerification` com `method=DOCUMENT` (mesmo padrão de `recordBirthDateFromBureau`); nome ou
-nascimento que divergem não têm campo verificável equivalente e viram `AssuranceCheck.divergences()`
-(V037) — sinal de possível fraude, não campo faltando, que `IdentityAssuranceRiskRule` soma ao
-score. Qualquer desfecho, inclusive FAIL/INCONCLUSIVE/UNAVAILABLE, dispara reavaliação automática:
+`FieldVerification` com `method=DOCUMENT` (mesmo padrão de `recordBirthDateFromBureau`); nascimento
+que diverge vira `AssuranceCheck.divergences()` (V037) — sinal de possível fraude, não campo
+faltando. Nome é diferente: pertence ao `Subject`, não ao cadastro, então não tem campo verificável
+equivalente **para ele** — divergir também vira `divergences()`, mas nunca `FieldVerification`.
+`IdentityAssuranceRiskRule` soma a divergência ao score e cita **quais campos** divergiram na
+evidência (NAME/BIRTH_DATE, nunca o valor — fator explicável). Qualquer desfecho, inclusive FAIL/INCONCLUSIVE/UNAVAILABLE, dispara reavaliação automática:
 `AssuranceService` agenda a notificação em `TransactionSynchronization.afterCommit()` (a gravação
 do check precisa estar commitada antes de reagir) e o listener roda em `REQUIRES_NEW` — sem
 propagation própria ele entraria na transação já commitada em vez de abrir uma nova, e a
@@ -323,14 +325,21 @@ reavaliação sumiria sem lançar. A reação mora em `rescreening`
 `assurance → assessment → risk → assurance` (risk já depende de assurance via
 `IdentityAssuranceRiskRule`) — o mesmo padrão de inversão de dependência do
 `WatchlistImportListener`. `ArchUnit` (`sem_ciclos_entre_modulos`) é o que prova que a inversão
-segura.
+segura. Kill switch `barrier.assurance.enabled` (default `true`, mesmo padrão de
+`barrier.rescreening.enabled`): desligado, o endpoint recusa com 409 antes de acionar qualquer
+provedor. Em `prod`, sem provedor real contratado, `UnavailableDocumentVerificationProvider`/
+`UnavailableBiometricVerificationProvider` (`@Profile("prod")`) devolvem sempre `UNAVAILABLE` —
+os stubs são `@Profile("!prod")` e, sem esses providers de emergência, o construtor obrigatório
+de `AssuranceService` faria o contexto inteiro falhar na subida em produção;
+`AssuranceProviderReadinessGuard` só **avisa** quando são eles que estão ativos, no padrão de
+`CnpjBureauReadinessGuard`.
 
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (428 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 508 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (440 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 520 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).
