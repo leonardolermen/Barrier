@@ -62,7 +62,7 @@ persistido; `IdentityService.verify` devolve `IdentityResult(check, company)` e 
 até o motor de risco pelo `RiskContext`. Regras de PJ que consomem isso: `NewCompanyRiskRule`
 (empresa recém-aberta), `SensitiveCnaeRiskRule` (CNAE sensível a PLD-FT) e
 `CorporateStructureRiskRule` (KYB — sócio estrangeiro/PJ no QSA de 1º grau; árvore até 3º grau
-ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.6.0`.
+ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.7.0`.
 
 Watchlists (screening): **ingeridas** (ADR-0010) — `WatchlistImporter` (ApplicationRunner +
 @Scheduled) carrega `WatchlistSource`s numa tabela `watchlist_entries`; `LocalWatchlistProvider`
@@ -201,7 +201,7 @@ inidoneidade em licitação não impede relacionamento bancário e gerava `REJEC
 100 sem recomendação por nome, nunca REJECT, sócio não escala). **Não** é `RegulatoryRiskRule` — é
 apetite de risco, desligável pelo registry (V030). Consequência: a CGU não conta mais como cobertura
 de `SANCTION`; a única fonte é a OFAC, então habilitar só a CGU em prod falha o
-`WatchlistReadinessGuard`. `ENGINE_VERSION` = `barrier-risk-rules/1.6.0`.
+`WatchlistReadinessGuard`. `ENGINE_VERSION` = `barrier-risk-rules/1.7.0`.
 
 Bureau real de CNPJ (Onda 2): `BigBoostCnpjBureauProvider` (`@Order(20)`, dataset `basic_data` da
 API de Empresas, mesma flag `barrier.identity.bigboost.enabled`) tira a cadeia de PJ do fail-open —
@@ -302,12 +302,35 @@ teto `barrier.rescreening.max-subjects-per-import` aborta e grita (delta gigante
 de layout); uma avaliação por (subject, tenant) por importação. Desligável em
 `barrier.rescreening.enabled`.
 
+Documentoscopia e biometria (ADR-0016, etapa 3): `AssuranceService` (pacote `assurance`) prova
+que quem está do outro lado é o titular — o motor até aqui confirmava CPF regular e nome batendo,
+não a pessoa. Guarda o **resultado**, nunca a imagem: `AssuranceCheck` (V035) fica com desfecho,
+score, provedor e referência da consulta, mesmo padrão de `BureauTrace`. Consentimento é exigido
+por verificação, na assinatura do serviço (`AssuranceConsent`, colunas em V036) — ausência recusa
+com 400 antes de acionar o provedor, nunca depois. Os campos que a documentoscopia extrai são
+comparados contra o cadastro (CMN 4.753) e o `Subject`: nascimento que confere vira
+`FieldVerification` com `method=DOCUMENT` (mesmo padrão de `recordBirthDateFromBureau`); nome ou
+nascimento que divergem não têm campo verificável equivalente e viram `AssuranceCheck.divergences()`
+(V037) — sinal de possível fraude, não campo faltando, que `IdentityAssuranceRiskRule` soma ao
+score. Qualquer desfecho, inclusive FAIL/INCONCLUSIVE/UNAVAILABLE, dispara reavaliação automática:
+`AssuranceService` agenda a notificação em `TransactionSynchronization.afterCommit()` (a gravação
+do check precisa estar commitada antes de reagir) e o listener roda em `REQUIRES_NEW` — sem
+propagation própria ele entraria na transação já commitada em vez de abrir uma nova, e a
+reavaliação sumiria sem lançar. A reação mora em `rescreening`
+(`AssuranceReassessmentTrigger`), não em `assurance`: `assurance` declara a interface
+(`AssuranceRecordedListener`) sem saber quem a implementa, porque reavaliar chamando
+`AssessmentService` direto de dentro de `assurance` fecharia o ciclo
+`assurance → assessment → risk → assurance` (risk já depende de assurance via
+`IdentityAssuranceRiskRule`) — o mesmo padrão de inversão de dependência do
+`WatchlistImportListener`. `ArchUnit` (`sem_ciclos_entre_modulos`) é o que prova que a inversão
+segura.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (275 testes na risk-engine + 16 na webhook-api, inclui
-integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (428 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 508 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).
