@@ -4,6 +4,7 @@ import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationP
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
+import com.barrier.riskengine.subject.service.SubjectService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -45,6 +46,17 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@code barrier.assurance.poller.delay-ms} pode ficar razoavelmente frequente sem preocupação de
  * custo por chamada; não "otimizar" o intervalo pensando em economizar dinheiro que não está
  * sendo gasto.
+ *
+ * <p><b>Resolve o CPF aqui, não no provider.</b> {@code BiometricVerificationProvider.pollResult}
+ * exige o documento já resolvido — nunca resolve sozinho — porque um provider em {@code client}
+ * não pode depender do módulo {@code subject} (integração externa só por interface). Este poller
+ * já depende de {@code SubjectService}, então é aqui que mora: {@code
+ * subjects.findById(pending.subjectId(), pending.tenantId())}, nunca só por {@code subjectId} —
+ * o tipo do método é a defesa contra vazar subject de outro tenant, mesmo padrão do {@code
+ * AssuranceReassessmentTrigger}. Resolver do banco a cada poll (em vez de cachear em memória) é
+ * deliberado: um mapa em memória preenchido na emissão do PIN foi exatamente o defeito que este
+ * desenho corrige — só funcionava quando a mesma instância emitia o PIN e poleiava, e este serviço
+ * roda replicado por desenho.
  */
 @Component
 public class AssuranceResultPoller {
@@ -55,6 +67,7 @@ public class AssuranceResultPoller {
   private final AssuranceCheckRepository repository;
   private final BiometricVerificationProvider biometricProvider;
   private final AssuranceService assuranceService;
+  private final SubjectService subjects;
   private final TransactionTemplate transactionTemplate;
   private final Clock clock;
   private final Duration lease;
@@ -63,12 +76,14 @@ public class AssuranceResultPoller {
       AssuranceCheckRepository repository,
       BiometricVerificationProvider biometricProvider,
       AssuranceService assuranceService,
+      SubjectService subjects,
       TransactionTemplate transactionTemplate,
       Clock clock,
       @Value("${barrier.assurance.poller.lease:PT1M}") Duration lease) {
     this.repository = repository;
     this.biometricProvider = biometricProvider;
     this.assuranceService = assuranceService;
+    this.subjects = subjects;
     this.transactionTemplate = transactionTemplate;
     this.clock = clock;
     this.lease = lease;
@@ -99,7 +114,8 @@ public class AssuranceResultPoller {
   private boolean pollOne(AssuranceCheck pending) {
     Optional<AssuranceCheck> outcome;
     try {
-      outcome = biometricProvider.pollResult(pending);
+      String document = subjects.findById(pending.subjectId(), pending.tenantId()).document();
+      outcome = biometricProvider.pollResult(pending, document);
     } catch (RuntimeException e) {
       // Falha ao consultar não é o mesmo que "provedor disse que ainda não saiu" — o item
       // simplesmente libera a posse (claimed_at vencerá) e tenta de novo no próximo ciclo, sem

@@ -11,11 +11,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -38,14 +36,16 @@ import tools.jackson.databind.ObjectMapper;
  * {@code BigBoostBureauProvider}: dev/testes usam {@code StubBiometricVerificationProvider};
  * habilitar exige {@code SERPRO_CONSUMER_KEY}/{@code SERPRO_CONSUMER_SECRET} reais.
  *
- * <p><b>Limite conhecido, documentado e não resolvido nesta rodada:</b> a associação
- * {@code pin → CPF} necessária para {@link #pollResult} é mantida em memória
- * ({@link #pinToDocument}), não persistida. Um restart da instância entre o PIN ser emitido e o
- * poller trazer o resultado perde essa associação — o check fica {@code PENDING} até expirar e
- * então vira {@code UNAVAILABLE} pelo próprio poller (ver {@code AssuranceResultPoller#expired}),
- * não trava para sempre, mas o cidadão precisa refazer a captura. Persistir o CPF junto do check
- * resolveria, ao custo de guardar CPF numa tabela que hoje não guarda documento nenhum — decisão
- * de produto que ficou fora desta fundação (ver relatório).
+ * <p><b>{@code pollResult} recebe o CPF já resolvido, não resolve sozinho.</b> A primeira versão
+ * guardava a associação {@code pin → CPF} num mapa em memória preenchido em
+ * {@code requestVerification} — funcionava só quando a mesma instância que emitiu o PIN também
+ * roda o poller. Este serviço roda replicado por desenho (é a razão de existir lease/{@code FOR
+ * UPDATE SKIP LOCKED} no outbox e no processor de avaliações): no cenário normal de produção, a
+ * réplica que emite o PIN quase nunca é a que poleia, e o mapa fazia a biometria <b>nunca</b>
+ * completar — não só depois de restart. Pior: o desfecho registrado era {@code UNAVAILABLE}
+ * ("provedor indisponível"), o que mentia na trilha — o Serpro respondia normalmente, quem
+ * perdeu o dado fomos nós. Ver Javadoc de {@link BiometricVerificationProvider#pollResult} para
+ * quem resolve o CPF agora e por quê o provider não pode fazer isso sozinho.
  *
  * <p><b>Verificado ao vivo contra o ambiente de demonstração</b> (token fixo público do Serpro
  * para esse fim; ver relatório): a URL base {@code gateway.apiserpro.serpro.gov.br/
@@ -76,8 +76,6 @@ public class SerproBiometricVerificationProvider implements BiometricVerificatio
   private final String cnpjAnuente;
   private final int pinExpiraEmSegundos;
   private final int qtdTentativas;
-
-  private final Map<String, String> pinToDocument = new ConcurrentHashMap<>();
 
   public SerproBiometricVerificationProvider(
       @Qualifier("serproDatavalidRestClient") RestClient restClient,
@@ -130,7 +128,6 @@ public class SerproBiometricVerificationProvider implements BiometricVerificatio
       PinResponse response = objectMapper.readValue(body, PinResponse.class);
       breaker.recordSuccess();
       Instant expiresAt = Instant.parse(response.dataHoraExpiracao());
-      pinToDocument.put(response.pin(), document);
       log.info(
           "PIN biométrico emitido para subject {} (CPF {}), expira em {}",
           subjectId,
@@ -161,21 +158,14 @@ public class SerproBiometricVerificationProvider implements BiometricVerificatio
    * não "otimizar" para menos frequente pensando em economizar chamadas pagas.
    */
   @Override
-  public Optional<AssuranceCheck> pollResult(AssuranceCheck pending) {
+  public Optional<AssuranceCheck> pollResult(AssuranceCheck pending, String document) {
     if (pending.pin() == null) {
       throw new IllegalStateException(
           "pollResult chamado para check sem PIN (id " + pending.id() + ") — provider errado?");
     }
-    String document = pinToDocument.get(pending.pin());
-    if (document == null) {
-      // Ver Javadoc da classe: perdeu a associação pin→CPF (restart). Sem CPF não há como
-      // consultar — devolve UNAVAILABLE em vez de tentar para sempre sem nunca poder resolver.
-      log.warn(
-          "Associação pin->CPF perdida para o check {} (subject {}); provavelmente restart da"
-              + " instância. Marcando indisponível.",
-          pending.id(),
-          pending.subjectId());
-      return Optional.of(unavailableFromPending(pending, "associação pin->CPF perdida (restart)"));
+    if (document == null || document.isBlank()) {
+      throw new IllegalArgumentException(
+          "pollResult chamado sem CPF resolvido para o check " + pending.id());
     }
 
     CircuitBreaker breaker = breakers.forName(name());

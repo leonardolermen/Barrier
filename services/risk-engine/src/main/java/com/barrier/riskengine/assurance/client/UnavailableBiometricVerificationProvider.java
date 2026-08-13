@@ -57,7 +57,7 @@ public class UnavailableBiometricVerificationProvider implements BiometricVerifi
 
   /** Síncrono: nunca produz um check PENDING, então o poller nunca deveria chamar isto. */
   @Override
-  public Optional<AssuranceCheck> pollResult(AssuranceCheck pending) {
+  public Optional<AssuranceCheck> pollResult(AssuranceCheck pending, String document) {
     throw new UnsupportedOperationException(
         "biometria-indisponivel é síncrona; requestVerification já devolve UNAVAILABLE");
   }

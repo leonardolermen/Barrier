@@ -42,6 +42,20 @@ public interface BiometricVerificationProvider {
    * Consulta o desfecho de um check ainda {@code PENDING} deste provedor. Chamado <b>só</b> pelo
    * {@code AssuranceResultPoller}, nunca no caminho síncrono da requisição HTTP.
    *
+   * @param document CPF do subject, resolvido pelo <b>chamador</b> a partir de {@code
+   *     pending.subjectId()}/{@code pending.tenantId()} — nunca pelo provider. Corrige um defeito
+   *     real: a primeira versão deste provider guardava a associação {@code pin → CPF} num mapa
+   *     em memória preenchido em {@code requestVerification}, o que funciona só quando a mesma
+   *     instância que emitiu o PIN também roda o poller. Este serviço roda replicado por desenho
+   *     (é a razão de existir lease/{@code FOR UPDATE SKIP LOCKED} no outbox e no processor de
+   *     avaliações) — no cenário normal de produção, a réplica que emite o PIN quase nunca é a
+   *     que poleia, e o mapa em memória fazia a biometria <b>nunca</b> completar, não só depois de
+   *     restart. E o desfecho errado (`UNAVAILABLE`, "provedor indisponível") mentia na trilha: o
+   *     Serpro respondeu normalmente, quem perdeu o dado fomos nós. O provider não deve resolver
+   *     isso sozinho porque isso o faria depender do módulo {@code subject} — integração externa
+   *     só conhece o pacote {@code client}; é o {@code AssuranceResultPoller} quem resolve via
+   *     {@code SubjectService.findById(subjectId, tenantId)} (nunca só por {@code subjectId} — o
+   *     tipo do método é a defesa contra vazar subject de outro tenant) e repassa aqui.
    * @return vazio enquanto o cidadão não completou a captura; presente com o desfecho final assim
    *     que ele completar, ou quando o PIN expirar sem resposta
    * @throws UnsupportedOperationException em provedores síncronos — eles nunca produzem um check
@@ -49,7 +63,7 @@ public interface BiometricVerificationProvider {
    *     {@code Optional.empty()} silenciosamente é deliberado: um poller que chamasse isto por
    *     engano ficaria tentando para sempre em vez de estourar no primeiro uso indevido.
    */
-  Optional<AssuranceCheck> pollResult(AssuranceCheck pending);
+  Optional<AssuranceCheck> pollResult(AssuranceCheck pending, String document);
 
   String name();
 }

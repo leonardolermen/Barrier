@@ -76,7 +76,7 @@ public class StubBiometricVerificationProvider implements BiometricVerificationP
 
   /** Síncrono: nunca produz um check PENDING, então o poller nunca deveria chamar isto. */
   @Override
-  public Optional<AssuranceCheck> pollResult(AssuranceCheck pending) {
+  public Optional<AssuranceCheck> pollResult(AssuranceCheck pending, String document) {
     throw new UnsupportedOperationException(
         "biometria-simulada é síncrona; requestVerification já devolve o desfecho final");
   }

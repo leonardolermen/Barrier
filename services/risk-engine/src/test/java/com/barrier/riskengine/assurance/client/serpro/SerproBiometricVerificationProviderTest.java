@@ -159,7 +159,7 @@ class SerproBiometricVerificationProviderTest {
 
     AssuranceCheck pending =
         provider.requestVerification(SUBJECT, "tenant-1", "11144477735", submissao());
-    Optional<AssuranceCheck> result = provider.pollResult(pending);
+    Optional<AssuranceCheck> result = provider.pollResult(pending, "11144477735");
 
     assertThat(result).isEmpty();
   }
@@ -185,7 +185,7 @@ class SerproBiometricVerificationProviderTest {
 
     AssuranceCheck pending =
         provider.requestVerification(SUBJECT, "tenant-1", "11144477735", submissao());
-    Optional<AssuranceCheck> result = provider.pollResult(pending);
+    Optional<AssuranceCheck> result = provider.pollResult(pending, "11144477735");
 
     assertThat(result).isPresent();
     assertThat(result.get().outcome()).isEqualTo(AssuranceOutcome.FAIL);
@@ -207,7 +207,7 @@ class SerproBiometricVerificationProviderTest {
     AssuranceCheck pending =
         provider.requestVerification(SUBJECT, "tenant-1", "11144477735", submissao());
 
-    org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.pollResult(pending))
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.pollResult(pending, "11144477735"))
         .isInstanceOf(org.springframework.web.client.RestClientResponseException.class);
   }
 
@@ -232,9 +232,65 @@ class SerproBiometricVerificationProviderTest {
 
     AssuranceCheck pending =
         provider.requestVerification(SUBJECT, "tenant-1", "11144477735", submissao());
-    Optional<AssuranceCheck> result = provider.pollResult(pending);
+    Optional<AssuranceCheck> result = provider.pollResult(pending, "11144477735");
 
     assertThat(result).isEmpty();
+  }
+
+  /**
+   * <b>O teste que fecha o defeito do mapa em memória</b>: constrói o provider do zero e chama
+   * {@code pollResult} diretamente com um check {@code PENDING} cujo PIN só existe porque veio
+   * "do banco" (é o argumento do teste, não algo que este provider emitiu) — nenhuma chamada a
+   * {@code requestVerification} aconteceu nesta instância. Simula exatamente o cenário de
+   * produção que quebrava com o mapa em memória: a réplica que poleia nunca é a que emitiu o PIN.
+   * Se a resolução do CPF voltar a depender de estado guardado pelo provider em
+   * {@code requestVerification}, este teste fica vermelho — o documento não estaria disponível
+   * para nenhum mapa interno resolver.
+   */
+  @Test
+  void poleiaUmCheckPendenteSemTerEmitidoOPinNesteProcesso() {
+    // Nenhuma chamada a requestVerification nesta instância — só o /token e o /resultado, que é
+    // tudo que uma réplica "diferente" da que emitiu o PIN precisaria fazer.
+    expectTokenCall();
+    dataServer
+        .expect(requestTo("/pessoa-fisica/app/resultado"))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(
+            withSuccess(
+                "{\"jws\":\"" + jwsAprovado() + "\"}",
+                MediaType.APPLICATION_JSON));
+
+    AssuranceCheck pendenteVindoDoBanco =
+        AssuranceCheck.pendingWithPin(
+            UUID.randomUUID(),
+            SUBJECT,
+            "tenant-1",
+            "datavalid-serpro",
+            "hash-abc",
+            NOW.minusSeconds(60),
+            "987654321",
+            NOW.plusSeconds(120));
+
+    Optional<AssuranceCheck> result = provider().pollResult(pendenteVindoDoBanco, "11144477735");
+
+    assertThat(result).isPresent();
+    tokenServer.verify();
+    dataServer.verify();
+  }
+
+  /** JWS minimamente válido só para o teste acima não depender da assinatura conferir de verdade. */
+  private String jwsAprovado() {
+    String header =
+        java.util.Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString("{\"alg\":\"none\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    String payload =
+        java.util.Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(
+                "{\"sub\":\"11144477735\",\"selo_biometrico\":\"A\"}"
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    return header + "." + payload + ".";
   }
 
   private void expectPinSuccess() {
