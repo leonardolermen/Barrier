@@ -227,8 +227,10 @@ class DocumentFieldExtractionTest {
   }
 
   /**
-   * Normalização ignora pontuação e caixa — sem isso, "maria silva" batendo contra "MARIA SILVA"
-   * (ou CPF pontuado contra sem pontuação) viraria divergência por formatação, não por conteúdo.
+   * Normalização ignora caixa e pontuação de nome — sem isso, "maria silva" batendo contra
+   * "MARIA SILVA", ou um apóstrofo/hífen do OCR contra o cadastro sem ele, viraria divergência
+   * por formatação, não por conteúdo. Documento não entra aqui: não é mais comparado (ver
+   * {@code numeroDoDocumentoDivergenteDoCpfNaoEComparadoNemPontua}).
    */
   @Test
   void nomeEquivalenteAposNormalizacaoNaoDiverge() {
@@ -236,10 +238,11 @@ class DocumentFieldExtractionTest {
     when(documentProvider.verify(any(), any(), any()))
         .thenReturn(
             new DocumentVerificationResult(
-                checkAprovado(), new ExtractedDocumentFields("maria silva", "12345678900", nascimento)));
+                checkAprovado(),
+                new ExtractedDocumentFields("maria d avila", "12345678900", nascimento)));
     when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
     when(subjectService.findById(SUBJECT, TENANT))
-        .thenReturn(subject("MARIA SILVA", "123.456.789-00"));
+        .thenReturn(subject("MARIA D'ÁVILA", "12345678900"));
 
     DocumentVerificationResult resultado =
         service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());

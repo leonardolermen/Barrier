@@ -133,7 +133,11 @@ public class AssuranceService {
     return divergences.isEmpty() ? check : check.withDivergences(divergences);
   }
 
-  /** Compara ignorando acento, caixa e pontuação — o mesmo normalizador do fuzzy match. */
+  /**
+   * Compara ignorando acento e caixa — o mesmo normalizador do fuzzy match ({@code
+   * NameNormalizer}). Pontuação não é removida, vira separador (espaço) e depois é colapsada com
+   * os demais espaços: {@code "D'ÁVILA"} normaliza para {@code "D AVILA"}, não {@code "DAVILA"}.
+   */
   private static boolean diverges(String declared, String extracted) {
     if (declared == null || extracted == null) {
       return false;
