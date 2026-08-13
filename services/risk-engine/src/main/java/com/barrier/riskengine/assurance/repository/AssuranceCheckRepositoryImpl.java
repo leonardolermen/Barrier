@@ -87,7 +87,15 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
   }
 
   private static AssuranceCheck map(ResultSet rs) throws SQLException {
-    int score = rs.getInt("score");
+    // rs.wasNull() reflete a ÚLTIMA coluna lida no ResultSet, não a coluna que se quer checar.
+    // Passá-lo como argumento posicional do construtor é uma armadilha: os argumentos de Java são
+    // avaliados da esquerda para a direita, então qualquer rs.getString(...) de coluna NOT NULL
+    // entre o rs.getInt("score") e o rs.wasNull() (id, subject_id, tenant_id, kind, outcome, todos
+    // acima na lista de argumentos) reseta a flag para false — e um score nulo silenciosamente
+    // virava 0. Isolar a leitura em variável local, com o wasNull() checado imediatamente depois,
+    // fecha essa lacuna.
+    int rawScore = rs.getInt("score");
+    Integer score = rs.wasNull() ? null : rawScore;
     String consentReference = rs.getString("consent_reference");
     Timestamp consentGrantedAt = rs.getTimestamp("consent_granted_at");
     AssuranceConsent consent =
@@ -103,7 +111,7 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         rs.getString("tenant_id"),
         AssuranceKind.valueOf(rs.getString("kind")),
         AssuranceOutcome.valueOf(rs.getString("outcome")),
-        rs.wasNull() ? null : score,
+        score,
         rs.getString("provider"),
         rs.getString("provider_reference"),
         rs.getString("algorithm_version"),
