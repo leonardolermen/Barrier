@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +15,10 @@ import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
+import com.barrier.riskengine.assurance.domain.AssuranceCheck;
+import com.barrier.riskengine.assurance.domain.AssuranceKind;
+import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
+import com.barrier.riskengine.assurance.service.AssuranceService;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.service.IdentityResult;
@@ -21,7 +27,11 @@ import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
+import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
+import com.barrier.riskengine.risk.repository.interfaces.RiskScoreRepository;
+import com.barrier.riskengine.risk.rule.IdentityAssuranceRiskRule;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.service.ScreeningCommand;
@@ -55,6 +65,7 @@ class AssessmentProcessorTest {
   @Mock RiskScoringService riskScoringService;
   @Mock SubjectProfileService subjectProfileService;
   @Mock com.barrier.riskengine.subject.profile.service.FieldVerificationService fieldVerificationService;
+  @Mock AssuranceService assuranceService;
   @Mock AssessmentEventPublisher eventPublisher;
 
   private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -67,6 +78,7 @@ class AssessmentProcessorTest {
         riskScoringService,
         subjectProfileService,
         fieldVerificationService,
+        assuranceService,
         eventPublisher,
         new AssessmentMetrics(registry),
         transactionTemplate(),
@@ -121,6 +133,13 @@ class AssessmentProcessorTest {
             java.util.Set.of(
                 com.barrier.riskengine.subject.profile.domain.VerifiableField.BIRTH_DATE,
                 com.barrier.riskengine.subject.profile.domain.VerifiableField.PHONE));
+    // Sem verificação registrada: comportamento padrão de quem não usa documentoscopia/biometria.
+    lenient()
+        .when(assuranceService.latest(any(UUID.class), anyString(), any(AssuranceKind.class)))
+        .thenReturn(Optional.empty());
+    lenient()
+        .when(assuranceService.attempts(any(UUID.class), anyString(), any(AssuranceKind.class)))
+        .thenReturn(0L);
     return a;
   }
 
@@ -361,5 +380,63 @@ class AssessmentProcessorTest {
 
     assertThat(processor.process()).isZero();
     verify(eventPublisher, never()).publishCompleted(any());
+  }
+
+  /**
+   * Prova que a regra dispara <b>pelo pipeline de verdade</b>, não só que o {@code
+   * AssuranceSummary} foi montado: usa o {@link RiskScoringService} real, com a
+   * {@link IdentityAssuranceRiskRule} real, sem mock no meio. Biometria com {@code FAIL} muda a
+   * decisão para o mesmo subject que, sem assurance, sairia aprovado — era exatamente esse o
+   * insumo que faltava chegar ao motor.
+   */
+  @Test
+  void biometriaComFalhaMudaADecisaoPeloMotorDeVerdade() {
+    RiskRuleRegistryService registryService = mock(RiskRuleRegistryService.class);
+    when(registryService.isActive(anyString())).thenReturn(true);
+    RiskScoreRepository riskScoreRepository = mock(RiskScoreRepository.class);
+    RiskRule assuranceRule = new IdentityAssuranceRiskRule(600, 100, 200, 3, 300);
+    RiskScoringService realRiskScoringService =
+        new RiskScoringService(List.of(assuranceRule), riskScoreRepository, registryService);
+
+    var processor =
+        new AssessmentProcessor(
+            repository,
+            identityService,
+            screeningService,
+            realRiskScoringService,
+            subjectProfileService,
+            fieldVerificationService,
+            assuranceService,
+            eventPublisher,
+            new AssessmentMetrics(registry),
+            transactionTemplate(),
+            Duration.ofMinutes(5),
+            5,
+            Duration.ofSeconds(30),
+            true);
+    Assessment pending = pendingAssessment();
+    AssuranceCheck biometricFail =
+        new AssuranceCheck(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "default",
+            AssuranceKind.BIOMETRIC,
+            AssuranceOutcome.FAIL,
+            10,
+            "provedor",
+            "ref-1",
+            "modelo/2.1",
+            "hash",
+            "detalhe",
+            java.util.Set.of(),
+            Instant.now(),
+            null);
+    when(assuranceService.latest(any(UUID.class), anyString(), eq(AssuranceKind.BIOMETRIC)))
+        .thenReturn(Optional.of(biometricFail));
+
+    processor.process();
+
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.EM_REVISAO);
+    assertThat(pending.factors()).anyMatch(f -> f.contains("IDENTITY_ASSURANCE"));
   }
 }
