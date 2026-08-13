@@ -211,7 +211,49 @@ quando a BrasilAPI é a única fonte de PJ (API pública sem SLA sustentando con
 `barrier.identity.brasilapi.enabled` permite desligá-la; `application-prod.yml` liga a BigBoost.
 ⚠️ `basic_data` de empresas **não traz QSA** — perfil vem com abertura/CNAE e sócios vazios, então
 `CorporateStructureRiskRule` fica sem entrada quando este provider atende; e o schema ainda não foi
-verificado contra a API real.
+verificado contra a API real. Ver `CorporateStructureCoverageRiskRule`, abaixo, para o guard que
+fecha o silêncio disso.
+
+Guard de cobertura de QSA (branch `feat/kyb-coverage-gaps`): mesmo modo de falha que o projeto já
+fechou para watchlist — importação/bureau falha → dado vazio → CLEAR → todos aprovados, com trilha
+"limpa" — reaparecendo na estrutura societária. Quando a BigBoost atende sem QSA,
+`CorporateStructureRiskRule` fica sem entrada (nenhum sócio para achar estrangeiro/PJ) e o
+screening de partes relacionadas roda sobre lista vazia (nenhum sócio conferido contra
+OFAC/CSNU/PEP) — nada registrava isso, e a avaliação concluía APROVADO.
+`CorporateStructureCoverageRiskRule` força REVIEW quando o bureau confirma a PJ
+(`CompanyProfile != null`) mas `partners()` vem vazio; a evidência cita o bureau que atendeu
+(`IdentityCheck.provider()`), para o analista distinguir limite de fonte de empresa sem sócio.
+**Regulatória** (entra em `RegulatoryRiskRules`, migration V039) — diferente do
+`CorporateStructureRiskRule`, que pontua sinais *dentro* de um QSA existente e é apetite: esta
+regra detecta a *ausência* do QSA, o mesmo tipo de gap que `ScreeningCoverageRiskRule` fecha para
+listas. Não dá para distinguir "bureau sem QSA" de "empresa legitimamente sem sócio"
+(MEI/empresário individual) com o dado disponível hoje — `CompanyProfile` não carrega natureza
+jurídica/porte, e nenhum provider de CNPJ expõe isso; a regra é fail-closed de propósito,
+registrado no Javadoc.
+
+`ADVERSE_MEDIA` na exigência de cobertura, **condicional** (mesma branch, corrigida após rodar a
+suíte completa): a primeira versão desta mudança fez `ScreeningCoverageRiskRule.REQUIRED` incluir
+`MatchType.ADVERSE_MEDIA` incondicionalmente, igual a `SANCTION`/`PEP` — e quebrou pior do que o
+fail-open que existia para fechar. `ADVERSE_MEDIA` nunca é populada em `WatchlistImportStatus`:
+mídia negativa é `NegativeMediaProvider`, consultado **ao vivo** por avaliação, não importado como
+`WatchlistSource`. Sem cobertura possível de existir, a regra pontuava **100% das avaliações**,
+recriando o problema que motivou o `SOLICITAR_DOCUMENTO` (7501 de 7529 avaliações em
+`EM_REVISAO` por ruído de cadastro, cegando operações — ver `plano-remediacao-auditoria.md`).
+Corrigido no mesmo padrão de `BureauProvider.authoritative()`: `NegativeMediaProvider` ganhou
+`authoritative()` (default `true`), `StubNegativeMediaProvider` sobrescreve para `false`.
+`ScreeningCoverageRiskRule` passou a receber `List<NegativeMediaProvider>` (construtor de 1
+argumento preservado como conveniência = "nenhum provedor", para não quebrar quem constrói a
+regra manualmente sem mídia negativa) e só exige `ADVERSE_MEDIA` quando existe pelo menos um
+provider autoritativo na lista — hoje, sem contrato, isso nunca acontece e a regra não pontua por
+mídia negativa; contratado um provider real, a exigência entra como sanção e PEP (controle que
+deveria estar rodando e não está confirmado). `WatchlistReadinessGuard` **não** ganhou a mesma
+exigência incondicional: adicionar `ADVERSE_MEDIA` à lista que barra a subida em `prod` derrubaria
+a aplicação inteira por falta de um provedor que hoje ninguém contratou — mais forte que o
+problema justifica. O guard só **avisa** quando falta cobertura de mídia negativa, no mesmo padrão
+do `CnpjBureauReadinessGuard` para a BrasilAPI como único bureau de PJ (o aviso não é
+condicionado a `authoritative()` — é aviso de startup, sempre útil). `DEBARMENT` segue de fora da
+exigência de cobertura, de propósito — é apetite de risco (ver acima), não obrigação regulatória.
+`ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
 
 Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
 (`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode

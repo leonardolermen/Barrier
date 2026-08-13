@@ -5,10 +5,14 @@ import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
+import com.barrier.riskengine.screening.client.interfaces.NegativeMediaProvider;
 import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.watchlist.WatchlistImportStatus;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,25 +27,59 @@ import org.springframework.stereotype.Component;
  *
  * <p>Força REVIEW em vez de REJECT: o problema é nosso, não do cliente. A avaliação vai para
  * análise humana e pode ser reprocessada quando a cobertura voltar.
+ *
+ * <p><b>{@code SANCTION} e {@code PEP} são exigência incondicional</b> — sempre checadas contra
+ * {@link WatchlistImportStatus#coverage()}, sem exceção.
+ *
+ * <p><b>{@code ADVERSE_MEDIA} é condicional à existência de um {@link NegativeMediaProvider}
+ * autoritativo.</b> Primeira versão desta regra exigia {@code ADVERSE_MEDIA} incondicionalmente,
+ * igual às outras duas — e quebrou em produção de um jeito pior do que o fail-open que existia
+ * para fechar: como {@code ADVERSE_MEDIA} nunca é populada em {@code WatchlistImportStatus} (mídia
+ * negativa é {@link NegativeMediaProvider}, consultada ao vivo por avaliação, não importada como
+ * {@code WatchlistSource}), a cobertura estava <i>sempre</i> ausente, e a regra pontuava 100% das
+ * avaliações — recriando o problema que motivou o status {@code SOLICITAR_DOCUMENTO}
+ * (7501 de 7529 avaliações em fila de EDD por ruído, cegando o time de operações; ver
+ * {@code plano-remediacao-auditoria.md}). Sem provedor contratado (só o
+ * {@code StubNegativeMediaProvider}, {@code authoritative() == false}), a ausência de cobertura é
+ * um fato conhecido e constante para toda a base — alarme por avaliação não informa nada; o
+ * {@code WatchlistReadinessGuard} já avisa isso uma vez, no startup, que é o lugar certo. Com um
+ * provedor autoritativo contratado, a exigência entra: é controle que deveria estar rodando (ou
+ * que a infraestrutura de importação ainda não sabe medir) e não está confirmado, tratamento igual
+ * ao de sanção e PEP.
  */
 @Component
 public class ScreeningCoverageRiskRule implements RiskRule {
 
   private static final String RULE_CODE = "SCREENING_COVERAGE";
-  private static final Set<MatchType> REQUIRED = Set.of(MatchType.SANCTION, MatchType.PEP);
+  // DEBARMENT fica de fora porque é apetite de risco (ver DebarmentRiskRule), não obrigação
+  // regulatória.
+  private static final Set<MatchType> BASE_REQUIRED = Set.of(MatchType.SANCTION, MatchType.PEP);
   private static final int SCORE = 300;
 
   private final WatchlistImportStatus status;
+  private final List<NegativeMediaProvider> negativeMediaProviders;
 
+  /**
+   * Construtor de conveniência: equivale a "nenhum provedor de mídia negativa autoritativo", que
+   * é o comportamento seguro por padrão (exige só {@code SANCTION}/{@code PEP}).
+   */
   public ScreeningCoverageRiskRule(WatchlistImportStatus status) {
+    this(status, List.of());
+  }
+
+  @Autowired
+  public ScreeningCoverageRiskRule(
+      WatchlistImportStatus status, List<NegativeMediaProvider> negativeMediaProviders) {
     this.status = status;
+    this.negativeMediaProviders = negativeMediaProviders;
   }
 
   @Override
   public RiskResult evaluate(RiskContext context) {
     Set<MatchType> covered = status.coverage();
+    Set<MatchType> required = required();
     List<String> missing =
-        REQUIRED.stream().filter(type -> !covered.contains(type)).map(Enum::name).sorted().toList();
+        required.stream().filter(type -> !covered.contains(type)).map(Enum::name).sorted().toList();
 
     if (missing.isEmpty()) {
       return RiskResult.notApplicable(RULE_CODE);
@@ -53,6 +91,16 @@ public class ScreeningCoverageRiskRule implements RiskRule {
         "Screening executado sem cobertura de " + String.join(", ", missing),
         missing.stream().map(type -> "cobertura ausente:" + type).toList(),
         RiskRecommendation.REVIEW);
+  }
+
+  private Set<MatchType> required() {
+    boolean hasAuthoritativeNegativeMedia =
+        negativeMediaProviders.stream().anyMatch(NegativeMediaProvider::authoritative);
+    if (!hasAuthoritativeNegativeMedia) {
+      return BASE_REQUIRED;
+    }
+    return Stream.concat(BASE_REQUIRED.stream(), Stream.of(MatchType.ADVERSE_MEDIA))
+        .collect(Collectors.toUnmodifiableSet());
   }
 
   @Override
