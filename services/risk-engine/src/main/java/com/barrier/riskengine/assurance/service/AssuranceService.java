@@ -194,8 +194,27 @@ public class AssuranceService {
     requireEnabled();
     requireConsent(consent);
     requireDocumentPass(subjectId, tenantId);
-    AssuranceCheck check = biometricProvider.verify(subjectId, tenantId, submission);
+    // O provider não resolve subjectId→documento sozinho (nenhum client resolve; é sempre quem
+    // chama que traduz identificador para o dado externo, como o bureau já recebe
+    // documentDigits pronto em BureauQuery). O Datavalid/Serpro emite o PIN por CPF, então
+    // precisa dele aqui — nem BiometricSubmission nem subjectId carregam o documento.
+    String document = subjectService.findById(subjectId, tenantId).document();
+    AssuranceCheck check =
+        biometricProvider.requestVerification(subjectId, tenantId, document, submission);
     return persist(check.withConsent(consent));
+  }
+
+  /**
+   * Grava o desfecho final trazido pelo {@code AssuranceResultPoller} — chamado fora de qualquer
+   * transação HTTP, em resposta a {@code BiometricVerificationProvider.pollResult}. Passa pelo
+   * mesmo {@link #persist}, então a mesma trilha, o mesmo {@code scheduleNotification}/reavaliação
+   * e o mesmo tratamento de consentimento (já carregado no check {@code PENDING} original) se
+   * aplicam sem duplicar lógica — a diferença para {@link #verifyBiometrics} é só quem chama e
+   * quando, não o que acontece com o resultado.
+   */
+  @Transactional
+  public AssuranceCheck recordPolledResult(AssuranceCheck resolved) {
+    return persist(resolved);
   }
 
   /**

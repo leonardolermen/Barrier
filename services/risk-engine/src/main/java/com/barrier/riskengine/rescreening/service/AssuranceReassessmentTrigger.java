@@ -102,6 +102,12 @@ public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   @Override
   public void onRecorded(AssuranceCheck check) {
+    // PENDING não é desfecho, é PIN emitido — ver Javadoc de AssuranceOutcome#PENDING. Disparar
+    // reavaliação aqui reavaliaria o cliente com a mesma ausência de prova que já tinha antes da
+    // submissão, e IdentityAssuranceRiskRule/AssuranceSummary não contam PENDING como sinal.
+    if (check.pending()) {
+      return;
+    }
     try {
       if (assessments.existsRecentByOriginAndSubject(
           check.subjectId(), check.tenantId(), AssessmentOrigin.ASSURANCE, reassessmentWindow)) {

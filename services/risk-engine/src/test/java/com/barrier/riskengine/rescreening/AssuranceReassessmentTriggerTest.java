@@ -182,6 +182,20 @@ class AssuranceReassessmentTriggerTest {
     verify(assessments, never()).submit(any());
   }
 
+  /**
+   * PENDING não é desfecho (PIN emitido, biometria assíncrona ainda sem resultado) — ver Javadoc
+   * de {@code AssuranceOutcome#PENDING}. Reavaliar aqui reavaliaria com a mesma ausência de prova
+   * que já existia antes da submissão; o gatilho tem de tratar como "nada aconteceu ainda", nem
+   * consultando dedup nem resolvendo o subject.
+   */
+  @Test
+  void naoReavaliaQuandoODesfechoEPending() {
+    trigger.onRecorded(check(AssuranceOutcome.PENDING));
+
+    verify(assessments, never()).submit(any());
+    verifyNoInteractions(subjects);
+  }
+
   // --- dedup por janela (item 1 do plano de throttle) ------------------------------------------
 
   /**

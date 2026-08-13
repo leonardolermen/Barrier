@@ -55,6 +55,24 @@ class IdentityAssuranceRiskRuleTest {
     assertThat(rule.evaluate(contexto(null)).triggered()).isFalse();
   }
 
+  /**
+   * PENDING (PIN emitido, biometria assíncrona sem desfecho ainda) não é FAIL/INCONCLUSIVE/
+   * UNAVAILABLE nem PASS — a regra não pode confundi-lo com nenhum dos quatro. É "ainda não há
+   * verificação", o mesmo tratamento de {@code assurance == null}, não um quinto sinal de risco.
+   */
+  @Test
+  void biometriaPendenteNaoPontua() {
+    AssuranceSummary pendente =
+        new AssuranceSummary(
+            check(AssuranceKind.DOCUMENT, AssuranceOutcome.PASS),
+            check(AssuranceKind.BIOMETRIC, AssuranceOutcome.PENDING),
+            1);
+
+    RiskResult result = rule.evaluate(contexto(pendente));
+
+    assertThat(result.triggered()).isFalse();
+  }
+
   @Test
   void tudoAprovadoNaoPontua() {
     AssuranceSummary ok =

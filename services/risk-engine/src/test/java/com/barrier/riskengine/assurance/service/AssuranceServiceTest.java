@@ -324,14 +324,18 @@ class AssuranceServiceTest {
   void processaBiometriaQuandoDocumentoscopiaPassou() {
     when(repository.findLatest(SUBJECT, "tenant-1", AssuranceKind.DOCUMENT))
         .thenReturn(Optional.of(checkComOutcome(AssuranceKind.DOCUMENT, AssuranceOutcome.PASS)));
-    when(biometricProvider.verify(any(), any(), any()))
+    when(subjectService.findById(SUBJECT, "tenant-1"))
+        .thenReturn(
+            new com.barrier.riskengine.subject.domain.Subject(
+                SUBJECT, "CPF", "12345678900", "Fulano de Tal", Instant.now()));
+    when(biometricProvider.requestVerification(any(), any(), any(), any()))
         .thenReturn(checkComOutcome(AssuranceKind.BIOMETRIC, AssuranceOutcome.PASS));
 
     AssuranceCheck result =
         service.verifyBiometrics(SUBJECT, "tenant-1", biometricSubmission(), consentimento());
 
     org.assertj.core.api.Assertions.assertThat(result.kind()).isEqualTo(AssuranceKind.BIOMETRIC);
-    verify(biometricProvider).verify(any(), any(), any());
+    verify(biometricProvider).requestVerification(any(), any(), any(), any());
     verify(repository).save(Mockito.any());
   }
 }

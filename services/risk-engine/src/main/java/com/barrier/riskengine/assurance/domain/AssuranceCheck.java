@@ -29,6 +29,14 @@ import java.util.UUID;
  * @param consent prova de consentimento do titular para esta verificação, nesta finalidade.
  *     Anexado pelo serviço, não pelo provedor: consentimento é obrigação legal do tratamento,
  *     não parte da verificação técnica de documento/biometria
+ * @param pin credencial de sessão do fluxo assíncrono por PIN (Datavalid/Serpro) — {@code null}
+ *     para qualquer verificação síncrona. <b>Nunca logar, nunca devolver em resposta de
+ *     listagem</b>: é o que autentica o cidadão na captura, não um identificador de auditoria.
+ *     Só existe enquanto {@link #outcome} é {@link AssuranceOutcome#PENDING}; o desfecho final
+ *     é um {@code AssuranceCheck} novo, sem PIN (ver {@code AssuranceService.recordPolledResult})
+ * @param pinExpiresAt até quando o PIN vale. Depois disso o {@code AssuranceResultPoller} para
+ *     de tentar e marca {@link AssuranceOutcome#UNAVAILABLE} — o cidadão nunca completou a
+ *     captura, e isso não é culpa nossa nem dele ficar preso em revisão para sempre
  */
 public record AssuranceCheck(
     UUID id,
@@ -44,13 +52,54 @@ public record AssuranceCheck(
     String detail,
     Set<DivergentField> divergences,
     Instant checkedAt,
-    AssuranceConsent consent) {
+    AssuranceConsent consent,
+    String pin,
+    Instant pinExpiresAt) {
 
   public AssuranceCheck {
     divergences =
         divergences == null || divergences.isEmpty()
             ? Set.of()
             : Set.copyOf(EnumSet.copyOf(divergences));
+  }
+
+  /**
+   * Compatibilidade com todo provider/teste síncrono existente (documentoscopia, stub, provedor
+   * de emergência): sem PIN nem expiração. Evita reescrever as ~24 chamadas do construtor de 14
+   * argumentos que já existiam quando o fluxo assíncrono por PIN foi introduzido.
+   */
+  public AssuranceCheck(
+      UUID id,
+      UUID subjectId,
+      String tenantId,
+      AssuranceKind kind,
+      AssuranceOutcome outcome,
+      Integer score,
+      String provider,
+      String providerReference,
+      String algorithmVersion,
+      String submittedHash,
+      String detail,
+      Set<DivergentField> divergences,
+      Instant checkedAt,
+      AssuranceConsent consent) {
+    this(
+        id,
+        subjectId,
+        tenantId,
+        kind,
+        outcome,
+        score,
+        provider,
+        providerReference,
+        algorithmVersion,
+        submittedHash,
+        detail,
+        divergences,
+        checkedAt,
+        consent,
+        null,
+        null);
   }
 
   /** Verificação que sustenta aprovação automática: só o desfecho positivo serve. */
@@ -64,6 +113,16 @@ public record AssuranceCheck(
    */
   public boolean inconclusive() {
     return outcome == AssuranceOutcome.INCONCLUSIVE || outcome == AssuranceOutcome.UNAVAILABLE;
+  }
+
+  /** Ainda não há desfecho — ver Javadoc de {@link AssuranceOutcome#PENDING}. */
+  public boolean pending() {
+    return outcome == AssuranceOutcome.PENDING;
+  }
+
+  /** O PIN venceu antes de o resultado chegar. Só faz sentido perguntar quando {@link #pending()}. */
+  public boolean expired(Instant now) {
+    return pinExpiresAt != null && !now.isBefore(pinExpiresAt);
   }
 
   /**
@@ -85,7 +144,9 @@ public record AssuranceCheck(
         detail,
         divergences,
         checkedAt,
-        consent);
+        consent,
+        pin,
+        pinExpiresAt);
   }
 
   /**
@@ -109,6 +170,41 @@ public record AssuranceCheck(
         detail,
         divergences,
         checkedAt,
-        consent);
+        consent,
+        pin,
+        pinExpiresAt);
+  }
+
+  /**
+   * Devolve uma cópia {@link AssuranceOutcome#PENDING} com o PIN e sua expiração — chamado pelo
+   * provider ao criar o PIN, nunca pelo poller (que substitui o check por um novo, sem PIN, ao
+   * trazer o desfecho final).
+   */
+  public static AssuranceCheck pendingWithPin(
+      UUID id,
+      UUID subjectId,
+      String tenantId,
+      String provider,
+      String submittedHash,
+      Instant checkedAt,
+      String pin,
+      Instant pinExpiresAt) {
+    return new AssuranceCheck(
+        id,
+        subjectId,
+        tenantId,
+        AssuranceKind.BIOMETRIC,
+        AssuranceOutcome.PENDING,
+        null,
+        provider,
+        null,
+        null,
+        submittedHash,
+        "PIN emitido; aguardando captura no app gov.br",
+        Set.of(),
+        checkedAt,
+        null,
+        pin,
+        pinExpiresAt);
   }
 }

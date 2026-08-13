@@ -474,4 +474,74 @@ class AssuranceCheckRepositoryIntegrationTest {
         .extracting(AssuranceCheck::providerReference)
         .containsExactlyInAnyOrder("ref-1", "ref-2");
   }
+
+  // --- V038: PIN e fila de pendências do poller -------------------------------------------------
+
+  /** Round-trip de {@code pin}/{@code pin_expires_at} nunca tinha sido exercitado contra Postgres. */
+  @Test
+  void roundTripPreservaPinEExpiracao() {
+    UUID subjectId = novoSubject("10122222166");
+    Instant expiresAt = Instant.now().plusSeconds(300).truncatedTo(ChronoUnit.MICROS);
+    AssuranceCheck pendente =
+        AssuranceCheck.pendingWithPin(
+            UUID.randomUUID(),
+            subjectId,
+            "default",
+            "datavalid-serpro",
+            "hash-pin",
+            Instant.now(),
+            "654321",
+            expiresAt);
+
+    repository.save(pendente);
+
+    AssuranceCheck lido =
+        repository.findLatest(subjectId, "default", AssuranceKind.BIOMETRIC).orElseThrow();
+
+    assertThat(lido.outcome()).isEqualTo(AssuranceOutcome.PENDING);
+    assertThat(lido.pin()).isEqualTo("654321");
+    assertThat(lido.pinExpiresAt()).isEqualTo(expiresAt);
+  }
+
+  /**
+   * {@code claimPendingBiometric} é a query nova do poller ({@code FOR UPDATE SKIP LOCKED} +
+   * lease, mesmo padrão de {@code OutboxRepository.claimPending}) — nunca tinha rodado contra
+   * Postgres real. Reivindica um check {@code PENDING} e marca a posse ({@code claimed_at}); uma
+   * segunda reivindicação imediata não pega a mesma linha, porque a lease ainda não venceu.
+   */
+  @Test
+  void claimPendingBiometricReivindicaEBloqueiaAtéALeaseVencer() {
+    UUID subjectId = novoSubject("10133333235");
+    repository.save(
+        AssuranceCheck.pendingWithPin(
+            UUID.randomUUID(),
+            subjectId,
+            "default",
+            "datavalid-serpro",
+            "hash",
+            Instant.now(),
+            "111222",
+            Instant.now().plusSeconds(300)));
+
+    List<AssuranceCheck> primeira = repository.claimPendingBiometric(10, java.time.Duration.ofMinutes(1));
+    List<AssuranceCheck> segunda = repository.claimPendingBiometric(10, java.time.Duration.ofMinutes(1));
+
+    assertThat(primeira).hasSize(1);
+    assertThat(primeira.get(0).pin()).isEqualTo("111222");
+    assertThat(segunda).isEmpty();
+  }
+
+  /** Checks já resolvidos (PASS/FAIL/...) não entram na fila do poller — só PENDING. */
+  @Test
+  void claimPendingBiometricIgnoraChecksJaResolvidos() {
+    UUID subjectId = novoSubject("10144444304");
+    repository.save(
+        checagem(
+            subjectId, "default", AssuranceKind.BIOMETRIC, 90, "ref-1", Set.of(), Instant.now(), null));
+
+    List<AssuranceCheck> reivindicados =
+        repository.claimPendingBiometric(10, java.time.Duration.ofMinutes(1));
+
+    assertThat(reivindicados).isEmpty();
+  }
 }

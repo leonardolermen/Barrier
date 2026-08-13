@@ -27,4 +27,13 @@ public interface AssuranceCheckRepository {
    * quente de toda avaliação (ver {@code AssuranceService.attempts}).
    */
   long countRecent(UUID subjectId, String tenantId, AssuranceKind kind, Duration window);
+
+  /**
+   * Reivindica um lote de checks {@code BIOMETRIC} ainda {@code PENDING} cuja posse está livre ou
+   * vencida, para o {@code AssuranceResultPoller} consultar o provedor <b>fora</b> desta
+   * transação — mesmo padrão de {@code OutboxRepository.claimPending}: {@code FOR UPDATE SKIP
+   * LOCKED} garante que réplicas concorrentes peguem conjuntos disjuntos, e a lease ({@code
+   * claimed_at}) é o que permite que a chamada ao provedor aconteça fora do lock.
+   */
+  List<AssuranceCheck> claimPendingBiometric(int limit, Duration lease);
 }

@@ -133,7 +133,7 @@ class DocumentGateHttpIntegrationTest {
         .retrieve()
         .toBodilessEntity();
 
-    when(biometricProvider.verify(any(), any(), any()))
+    when(biometricProvider.requestVerification(any(), any(), any(), any()))
         .thenAnswer(
             invocation ->
                 new AssuranceCheck(

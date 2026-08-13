@@ -20,5 +20,17 @@ public enum AssuranceOutcome {
   INCONCLUSIVE,
 
   /** Provedor indisponível — nada foi verificado, e isso não é culpa do cliente. */
-  UNAVAILABLE
+  UNAVAILABLE,
+
+  /**
+   * Verificação iniciada, sem desfecho ainda — fluxos assíncronos (ex.: biometria por PIN do
+   * Datavalid/Serpro, onde o cidadão captura a selfie depois, no app gov.br). Não é um quinto
+   * desfecho no sentido de {@link #PASS}/{@link #FAIL}/{@link #INCONCLUSIVE}/{@link
+   * #UNAVAILABLE}: é a ausência de desfecho, só que persistida porque a chamada que a criou já
+   * aconteceu (o PIN foi emitido, a chamada paga foi feita). {@code IdentityAssuranceRiskRule} e o
+   * gatilho de reavaliação tratam {@code PENDING} como "ainda não há verificação" — não pontua, não
+   * dispara reavaliação, fail-closed: a avaliação permanece em {@code SOLICITAR_DOCUMENTO} até um
+   * poller trazer o desfecho final e substituir este registro por um novo.
+   */
+  PENDING
 }

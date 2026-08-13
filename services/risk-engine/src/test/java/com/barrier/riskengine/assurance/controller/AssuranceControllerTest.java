@@ -322,7 +322,7 @@ class AssuranceControllerTest {
             Set.of(),
             Instant.now(),
             null);
-    when(biometricProvider.verify(any(), any(), any())).thenReturn(check);
+    when(biometricProvider.requestVerification(any(), any(), any(), any())).thenReturn(check);
 
     SubmitBiometricRequest request =
         new SubmitBiometricRequest(
