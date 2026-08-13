@@ -9,6 +9,7 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -33,14 +34,17 @@ public class AssuranceService {
   private final DocumentVerificationProvider documentProvider;
   private final BiometricVerificationProvider biometricProvider;
   private final AssuranceCheckRepository repository;
+  private final List<AssuranceRecordedListener> listeners;
 
   public AssuranceService(
       DocumentVerificationProvider documentProvider,
       BiometricVerificationProvider biometricProvider,
-      AssuranceCheckRepository repository) {
+      AssuranceCheckRepository repository,
+      List<AssuranceRecordedListener> listeners) {
     this.documentProvider = documentProvider;
     this.biometricProvider = biometricProvider;
     this.repository = repository;
+    this.listeners = listeners;
   }
 
   /**
@@ -98,7 +102,29 @@ public class AssuranceService {
         check.score(),
         check.provider(),
         check.providerReference());
+    notifyListeners(check);
     return check;
+  }
+
+  /**
+   * Roda depois de a gravação já ter acontecido: o desfecho já está persistido e é isso que
+   * sustenta a reavaliação, então uma falha em quem reage não pode desfazer a verificação. O
+   * isolamento é <b>por listener</b>, mesmo padrão do {@code WatchlistImporter}: um consumidor que
+   * quebra não pode levar os outros junto nem invalidar a gravação.
+   */
+  private void notifyListeners(AssuranceCheck check) {
+    for (AssuranceRecordedListener listener : listeners) {
+      try {
+        listener.onRecorded(check);
+      } catch (RuntimeException e) {
+        log.error(
+            "Listener {} falhou ao reagir à verificação {} do subject {}; a gravação segue válida",
+            listener.getClass().getSimpleName(),
+            check.id(),
+            check.subjectId(),
+            e);
+      }
+    }
   }
 
   @Transactional(readOnly = true)

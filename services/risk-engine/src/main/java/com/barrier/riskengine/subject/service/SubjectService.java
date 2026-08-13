@@ -39,6 +39,19 @@ public class SubjectService {
     }
   }
 
+  /**
+   * Busca o subject pelo id, sem escopo de tenant. Uso interno (ex.: o disparo de reavaliação por
+   * assurance, que já sabe o {@code subjectId} de um {@code AssuranceCheck} e precisa só de
+   * documento/nome para montar a reavaliação) — não é o caminho de consulta do parceiro, que
+   * segue {@link #getForTenant} e a checagem de vínculo.
+   */
+  @Transactional(readOnly = true)
+  public Subject findById(java.util.UUID subjectId) {
+    return repository
+        .findById(subjectId)
+        .orElseThrow(() -> new SubjectNotFoundException("Subject não encontrado: " + subjectId));
+  }
+
   /** Garante a visibilidade do subject para o tenant. */
   @Transactional
   public void link(String tenantId, java.util.UUID subjectId) {

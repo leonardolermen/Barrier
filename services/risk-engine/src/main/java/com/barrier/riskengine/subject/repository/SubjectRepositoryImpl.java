@@ -39,6 +39,11 @@ class SubjectRepositoryImpl implements SubjectRepository {
   }
 
   @Override
+  public Optional<Subject> findById(UUID subjectId) {
+    return subjects.findById(subjectId).map(this::toDomain);
+  }
+
+  @Override
   public void link(String tenantId, UUID subjectId) {
     Instant now = Instant.now();
     links
