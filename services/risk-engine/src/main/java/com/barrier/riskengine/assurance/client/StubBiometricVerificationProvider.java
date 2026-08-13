@@ -31,9 +31,9 @@ import org.springframework.stereotype.Component;
 @Profile("!prod")
 // Mutuamente exclusivo com o provider real: os dois implementam a mesma interface, e o
 // construtor de AssuranceService exige exatamente um bean. Sem isto, ligar
-// barrier.assurance.serpro.enabled em dev criaria NoUniqueBeanDefinitionException.
+// barrier.serpro.enabled em dev criaria NoUniqueBeanDefinitionException.
 @ConditionalOnProperty(
-    name = "barrier.assurance.serpro.enabled",
+    name = "barrier.serpro.enabled",
     havingValue = "false",
     matchIfMissing = true)
 public class StubBiometricVerificationProvider implements BiometricVerificationProvider {

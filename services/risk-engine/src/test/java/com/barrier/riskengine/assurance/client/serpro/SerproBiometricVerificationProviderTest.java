@@ -11,6 +11,7 @@ import com.barrier.riskengine.assurance.client.BiometricSubmission;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import com.barrier.riskengine.resilience.CircuitBreakerRegistry;
+import com.barrier.riskengine.serpro.SerproTokenClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;

@@ -372,6 +372,32 @@ longo de anos (re-KYC periódico, troca de aparelho) travavam o cliente em `+200
 sempre, sem caminho de saída — o sinal que a regra quer capturar é fenômeno de sessão, não de
 vida inteira.
 
+**Validação cadastral (Datavalid/Serpro `pessoa-fisica/validacao`, 2026-08-13).** Diferente de
+documentoscopia (lê um documento) e biometria (prova presença): confere dado **declarado** contra
+RFB e, só para endereço, contra a base da CNH (SENATRAN) — não é documentoscopia, é veracidade
+cadastral. Vive em `subject.profile`, não em `assurance` — o consumidor natural é o
+`FieldVerificationService` que já existia (OTP/BUREAU/DOCUMENT). `subject.profile` não pode
+depender de `assurance` (regra de módulo), mas as duas frentes usam a mesma credencial/token
+Serpro; o plumbing de autenticação (`SerproTokenClient`, o `RestClient` do `datavalid/v5`) mudou
+de `assurance.client.serpro` para um pacote neutro, `com.barrier.riskengine.serpro`
+(`SerproGatewayConfig`) — não em `commons`, para não arrastar dependência de `RestClient` nele
+(mesmo raciocínio já registrado aqui para o `AdminApiKeyFilter`). Nascimento confirmado pela RFB
+vira `FieldVerification` com `method = REGISTRY` (novo valor do enum — fonte diferente do bureau
+comercial e da documentoscopia, força de prova distinta numa contestação). Endereço confirmado
+usa `method = ADDRESS_LOOKUP`, que já existia no enum definido para "base de endereçamento" e
+nunca tinha sido usado. **Cobertura de endereço é parcial**: só fecha para quem tem CNH com
+endereço registrado — sem CNH, o campo continua sem verificação (por isso o item correspondente
+em `plano-remediacao-auditoria.md` segue aberto, não marcado como concluído). Gating no mesmo
+padrão da biometria: `barrier.serpro.enabled` liga a conectividade compartilhada,
+`barrier.registry-validation.enabled` liga esta frente especificamente; `privacidade`
+(`id_template` da RFB, `token`/`cnpj_anuente` da SENATRAN) é config de contrato, não segredo
+técnico — a família de erro `DV200–DV213` (template mal configurado) vira log apontando para
+configuração, nunca para o CPF do cliente. `DV001` (menor de idade) é desfecho cobrado, não erro
+de transporte. Não verificado ao vivo: o ambiente de execução desta etapa não teve egress de rede
+para o gateway Serpro (diferente da etapa de biometria, que rodou contra a demonstração real);
+todo o mapeamento de contrato segue a documentação oficial verbatim e a taxonomia de erro segue
+por analogia com a já sondada.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.

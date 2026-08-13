@@ -562,6 +562,17 @@ de outro tenant.
   `RegistrationCompleteness` checa se o campo está preenchido, não se é verdadeiro: preencher
   com dados plausíveis satisfaz o gate e libera aprovação automática.
   *Pronto quando:* OTP de telefone/e-mail, validação de endereço, nascimento contra bureau.
+  **Progresso (2026-08-13, validação cadastral Datavalid/Serpro):** nascimento passou a poder
+  ser confirmado contra a RFB (`pessoa-fisica/validacao`, `VerificationMethod.REGISTRY`), além do
+  bureau e da documentoscopia que já existiam. Endereço passou a ter uma via de verificação —
+  `VerificationMethod.ADDRESS_LOOKUP`, que já estava definido no enum e nunca tinha sido usado —
+  mas **essa cobertura é parcial, não geral**: o Datavalid só confere o endereço declarado contra
+  o endereço registrado na **CNH** (via SENATRAN), não contra uma base de endereçamento
+  independente. Quem tem CNH com endereço cadastrado ganha verificação real; quem não tem CNH, ou
+  tem CNH sem endereço registrado, **continua sem nenhuma verificação de endereço** — o campo
+  segue igual a antes desta etapa para esse subconjunto de subjects. Por isso o item continua
+  aberto: fechá-lo exigiria uma segunda fonte de verificação de endereço para quem não tem CNH,
+  que não existe ainda.
 
 - [x] **Proveniência por tenant no `SubjectProfile`** 🔴 — `fix/audit-top10`
   O cadastro era **global e gravável por qualquer tenant vinculado**, e o vínculo nasce de um

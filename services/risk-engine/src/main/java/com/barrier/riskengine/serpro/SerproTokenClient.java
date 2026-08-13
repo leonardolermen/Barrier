@@ -1,4 +1,4 @@
-package com.barrier.riskengine.assurance.client.serpro;
+package com.barrier.riskengine.serpro;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Clock;
@@ -15,17 +15,25 @@ import tools.jackson.databind.ObjectMapper;
  * Token OAuth2 client_credentials do gateway Serpro ({@code POST /token}), com cache local
  * respeitando {@code expires_in}.
  *
+ * <p><b>Plumbing compartilhado</b> — extraído de {@code assurance.client.serpro} porque um segundo
+ * consumidor (validação cadastral, em {@code subject.profile}) usa a mesma credencial e o mesmo
+ * token do mesmo gateway Serpro; {@code subject.profile} não pode depender de {@code assurance}
+ * (regra de módulo), então este pacote neutro (não pertence a nenhum dos dois) é o lugar comum.
+ * Não vive em {@code commons} porque isso arrastaria o {@code RestClient}/dependência de
+ * infraestrutura HTTP no `commons` compartilhado com módulos que não precisam dela — mesmo
+ * raciocínio já registrado no CLAUDE.md para o `AdminApiKeyFilter`.
+ *
  * <p><b>Não pede token por requisição</b> — {@code expires_in} típico é da ordem de uma hora
- * (~3295s no exemplo da doc oficial); pedir um novo a cada chamada de PIN/resultado sobrecarregaria
- * o endpoint de autenticação sem necessidade. Uma margem de segurança ({@code
- * barrier.assurance.serpro.token-margin}, default 60s) renova antes do vencimento exato, para não
- * arriscar usar um token que expira no meio de uma chamada em voo.
+ * (~3295s no exemplo da doc oficial); pedir um novo a cada chamada sobrecarregaria o endpoint de
+ * autenticação sem necessidade. Uma margem de segurança ({@code barrier.serpro.token-margin},
+ * default 60s) renova antes do vencimento exato, para não arriscar usar um token que expira no
+ * meio de uma chamada em voo.
  *
  * <p>{@code synchronized} via lock explícito, não {@code synchronized} na assinatura: evita
  * segurar o monitor do bean inteiro (compartilhado com outras chamadas concorrentes) durante o
  * round-trip de rede da renovação.
  */
-class SerproTokenClient {
+public class SerproTokenClient {
 
   private final RestClient tokenRestClient;
   private final ObjectMapper objectMapper;
@@ -38,7 +46,7 @@ class SerproTokenClient {
   private volatile String cachedToken;
   private volatile Instant expiresAt = Instant.MIN;
 
-  SerproTokenClient(
+  public SerproTokenClient(
       RestClient tokenRestClient,
       ObjectMapper objectMapper,
       String consumerKey,
@@ -53,7 +61,7 @@ class SerproTokenClient {
     this.margin = margin;
   }
 
-  String token() {
+  public String token() {
     Instant now = clock.instant();
     if (cachedToken != null && now.isBefore(expiresAt)) {
       return cachedToken;
@@ -72,9 +80,7 @@ class SerproTokenClient {
   }
 
   private String renew(Instant now) {
-    String basic =
-        Base64.getEncoder()
-            .encodeToString((consumerKey + ":" + consumerSecret).getBytes());
+    String basic = Base64.getEncoder().encodeToString((consumerKey + ":" + consumerSecret).getBytes());
     String body =
         tokenRestClient
             .post()

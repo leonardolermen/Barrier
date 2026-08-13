@@ -7,6 +7,7 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import com.barrier.riskengine.resilience.CircuitBreaker;
 import com.barrier.riskengine.resilience.CircuitBreakerRegistry;
+import com.barrier.riskengine.serpro.SerproTokenClient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Clock;
@@ -61,7 +62,7 @@ import tools.jackson.databind.ObjectMapper;
  * formato de {@code device} — todos seguem só documentados, tratados defensivamente.
  */
 @Component
-@ConditionalOnProperty(name = "barrier.assurance.serpro.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "barrier.serpro.enabled", havingValue = "true")
 public class SerproBiometricVerificationProvider implements BiometricVerificationProvider {
 
   private static final Logger log = LoggerFactory.getLogger(SerproBiometricVerificationProvider.class);

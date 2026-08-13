@@ -22,7 +22,8 @@ import org.springframework.web.client.RestClient;
  * JWKS de {@code GET pessoa-fisica/app/jwks} — chave pública que verifica a assinatura do
  * resultado biométrico.
  *
- * <p>Cacheado com TTL ({@code barrier.assurance.serpro.jwks-ttl}, default 1h): o desfecho
+ * <p>Cacheado com TTL ({@code barrier.assurance.serpro.jwks-ttl}, default 1h — mantido no
+ * namespace de assurance porque só a biometria usa JWKS/JWS): o desfecho
  * assinado (JWS) chega a cada poll, e buscar a chave a cada verificação seria uma chamada de rede
  * a mais por tentativa, sem necessidade — a chave não muda a cada resultado. <b>Rotação de chave
  * refaz a busca</b>: um {@code kid} não encontrado no cache dispara um refresh imediato antes de
