@@ -31,7 +31,8 @@ class IdentityAssuranceRiskRuleTest {
         "modelo/2.1",
         "hash",
         "detalhe",
-        Instant.now());
+        Instant.now(),
+        null);
   }
 
   private static RiskContext contexto(AssuranceSummary assurance) {

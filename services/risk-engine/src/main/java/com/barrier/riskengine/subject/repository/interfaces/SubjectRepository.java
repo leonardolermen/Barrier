@@ -11,6 +11,8 @@ public interface SubjectRepository {
 
   Optional<Subject> findByDocument(String documentType, String document);
 
+  Optional<Subject> findById(UUID subjectId);
+
   /** Cria o vínculo tenant↔subject se não existir; atualiza {@code last_seen} se já existir. */
   void link(String tenantId, UUID subjectId);
 

@@ -6,6 +6,7 @@ import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -35,7 +36,8 @@ public class StubDocumentVerificationProvider implements DocumentVerificationPro
   }
 
   @Override
-  public AssuranceCheck verify(UUID subjectId, String tenantId, DocumentSubmission submission) {
+  public DocumentVerificationResult verify(
+      UUID subjectId, String tenantId, DocumentSubmission submission) {
     String reference = submission.captureReference() == null ? "" : submission.captureReference();
     Instant now = clock.instant();
     AssuranceOutcome outcome =
@@ -46,19 +48,29 @@ public class StubDocumentVerificationProvider implements DocumentVerificationPro
                 : reference.startsWith("unavailable-")
                     ? AssuranceOutcome.UNAVAILABLE
                     : AssuranceOutcome.PASS;
-    return new AssuranceCheck(
-        UUID.randomUUID(),
-        subjectId,
-        tenantId,
-        AssuranceKind.DOCUMENT,
-        outcome,
-        outcome == AssuranceOutcome.PASS ? 97 : 20,
-        name(),
-        "stub:" + reference,
-        "stub/1.0.0",
-        submission.submittedHash(),
-        "documentoscopia simulada (" + submission.documentType() + ")",
-        now);
+    AssuranceCheck check =
+        new AssuranceCheck(
+            UUID.randomUUID(),
+            subjectId,
+            tenantId,
+            AssuranceKind.DOCUMENT,
+            outcome,
+            outcome == AssuranceOutcome.PASS ? 97 : 20,
+            name(),
+            "stub:" + reference,
+            "stub/1.0.0",
+            submission.submittedHash(),
+            "documentoscopia simulada (" + submission.documentType() + ")",
+            now,
+            null);
+    // Só um desfecho positivo sustenta os dados extraídos: documento reprovado ou inconclusivo
+    // não dá confiança nenhuma de que o que foi lido é do titular.
+    ExtractedDocumentFields extracted =
+        outcome == AssuranceOutcome.PASS
+            ? new ExtractedDocumentFields(
+                "TITULAR SIMULADO " + reference, "00000000000", LocalDate.of(1990, 1, 1))
+            : null;
+    return new DocumentVerificationResult(check, extracted);
   }
 
   @Override

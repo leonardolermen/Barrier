@@ -1,6 +1,7 @@
 package com.barrier.riskengine.assurance.repository;
 
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
+import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
@@ -20,8 +21,9 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
   private static final String INSERT =
       "INSERT INTO identity_assurance_checks"
           + " (id, subject_id, tenant_id, kind, outcome, score, provider, provider_reference,"
-          + " algorithm_version, submitted_hash, detail, checked_at)"
-          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+          + " algorithm_version, submitted_hash, detail, checked_at, consent_reference,"
+          + " consent_purpose, consent_granted_at)"
+          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   private final JdbcTemplate jdbc;
 
@@ -45,7 +47,10 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         c.algorithmVersion(),
         c.submittedHash(),
         c.detail(),
-        Timestamp.from(c.checkedAt()));
+        Timestamp.from(c.checkedAt()),
+        c.consent() == null ? null : c.consent().reference(),
+        c.consent() == null ? null : c.consent().purpose(),
+        c.consent() == null ? null : Timestamp.from(c.consent().grantedAt()));
   }
 
   @Override
@@ -76,6 +81,15 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
 
   private static AssuranceCheck map(ResultSet rs) throws SQLException {
     int score = rs.getInt("score");
+    String consentReference = rs.getString("consent_reference");
+    Timestamp consentGrantedAt = rs.getTimestamp("consent_granted_at");
+    AssuranceConsent consent =
+        consentReference == null
+            ? null
+            : new AssuranceConsent(
+                consentReference,
+                rs.getString("consent_purpose"),
+                consentGrantedAt == null ? null : consentGrantedAt.toInstant());
     return new AssuranceCheck(
         UUID.fromString(rs.getString("id")),
         UUID.fromString(rs.getString("subject_id")),
@@ -88,6 +102,7 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         rs.getString("algorithm_version"),
         rs.getString("submitted_hash"),
         rs.getString("detail"),
-        rs.getTimestamp("checked_at").toInstant());
+        rs.getTimestamp("checked_at").toInstant(),
+        consent);
   }
 }

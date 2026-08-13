@@ -58,7 +58,8 @@ public class StubBiometricVerificationProvider implements BiometricVerificationP
         "stub/1.0.0",
         submission.submittedHash(),
         "biometria simulada (prova de vida inclusa)",
-        now);
+        now,
+        null);
   }
 
   @Override
