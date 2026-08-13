@@ -21,6 +21,7 @@ import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.subject.service.SubjectService;
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,6 +63,7 @@ class AssuranceReassessmentTriggerTest {
         "v1",
         "hash",
         "ok",
+        Set.of(),
         Instant.now(),
         null);
   }

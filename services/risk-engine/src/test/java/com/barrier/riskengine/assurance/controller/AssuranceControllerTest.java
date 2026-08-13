@@ -32,6 +32,7 @@ import com.barrier.riskengine.tenant.domain.Tenant;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -189,6 +190,7 @@ class AssuranceControllerTest {
             "v1.0.0",
             "hash-abc",
             null,
+            Set.of(),
             Instant.now(),
             null);
     ExtractedDocumentFields extracted =
@@ -224,6 +226,7 @@ class AssuranceControllerTest {
             "v1.0.0",
             "hash-abc",
             null,
+            Set.of(),
             Instant.now(),
             null);
     ExtractedDocumentFields extracted =
@@ -257,6 +260,7 @@ class AssuranceControllerTest {
             "v1.0.0",
             "hash-def",
             null,
+            Set.of(),
             Instant.now(),
             null);
     when(biometricProvider.verify(any(), any(), any())).thenReturn(check);

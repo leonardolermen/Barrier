@@ -6,18 +6,21 @@ import com.barrier.riskengine.assurance.client.DocumentVerificationResult;
 import com.barrier.riskengine.assurance.client.ExtractedDocumentFields;
 import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationProvider;
 import com.barrier.riskengine.assurance.client.interfaces.DocumentVerificationProvider;
+import com.barrier.commons.name.NameNormalizer;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
+import com.barrier.riskengine.assurance.domain.DivergentField;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import com.barrier.riskengine.subject.service.SubjectService;
-import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,7 +81,11 @@ public class AssuranceService {
     DocumentVerificationResult result = documentProvider.verify(subjectId, tenantId, submission);
     AssuranceCheck check = result.check().withConsent(consent);
     ExtractedDocumentFields extracted = result.extracted();
-    if (extracted != null) {
+    // extracted só existe quando o desfecho é PASS (ver Javadoc de DocumentVerificationResult),
+    // mas o guard fica explícito aqui: sem ele, um provedor futuro que devolva extracted junto
+    // de um FAIL somaria failScore + divergenceScore pelo mesmo evento — o mesmo documento
+    // adulterado pontuando duas vezes.
+    if (extracted != null && check.passed()) {
       check = reconcileWithCadastro(subjectId, tenantId, extracted, check);
     }
     AssuranceCheck persisted = persist(check);
@@ -91,64 +98,47 @@ public class AssuranceService {
    *
    * <p>Nascimento que confere é evento independente confirmando o valor declarado, então vira
    * {@link FieldVerificationService#recordBirthDateFromDocument}, o mesmo padrão de
-   * {@code recordBirthDateFromBureau} já usado para o bureau. Nome, documento ou nascimento que
-   * <b>divergem</b> não têm campo verificável equivalente (nome/documento pertencem ao
-   * {@code Subject}, não ao cadastro) — é sinal de possível fraude, não campo faltando, e vira
-   * marcador em {@link AssuranceCheck#detail()} para {@code IdentityAssuranceRiskRule} pontuar.
-   * O marcador nunca carrega o valor declarado nem o extraído — só que houve divergência: a
-   * evidência vai para a trilha de auditoria, e CPF/CNPJ/nome não podem aparecer lá sem máscara.
+   * {@code recordBirthDateFromBureau} já usado para o bureau. Nome ou nascimento que
+   * <b>divergem</b> não têm campo verificável equivalente (nome pertence ao {@code Subject}, não
+   * ao cadastro) — é sinal de possível fraude, não campo faltando, e vira
+   * {@link AssuranceCheck#divergences()} para {@code IdentityAssuranceRiskRule} pontuar. Nunca
+   * carrega o valor declarado nem o extraído — só quais campos divergiram.
+   *
+   * <p><b>Documento não entra nesta comparação.</b> {@code ExtractedDocumentFields.document} é o
+   * número do documento apresentado como o provedor o leu (RG, CNH...), não o CPF/CNPJ que
+   * identifica o {@code Subject} (ADR-0011) — são grandezas diferentes, e compará-las geraria
+   * divergência sistemática (todo RG "diverge" do CPF do cadastro). Ver {@link DivergentField}.
    */
   private AssuranceCheck reconcileWithCadastro(
       UUID subjectId, String tenantId, ExtractedDocumentFields extracted, AssuranceCheck check) {
     SubjectProfile profile = subjectProfileService.find(subjectId, tenantId);
     Subject subject = subjectService.findById(subjectId, tenantId);
 
-    List<String> divergences = new ArrayList<>();
+    Set<DivergentField> divergences = EnumSet.noneOf(DivergentField.class);
     if (extracted.birthDate() != null && profile.birthDate() != null) {
       if (extracted.birthDate().equals(profile.birthDate())) {
         fieldVerificationService.recordBirthDateFromDocument(
-            subjectId, tenantId, profile.birthDate(), extracted.birthDate(), check.providerReference());
+            subjectId,
+            tenantId,
+            profile.birthDate(),
+            extracted.birthDate(),
+            check.providerReference());
       } else {
-        divergences.add("nascimento");
+        divergences.add(DivergentField.BIRTH_DATE);
       }
     }
     if (diverges(subject.name(), extracted.name())) {
-      divergences.add("nome");
+      divergences.add(DivergentField.NAME);
     }
-    if (diverges(subject.document(), extracted.document())) {
-      divergences.add("documento");
-    }
-    if (divergences.isEmpty()) {
-      return check;
-    }
-    String note = AssuranceCheck.CADASTRO_DIVERGENCE_MARKER + ":" + String.join(",", divergences);
-    String detail = check.detail() == null ? note : check.detail() + " | " + note;
-    return new AssuranceCheck(
-        check.id(),
-        check.subjectId(),
-        check.tenantId(),
-        check.kind(),
-        check.outcome(),
-        check.score(),
-        check.provider(),
-        check.providerReference(),
-        check.algorithmVersion(),
-        check.submittedHash(),
-        detail,
-        check.checkedAt(),
-        check.consent());
+    return divergences.isEmpty() ? check : check.withDivergences(divergences);
   }
 
-  /** Compara ignorando caixa e pontuação — CPF pontuado × sem pontuação não é divergência. */
+  /** Compara ignorando acento, caixa e pontuação — o mesmo normalizador do fuzzy match. */
   private static boolean diverges(String declared, String extracted) {
     if (declared == null || extracted == null) {
       return false;
     }
-    return !normalize(declared).equals(normalize(extracted));
-  }
-
-  private static String normalize(String value) {
-    return value.replaceAll("[^\\p{L}\\p{N}]", "").toUpperCase();
+    return !NameNormalizer.normalize(declared).equals(NameNormalizer.normalize(extracted));
   }
 
   /** Ver {@link #verifyDocument}: mesmo motivo para o consentimento entrar aqui. */

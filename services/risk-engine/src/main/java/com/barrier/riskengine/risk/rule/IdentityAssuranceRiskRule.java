@@ -1,5 +1,6 @@
 package com.barrier.riskengine.risk.rule;
 
+import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
@@ -89,11 +90,11 @@ public class IdentityAssuranceRiskRule implements RiskRule {
       recommendation = RiskRecommendation.REVIEW;
       evidence.add("biometria: " + assurance.biometricAttempts() + " tentativas");
     }
-    // Nome/documento pertencem ao Subject, não ao cadastro — não há campo verificável
-    // equivalente a VerifiableField para eles, então a divergência lida do documento vira sinal
-    // de risco aqui, não campo faltando no gate de completude. O marcador nunca carrega o valor
-    // declarado nem o extraído (PII) — só que houve divergência.
-    if (documentDataDiverges(assurance)) {
+    // Nome pertence ao Subject, não ao cadastro — não há campo verificável equivalente a
+    // VerifiableField para ele, então a divergência lida do documento vira sinal de risco aqui,
+    // não campo faltando no gate de completude. AssuranceCheck.divergences nunca carrega o valor
+    // declarado nem o extraído (PII) — só quais campos divergiram.
+    if (assurance.document() != null && !assurance.document().divergences().isEmpty()) {
       score += divergenceScore;
       recommendation = RiskRecommendation.REVIEW;
       evidence.add("documentoscopia: dado lido do documento diverge do cadastro declarado");
@@ -111,17 +112,8 @@ public class IdentityAssuranceRiskRule implements RiskRule {
         recommendation);
   }
 
-  private static String detailOf(com.barrier.riskengine.assurance.domain.AssuranceCheck check) {
+  private static String detailOf(AssuranceCheck check) {
     return check.provider() + " ref " + check.providerReference();
-  }
-
-  private static boolean documentDataDiverges(AssuranceSummary assurance) {
-    com.barrier.riskengine.assurance.domain.AssuranceCheck document = assurance.document();
-    return document != null
-        && document.detail() != null
-        && document
-            .detail()
-            .contains(com.barrier.riskengine.assurance.domain.AssuranceCheck.CADASTRO_DIVERGENCE_MARKER);
   }
 
   @Override

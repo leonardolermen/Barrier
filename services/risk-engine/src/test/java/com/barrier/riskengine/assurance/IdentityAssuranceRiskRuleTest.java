@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
+import com.barrier.riskengine.assurance.domain.DivergentField;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.rule.IdentityAssuranceRiskRule;
 import com.barrier.riskengine.risk.rule.context.AssuranceSummary;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +22,11 @@ class IdentityAssuranceRiskRuleTest {
       new IdentityAssuranceRiskRule(600, 100, 200, 3, 300);
 
   private static AssuranceCheck check(AssuranceKind kind, AssuranceOutcome outcome) {
+    return check(kind, outcome, Set.of());
+  }
+
+  private static AssuranceCheck check(
+      AssuranceKind kind, AssuranceOutcome outcome, Set<DivergentField> divergences) {
     return new AssuranceCheck(
         UUID.randomUUID(),
         UUID.randomUUID(),
@@ -32,6 +39,7 @@ class IdentityAssuranceRiskRuleTest {
         "modelo/2.1",
         "hash",
         "detalhe",
+        divergences,
         Instant.now(),
         null);
   }
@@ -118,5 +126,35 @@ class IdentityAssuranceRiskRuleTest {
     assertThat(result.score()).isEqualTo(200);
     assertThat(result.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
     assertThat(result.evidences()).anySatisfy(e -> assertThat(e).contains("4 tentativas"));
+  }
+
+  /**
+   * Nome/nascimento lidos do documento divergentes do declarado pontuam e forçam revisão — sinal
+   * de possível fraude, não campo faltando. A evidência nunca carrega os valores declarado ou
+   * extraído (PII), só que houve divergência.
+   */
+  @Test
+  void documentoComCadastroDivergentePontuaEForcaRevisao() {
+    AssuranceSummary divergente =
+        new AssuranceSummary(
+            check(AssuranceKind.DOCUMENT, AssuranceOutcome.PASS, Set.of(DivergentField.NAME)),
+            null,
+            0);
+
+    RiskResult result = rule.evaluate(contexto(divergente));
+
+    assertThat(result.triggered()).isTrue();
+    assertThat(result.score()).isEqualTo(300);
+    assertThat(result.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
+    assertThat(result.evidences())
+        .noneMatch(e -> e.toUpperCase().contains("MARIA") || e.matches(".*\\d{4}-\\d{2}-\\d{2}.*"));
+  }
+
+  @Test
+  void documentSemDivergenciaNaoPontuaPorIsso() {
+    AssuranceSummary ok =
+        new AssuranceSummary(check(AssuranceKind.DOCUMENT, AssuranceOutcome.PASS, Set.of()), null, 0);
+
+    assertThat(rule.evaluate(contexto(ok)).triggered()).isFalse();
   }
 }

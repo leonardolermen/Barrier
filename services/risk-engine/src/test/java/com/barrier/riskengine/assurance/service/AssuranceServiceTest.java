@@ -18,10 +18,14 @@ import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
+import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
+import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
+import com.barrier.riskengine.subject.service.SubjectService;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -37,15 +41,11 @@ class AssuranceServiceTest {
       Mockito.mock(BiometricVerificationProvider.class);
   private final AssuranceCheckRepository repository = Mockito.mock(AssuranceCheckRepository.class);
   private final AssuranceRecordedListener listener = Mockito.mock(AssuranceRecordedListener.class);
-  private final com.barrier.riskengine.subject.profile.service.SubjectProfileService
-      subjectProfileService =
-          Mockito.mock(com.barrier.riskengine.subject.profile.service.SubjectProfileService.class);
-  private final com.barrier.riskengine.subject.service.SubjectService subjectService =
-      Mockito.mock(com.barrier.riskengine.subject.service.SubjectService.class);
-  private final com.barrier.riskengine.subject.profile.service.FieldVerificationService
-      fieldVerificationService =
-          Mockito.mock(
-              com.barrier.riskengine.subject.profile.service.FieldVerificationService.class);
+  private final SubjectProfileService subjectProfileService =
+      Mockito.mock(SubjectProfileService.class);
+  private final SubjectService subjectService = Mockito.mock(SubjectService.class);
+  private final FieldVerificationService fieldVerificationService =
+      Mockito.mock(FieldVerificationService.class);
   private final AssuranceService service =
       new AssuranceService(
           documentProvider,
@@ -73,6 +73,7 @@ class AssuranceServiceTest {
         "v1",
         "hash",
         "ok",
+        Set.of(),
         Instant.now(),
         null);
   }

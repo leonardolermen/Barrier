@@ -151,6 +151,7 @@ class AssuranceListenerCommitIsolationIntegrationTest {
             "v1",
             "hash",
             "d",
+            java.util.Set.of(),
             Instant.now(),
             null);
     jdbc.update(

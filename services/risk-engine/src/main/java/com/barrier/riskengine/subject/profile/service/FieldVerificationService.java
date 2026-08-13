@@ -158,7 +158,11 @@ public class FieldVerificationService {
    */
   @Transactional
   public void recordBirthDateFromDocument(
-      UUID subjectId, String tenantId, LocalDate declared, LocalDate fromDocument, String evidence) {
+      UUID subjectId,
+      String tenantId,
+      LocalDate declared,
+      LocalDate fromDocument,
+      String evidence) {
     if (declared == null || fromDocument == null || !declared.equals(fromDocument)) {
       return;
     }

@@ -4,13 +4,17 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
+import com.barrier.riskengine.assurance.domain.DivergentField;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,9 +25,9 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
   private static final String INSERT =
       "INSERT INTO identity_assurance_checks"
           + " (id, subject_id, tenant_id, kind, outcome, score, provider, provider_reference,"
-          + " algorithm_version, submitted_hash, detail, checked_at, consent_reference,"
-          + " consent_purpose, consent_granted_at)"
-          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+          + " algorithm_version, submitted_hash, detail, divergent_fields, checked_at,"
+          + " consent_reference, consent_purpose, consent_granted_at)"
+          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   private final JdbcTemplate jdbc;
 
@@ -47,6 +51,9 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         c.algorithmVersion(),
         c.submittedHash(),
         c.detail(),
+        c.divergences().isEmpty()
+            ? null
+            : c.divergences().stream().map(Enum::name).collect(Collectors.joining(",")),
         Timestamp.from(c.checkedAt()),
         c.consent() == null ? null : c.consent().reference(),
         c.consent() == null ? null : c.consent().purpose(),
@@ -102,7 +109,19 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         rs.getString("algorithm_version"),
         rs.getString("submitted_hash"),
         rs.getString("detail"),
+        parseDivergences(rs.getString("divergent_fields")),
         rs.getTimestamp("checked_at").toInstant(),
         consent);
+  }
+
+  private static Set<DivergentField> parseDivergences(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return Set.of();
+    }
+    Set<DivergentField> fields = EnumSet.noneOf(DivergentField.class);
+    for (String name : raw.split(",")) {
+      fields.add(DivergentField.valueOf(name));
+    }
+    return fields;
   }
 }

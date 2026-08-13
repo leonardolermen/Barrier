@@ -2,6 +2,10 @@ package com.barrier.riskengine.assurance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.assurance.client.DocumentSubmission;
@@ -13,10 +17,12 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
+import com.barrier.riskengine.assurance.domain.DivergentField;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
 import com.barrier.riskengine.assurance.service.AssuranceRecordedListener;
 import com.barrier.riskengine.assurance.service.AssuranceService;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
+import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.rule.IdentityAssuranceRiskRule;
 import com.barrier.riskengine.risk.rule.context.AssuranceSummary;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
@@ -28,6 +34,7 @@ import com.barrier.riskengine.subject.service.SubjectService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -35,8 +42,12 @@ import org.mockito.Mockito;
 
 /**
  * Campos lidos do documento viram verificação de cadastro (nascimento que confere) ou fator de
- * risco explicável (nome/documento/nascimento que divergem do declarado) — nunca são gravados
- * direto no {@code SubjectProfile}.
+ * risco explicável (nome/nascimento que divergem do declarado) — nunca são gravados direto no
+ * {@code SubjectProfile}.
+ *
+ * <p>Documento (CPF/CNPJ) não entra nessa comparação de propósito: {@code
+ * ExtractedDocumentFields.document} é o número do documento apresentado (RG, CNH...), grandeza
+ * diferente do {@code Subject.document} (CPF/CNPJ, ADR-0011) — ver {@link DivergentField}.
  */
 class DocumentFieldExtractionTest {
 
@@ -64,7 +75,8 @@ class DocumentFieldExtractionTest {
           subjectService,
           fieldVerificationService);
 
-  private final IdentityAssuranceRiskRule rule = new IdentityAssuranceRiskRule(600, 100, 200, 3, 300);
+  private final IdentityAssuranceRiskRule rule =
+      new IdentityAssuranceRiskRule(600, 100, 200, 3, 300);
 
   private static DocumentSubmission submissao() {
     return new DocumentSubmission("ref", "RG", "hash");
@@ -87,6 +99,7 @@ class DocumentFieldExtractionTest {
         "modelo/1.0",
         "hash",
         "documentoscopia ok",
+        Set.of(),
         Instant.now(),
         null);
   }
@@ -133,23 +146,22 @@ class DocumentFieldExtractionTest {
             new DocumentVerificationResult(
                 checkAprovado(), new ExtractedDocumentFields("MARIA SILVA", "12345678900", nascimento)));
     when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
-    when(subjectService.findById(SUBJECT, TENANT)).thenReturn(subject("MARIA SILVA", "12345678900"));
+    when(subjectService.findById(SUBJECT, TENANT))
+        .thenReturn(subject("MARIA SILVA", "12345678900"));
 
-    service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+    DocumentVerificationResult resultado =
+        service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
 
     ArgumentCaptor<LocalDate> declaradoCaptor = ArgumentCaptor.forClass(LocalDate.class);
     ArgumentCaptor<LocalDate> extraidoCaptor = ArgumentCaptor.forClass(LocalDate.class);
     ArgumentCaptor<String> evidenceCaptor = ArgumentCaptor.forClass(String.class);
-    Mockito.verify(fieldVerificationService)
+    verify(fieldVerificationService)
         .recordBirthDateFromDocument(
-            org.mockito.ArgumentMatchers.eq(SUBJECT),
-            org.mockito.ArgumentMatchers.eq(TENANT),
-            declaradoCaptor.capture(),
-            extraidoCaptor.capture(),
-            evidenceCaptor.capture());
+            eq(SUBJECT), eq(TENANT), declaradoCaptor.capture(), extraidoCaptor.capture(), evidenceCaptor.capture());
     assertThat(declaradoCaptor.getValue()).isEqualTo(nascimento);
     assertThat(extraidoCaptor.getValue()).isEqualTo(nascimento);
     assertThat(evidenceCaptor.getValue()).isEqualTo("doc-ref-1");
+    assertThat(resultado.check().divergences()).isEmpty();
   }
 
   /** 2. Nascimento extraído diferente do declarado -> não verifica, e vira fator de risco. */
@@ -162,19 +174,22 @@ class DocumentFieldExtractionTest {
                 new ExtractedDocumentFields(
                     "MARIA SILVA", "12345678900", LocalDate.of(1991, 5, 20))));
     when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(LocalDate.of(1990, 5, 20)));
-    when(subjectService.findById(SUBJECT, TENANT)).thenReturn(subject("MARIA SILVA", "12345678900"));
+    when(subjectService.findById(SUBJECT, TENANT))
+        .thenReturn(subject("MARIA SILVA", "12345678900"));
     ArgumentCaptor<AssuranceCheck> persistedCaptor = ArgumentCaptor.forClass(AssuranceCheck.class);
 
     service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
 
-    Mockito.verify(fieldVerificationService, Mockito.never())
+    verify(fieldVerificationService, never())
         .recordBirthDateFromDocument(any(), any(), any(), any(), any());
-    Mockito.verify(repository).save(persistedCaptor.capture());
+    verify(repository).save(persistedCaptor.capture());
     AssuranceCheck persisted = persistedCaptor.getValue();
-    assertThat(persisted.detail()).contains(AssuranceCheck.CADASTRO_DIVERGENCE_MARKER);
+    assertThat(persisted.divergences()).containsExactly(DivergentField.BIRTH_DATE);
+    // detail é a mensagem do provedor, e tem de sobreviver intacta — a divergência vive num
+    // campo próprio, não concatenada nela.
+    assertThat(persisted.detail()).isEqualTo("documentoscopia ok");
 
-    RiskContext contexto = contexto(persisted);
-    var resultado = rule.evaluate(contexto);
+    RiskResult resultado = rule.evaluate(contexto(persisted));
     assertThat(resultado.triggered()).isTrue();
     assertThat(resultado.score()).isEqualTo(300);
     assertThat(resultado.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
@@ -184,27 +199,96 @@ class DocumentFieldExtractionTest {
 
   /** 3. Nome extraído diferente do declarado -> fator de risco (nascimento à parte permanece). */
   @Test
-  void nomeDivergenteViraFatorDeRisco() {
+  void nomeDivergenteViraFatorDeRiscoEAindaAssimVerificaNascimento() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+    when(documentProvider.verify(any(), any(), any()))
+        .thenReturn(
+            new DocumentVerificationResult(
+                checkAprovado(), new ExtractedDocumentFields("OUTRO NOME", "12345678900", nascimento)));
+    when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
+    when(subjectService.findById(SUBJECT, TENANT))
+        .thenReturn(subject("MARIA SILVA", "12345678900"));
+    ArgumentCaptor<AssuranceCheck> persistedCaptor = ArgumentCaptor.forClass(AssuranceCheck.class);
+
+    service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+
+    verify(repository).save(persistedCaptor.capture());
+    AssuranceCheck persisted = persistedCaptor.getValue();
+    assertThat(persisted.divergences()).containsExactly(DivergentField.NAME);
+    assertThat(persisted.detail()).isEqualTo("documentoscopia ok");
+    // "à parte permanece": nome divergente não impede o nascimento (que bateu) de virar
+    // verificação de cadastro — os dois campos são avaliados independentemente.
+    verify(fieldVerificationService)
+        .recordBirthDateFromDocument(SUBJECT, TENANT, nascimento, nascimento, "doc-ref-1");
+
+    RiskResult resultado = rule.evaluate(contexto(persisted));
+    assertThat(resultado.triggered()).isTrue();
+    assertThat(resultado.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
+  }
+
+  /**
+   * Normalização ignora pontuação e caixa — sem isso, "maria silva" batendo contra "MARIA SILVA"
+   * (ou CPF pontuado contra sem pontuação) viraria divergência por formatação, não por conteúdo.
+   */
+  @Test
+  void nomeEquivalenteAposNormalizacaoNaoDiverge() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+    when(documentProvider.verify(any(), any(), any()))
+        .thenReturn(
+            new DocumentVerificationResult(
+                checkAprovado(), new ExtractedDocumentFields("maria silva", "12345678900", nascimento)));
+    when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
+    when(subjectService.findById(SUBJECT, TENANT))
+        .thenReturn(subject("MARIA SILVA", "123.456.789-00"));
+
+    DocumentVerificationResult resultado =
+        service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+
+    assertThat(resultado.check().divergences()).isEmpty();
+  }
+
+  /**
+   * Acento perdido no OCR não pode virar divergência — é o motivo de usar o
+   * {@code NameNormalizer} do commons (NFD + remoção de marca diacrítica), não uma versão própria
+   * que só remove pontuação.
+   */
+  @Test
+  void nomeSemAcentoNoDocumentoNaoDiverge() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+    when(documentProvider.verify(any(), any(), any()))
+        .thenReturn(
+            new DocumentVerificationResult(
+                checkAprovado(), new ExtractedDocumentFields("JOAO", "12345678900", nascimento)));
+    when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
+    when(subjectService.findById(SUBJECT, TENANT)).thenReturn(subject("JOÃO", "12345678900"));
+
+    DocumentVerificationResult resultado =
+        service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+
+    assertThat(resultado.check().divergences()).isEmpty();
+  }
+
+  /**
+   * Número do documento (RG/CNH) divergindo do CPF do cadastro é esperado — são grandezas
+   * diferentes (ver Javadoc de {@code ExtractedDocumentFields}) — e não pode virar fator de
+   * risco. Reproduz o cenário real do stub (dev): CPF do subject × "00000000000" extraído.
+   */
+  @Test
+  void numeroDoDocumentoDivergenteDoCpfNaoEComparadoNemPontua() {
     LocalDate nascimento = LocalDate.of(1990, 5, 20);
     when(documentProvider.verify(any(), any(), any()))
         .thenReturn(
             new DocumentVerificationResult(
                 checkAprovado(),
-                new ExtractedDocumentFields("OUTRO NOME", "12345678900", nascimento)));
+                new ExtractedDocumentFields("MARIA SILVA", "00000000000", nascimento)));
     when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
-    when(subjectService.findById(SUBJECT, TENANT)).thenReturn(subject("MARIA SILVA", "12345678900"));
-    ArgumentCaptor<AssuranceCheck> persistedCaptor = ArgumentCaptor.forClass(AssuranceCheck.class);
+    when(subjectService.findById(SUBJECT, TENANT))
+        .thenReturn(subject("MARIA SILVA", "52998224725"));
 
-    service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+    DocumentVerificationResult resultado =
+        service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
 
-    Mockito.verify(repository).save(persistedCaptor.capture());
-    AssuranceCheck persisted = persistedCaptor.getValue();
-    assertThat(persisted.detail()).contains(AssuranceCheck.CADASTRO_DIVERGENCE_MARKER);
-    assertThat(persisted.detail()).doesNotContain("OUTRO NOME").doesNotContain("MARIA SILVA");
-
-    var resultado = rule.evaluate(contexto(persisted));
-    assertThat(resultado.triggered()).isTrue();
-    assertThat(resultado.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
+    assertThat(resultado.check().divergences()).isEmpty();
   }
 
   /** 4. Documento reprovado (extracted == null) -> não grava nada, não quebra. */
@@ -223,6 +307,7 @@ class DocumentFieldExtractionTest {
             "modelo/1.0",
             "hash",
             "adulterado",
+            Set.of(),
             Instant.now(),
             null);
     when(documentProvider.verify(any(), any(), any()))
@@ -232,7 +317,41 @@ class DocumentFieldExtractionTest {
         service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
 
     assertThat(resultado.extracted()).isNull();
-    Mockito.verifyNoInteractions(subjectProfileService, subjectService, fieldVerificationService);
-    Mockito.verify(repository).save(any(AssuranceCheck.class));
+    verifyNoInteractions(subjectProfileService, subjectService, fieldVerificationService);
+    verify(repository).save(any(AssuranceCheck.class));
+  }
+
+  /**
+   * Guard extra: mesmo que um provedor real venha a devolver {@code extracted} não-nulo junto de
+   * um desfecho que não seja PASS, a reconciliação não deve rodar — documento reprovado não
+   * sustenta comparação nenhuma, e rodar mesmo assim somaria failScore + divergenceScore pelo
+   * mesmo evento.
+   */
+  @Test
+  void extractedComDesfechoNaoPassNaoDisparaReconciliacao() {
+    AssuranceCheck inconclusivo =
+        new AssuranceCheck(
+            UUID.randomUUID(),
+            SUBJECT,
+            TENANT,
+            AssuranceKind.DOCUMENT,
+            AssuranceOutcome.INCONCLUSIVE,
+            30,
+            "provedor",
+            "doc-ref-3",
+            "modelo/1.0",
+            "hash",
+            "foto tremida",
+            Set.of(),
+            Instant.now(),
+            null);
+    when(documentProvider.verify(any(), any(), any()))
+        .thenReturn(
+            new DocumentVerificationResult(
+                inconclusivo, new ExtractedDocumentFields("MARIA SILVA", "12345678900", null)));
+
+    service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+
+    verifyNoInteractions(subjectProfileService, subjectService, fieldVerificationService);
   }
 }
