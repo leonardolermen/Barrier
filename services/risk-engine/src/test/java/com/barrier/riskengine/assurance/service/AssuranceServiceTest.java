@@ -17,6 +17,7 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
+import com.barrier.riskengine.assurance.domain.DocumentGateNotSatisfiedException;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
 import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
@@ -25,6 +26,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -56,7 +58,8 @@ class AssuranceServiceTest {
           subjectService,
           fieldVerificationService,
           true,
-          0.85);
+          0.85,
+          java.time.Duration.ofHours(24));
 
   private DocumentSubmission submissao() {
     return new DocumentSubmission("ref", "RG", "hash");
@@ -127,7 +130,8 @@ class AssuranceServiceTest {
             subjectService,
             fieldVerificationService,
             false,
-            0.85);
+            0.85,
+            java.time.Duration.ofHours(24));
 
     assertThatThrownBy(
             () -> desabilitado.verifyDocument(SUBJECT, "tenant-1", submissao(), consentimento()))
@@ -149,7 +153,8 @@ class AssuranceServiceTest {
             subjectService,
             fieldVerificationService,
             false,
-            0.85);
+            0.85,
+            java.time.Duration.ofHours(24));
 
     assertThatThrownBy(
             () ->
@@ -211,5 +216,126 @@ class AssuranceServiceTest {
               method.getName())
           .isTrue();
     }
+  }
+
+  // --- attempts: janela + contagem no banco (itens 2 e 3 do plano de throttle) ------------------
+
+  /**
+   * {@code attempts} tem de delegar a contagem para o repositório, passando a janela configurada
+   * — não materializar {@code findAll} e contar em memória. Este teste ficaria vermelho tanto se
+   * {@code attempts} voltasse a usar {@code findAll}/stream quanto se a janela passada não fosse
+   * a configurada no construtor.
+   */
+  @Test
+  void attemptsDelegaParaCountRecentComAJanelaConfigurada() {
+    java.time.Duration janela = java.time.Duration.ofHours(24);
+    AssuranceService servico =
+        new AssuranceService(
+            documentProvider,
+            biometricProvider,
+            repository,
+            List.of(listener),
+            subjectProfileService,
+            subjectService,
+            fieldVerificationService,
+            true,
+            0.85,
+            janela);
+    Mockito.when(repository.countRecent(SUBJECT, "tenant-1", AssuranceKind.BIOMETRIC, janela))
+        .thenReturn(3L);
+
+    long total = servico.attempts(SUBJECT, "tenant-1", AssuranceKind.BIOMETRIC);
+
+    org.assertj.core.api.Assertions.assertThat(total).isEqualTo(3L);
+    verify(repository).countRecent(SUBJECT, "tenant-1", AssuranceKind.BIOMETRIC, janela);
+    verify(repository, Mockito.never()).findAll(Mockito.any(), Mockito.any());
+  }
+
+  // --- documentoscopia como pré-requisito da biometria (decisão de produto 2026-08-13) ----------
+
+  private AssuranceCheck checkComOutcome(AssuranceKind kind, AssuranceOutcome outcome) {
+    return new AssuranceCheck(
+        UUID.randomUUID(),
+        SUBJECT,
+        "tenant-1",
+        kind,
+        outcome,
+        90,
+        "stub",
+        "abc-123",
+        "v1",
+        "hash",
+        "ok",
+        Set.of(),
+        Instant.now(),
+        null);
+  }
+
+  private BiometricSubmission biometricSubmission() {
+    return new BiometricSubmission("selfie", "face", "hash");
+  }
+
+  /**
+   * Sem nenhum {@code AssuranceCheck} de DOCUMENT para o par, a biometria recusa antes de acionar
+   * o provider — que é chamada paga. {@code DocumentGateNotSatisfiedException}, não {@code
+   * IllegalStateException}: o parceiro precisa distinguir "falta documentoscopia" de "kill switch
+   * desligado".
+   */
+  @Test
+  void recusaBiometriaSemDocumentoscopiaAlguma() {
+    when(repository.findLatest(SUBJECT, "tenant-1", AssuranceKind.DOCUMENT))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                service.verifyBiometrics(
+                    SUBJECT, "tenant-1", biometricSubmission(), consentimento()))
+        .isInstanceOf(DocumentGateNotSatisfiedException.class);
+
+    verifyNoInteractions(biometricProvider);
+    verify(repository, Mockito.never()).save(Mockito.any());
+  }
+
+  /**
+   * Comparar rosto contra um documento que não passou na autenticidade prova pouco — só {@code
+   * PASS} libera. FAIL/INCONCLUSIVE/UNAVAILABLE recusam do mesmo jeito que ausência total.
+   */
+  @Test
+  void recusaBiometriaQuandoDocumentoscopiaNaoPassou() {
+    for (AssuranceOutcome outcome :
+        Set.of(AssuranceOutcome.FAIL, AssuranceOutcome.INCONCLUSIVE, AssuranceOutcome.UNAVAILABLE)) {
+      when(repository.findLatest(SUBJECT, "tenant-1", AssuranceKind.DOCUMENT))
+          .thenReturn(Optional.of(checkComOutcome(AssuranceKind.DOCUMENT, outcome)));
+
+      assertThatThrownBy(
+              () ->
+                  service.verifyBiometrics(
+                      SUBJECT, "tenant-1", biometricSubmission(), consentimento()))
+          .as("outcome %s não pode liberar a biometria", outcome)
+          .isInstanceOf(DocumentGateNotSatisfiedException.class);
+    }
+
+    verifyNoInteractions(biometricProvider);
+    verify(repository, Mockito.never()).save(Mockito.any());
+  }
+
+  /** Documentoscopia PASS libera a biometria normalmente, acionando o provider. */
+  @Test
+  void processaBiometriaQuandoDocumentoscopiaPassou() {
+    when(repository.findLatest(SUBJECT, "tenant-1", AssuranceKind.DOCUMENT))
+        .thenReturn(Optional.of(checkComOutcome(AssuranceKind.DOCUMENT, AssuranceOutcome.PASS)));
+    when(subjectService.findById(SUBJECT, "tenant-1"))
+        .thenReturn(
+            new com.barrier.riskengine.subject.domain.Subject(
+                SUBJECT, "CPF", "12345678900", "Fulano de Tal", Instant.now()));
+    when(biometricProvider.requestVerification(any(), any(), any(), any()))
+        .thenReturn(checkComOutcome(AssuranceKind.BIOMETRIC, AssuranceOutcome.PASS));
+
+    AssuranceCheck result =
+        service.verifyBiometrics(SUBJECT, "tenant-1", biometricSubmission(), consentimento());
+
+    org.assertj.core.api.Assertions.assertThat(result.kind()).isEqualTo(AssuranceKind.BIOMETRIC);
+    verify(biometricProvider).requestVerification(any(), any(), any(), any());
+    verify(repository).save(Mockito.any());
   }
 }

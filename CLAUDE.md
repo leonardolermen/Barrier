@@ -334,12 +334,76 @@ de `AssuranceService` faria o contexto inteiro falhar na subida em produção;
 `AssuranceProviderReadinessGuard` só **avisa** quando são eles que estão ativos, no padrão de
 `CnpjBureauReadinessGuard`.
 
+**Decisão de produto (2026-08-13): documentoscopia aprovada é pré-requisito da biometria.**
+`documentFaceReference` tinha `@NotBlank` — exigia uma string, não verificava nada; `"x"` passava.
+Era campo obrigatório, não pré-requisito, o mesmo padrão de falha (controle que roda e não
+verifica) do `RegistrationCompleteness`/`PepRiskRule` citados em `plano-remediacao-auditoria.md`.
+Agora `AssuranceService.verifyBiometrics` exige um `AssuranceCheck` de `kind = DOCUMENT` com
+`outcome = PASS` para o `(subjectId, tenantId)` antes de acionar o provedor de biometria (chamada
+paga); sem ele, `DocumentGateNotSatisfiedException` recusa com 409 — exceção própria, não
+`IllegalStateException`, para o parceiro distinguir "assurance desligado" de "falta
+documentoscopia". Só `PASS` libera: comparar rosto contra documento que não passou na
+autenticidade prova pouco, então `FAIL`/`INCONCLUSIVE`/`UNAVAILABLE` recusam do mesmo jeito que
+ausência total. Consequência operacional: provedor de documentoscopia indisponível trava a frente
+inteira, não só metade (o cliente não fica preso — `IdentityAssuranceRiskRule` converte
+`UNAVAILABLE` em revisão humana — mas não avança sozinho). Muda o contrato de integração (ordem
+passa a ser obrigatória); viável agora porque o endpoint ainda não está em produção. Fora de
+escopo, decisões de produto separadas: validade temporal do `PASS` (hoje sem janela) e
+correspondência do `documentFaceReference` com a referência do check que autorizou.
+
+Throttle da frente de assurance (branch `feat/assurance-throttle`): duas travas fecham o que faltava
+depois de ligar o gatilho de reavaliação. **Dedup por janela** —
+`barrier.assurance.reassessment-window` (default `PT5M`) — no máximo uma reavaliação por
+`(subject, tenant)` a cada janela; `AssuranceReassessmentTrigger` consulta
+`AssessmentService.existsRecentByOriginAndSubject` (avaliações com `origin = ASSURANCE` para
+aquele par, dentro da janela — a checagem mora no `AssessmentService`, não no repositório
+exposto direto a outro módulo: o service é o portão do módulo) antes de submeter, mesmo
+vocabulário do "uma avaliação por (subject, tenant) por importação" do `RescreeningService`. Vinte tentativas de biometria em
+sequência viravam vinte avaliações completas — vinte consultas pagas à BigBoost e vinte rodadas
+de screening pelo mesmo evento; agora só a primeira dentro da janela dispara. **A submissão dentro
+da janela continua gravando o `AssuranceCheck` normalmente** — só a reavaliação é suprimida (com
+log): a trilha de tentativas é o próprio sinal de fraude que a regra abaixo conta, e perdê-la
+seria pior que o problema que a janela resolve. **Janela na contagem de tentativas** —
+`barrier.assurance.attempts-window` (default `PT24H`) — `AssuranceService.attempts` deixou de
+contar o histórico inteiro (`repository.findAll(...).stream().count()`, materializando tudo no
+caminho quente de toda avaliação) e passou a um `COUNT(*)` no banco
+(`AssuranceCheckRepository.countRecent`) com a janela no `WHERE`; sem isso, três tentativas ao
+longo de anos (re-KYC periódico, troca de aparelho) travavam o cliente em `+200/REVIEW` para
+sempre, sem caminho de saída — o sinal que a regra quer capturar é fenômeno de sessão, não de
+vida inteira.
+
+**Validação cadastral (Datavalid/Serpro `pessoa-fisica/validacao`, 2026-08-13).** Diferente de
+documentoscopia (lê um documento) e biometria (prova presença): confere dado **declarado** contra
+RFB e, só para endereço, contra a base da CNH (SENATRAN) — não é documentoscopia, é veracidade
+cadastral. Vive em `subject.profile`, não em `assurance` — o consumidor natural é o
+`FieldVerificationService` que já existia (OTP/BUREAU/DOCUMENT). `subject.profile` não pode
+depender de `assurance` (regra de módulo), mas as duas frentes usam a mesma credencial/token
+Serpro; o plumbing de autenticação (`SerproTokenClient`, o `RestClient` do `datavalid/v5`) mudou
+de `assurance.client.serpro` para um pacote neutro, `com.barrier.riskengine.serpro`
+(`SerproGatewayConfig`) — não em `commons`, para não arrastar dependência de `RestClient` nele
+(mesmo raciocínio já registrado aqui para o `AdminApiKeyFilter`). Nascimento confirmado pela RFB
+vira `FieldVerification` com `method = REGISTRY` (novo valor do enum — fonte diferente do bureau
+comercial e da documentoscopia, força de prova distinta numa contestação). Endereço confirmado
+usa `method = ADDRESS_LOOKUP`, que já existia no enum definido para "base de endereçamento" e
+nunca tinha sido usado. **Cobertura de endereço é parcial**: só fecha para quem tem CNH com
+endereço registrado — sem CNH, o campo continua sem verificação (por isso o item correspondente
+em `plano-remediacao-auditoria.md` segue aberto, não marcado como concluído). Gating no mesmo
+padrão da biometria: `barrier.serpro.enabled` liga a conectividade compartilhada,
+`barrier.registry-validation.enabled` liga esta frente especificamente; `privacidade`
+(`id_template` da RFB, `token`/`cnpj_anuente` da SENATRAN) é config de contrato, não segredo
+técnico — a família de erro `DV200–DV213` (template mal configurado) vira log apontando para
+configuração, nunca para o CPF do cliente. `DV001` (menor de idade) é desfecho cobrado, não erro
+de transporte. Não verificado ao vivo: o ambiente de execução desta etapa não teve egress de rede
+para o gateway Serpro (diferente da etapa de biometria, que rodou contra a demonstração real);
+todo o mapeamento de contrato segue a documentação oficial verbatim e a taxonomia de erro segue
+por analogia com a já sondada.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (440 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 520 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (451 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 531 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

@@ -113,6 +113,40 @@ barrier:
       base-url: https://plataforma.bigdatacorp.com.br
       access-token: ${BIGBOOST_ACCESS_TOKEN:}
       token-id: ${BIGBOOST_TOKEN_ID:}
+  serpro:
+    # Conectividade compartilhada com o gateway Serpro (token OAuth2 + RestClient do
+    # datavalid/v5) — usada tanto pela biometria facial por PIN (assurance) quanto pela
+    # validação cadastral (subject.profile): mesma credencial, mesmo token, mesmo gateway.
+    # Desligado por padrão — dev/testes usam os stubs de cada módulo. Habilitar exige
+    # credenciais reais de produção (SERPRO_CONSUMER_KEY/SERPRO_CONSUMER_SECRET).
+    enabled: false
+    base-url: https://gateway.apiserpro.serpro.gov.br/datavalid/v5
+    auth-base-url: https://gateway.apiserpro.serpro.gov.br
+    consumer-key: ${SERPRO_CONSUMER_KEY:}
+    consumer-secret: ${SERPRO_CONSUMER_SECRET:}
+  registry-validation:
+    # Validação cadastral (Datavalid pessoa-fisica/validacao) contra RFB/SENATRAN, em
+    # subject.profile — reusa a conectividade de barrier.serpro acima (mesma credencial).
+    # Desligado por padrão; StubRegistryValidationProvider atende em dev/testes. Campos de
+    # privacidade são config de contrato, não segredo técnico: id-template (RFB) e
+    # token/cnpj-anuente (SENATRAN) vêm do cadastro do parceiro junto ao Serpro.
+    enabled: false
+    rfb-id-template: ${SERPRO_RFB_ID_TEMPLATE:}
+    senatran-token: ${SERPRO_SENATRAN_TOKEN:}
+    senatran-cnpj-anuente: ${SERPRO_SENATRAN_CNPJ_ANUENTE:}
+  assurance:
+    serpro:
+      # privacidade-token/cnpj-anuente vêm do cadastro do parceiro junto ao Serpro para a
+      # biometria — não são segredo técnico mas também não têm default de dev sensato, ficam
+      # vazios até serem configurados. Conectividade (enabled/base-url/credenciais) mudou para
+      # barrier.serpro acima.
+      privacidade-token: ${SERPRO_PRIVACIDADE_TOKEN:}
+      cnpj-anuente: ${SERPRO_CNPJ_ANUENTE:}
+    poller:
+      # Frequência do AssuranceResultPoller e por quanto tempo um item reivindicado fica com a
+      # posse antes de outra réplica poder tentar de novo — mesmo mecanismo do outbox.
+      delay-ms: 5000
+      lease: PT1M
   watchlist:
     # Fontes reais que baixam arquivos publicados. Desligadas por padrão (dev/testes não baixam
     # nada); ligue em produção. A importação isola falhas por fonte.

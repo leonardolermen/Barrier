@@ -9,6 +9,7 @@ import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepo
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -26,8 +27,8 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
       "INSERT INTO identity_assurance_checks"
           + " (id, subject_id, tenant_id, kind, outcome, score, provider, provider_reference,"
           + " algorithm_version, submitted_hash, detail, divergent_fields, checked_at,"
-          + " consent_reference, consent_purpose, consent_granted_at)"
-          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+          + " consent_reference, consent_purpose, consent_granted_at, pin, pin_expires_at)"
+          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   private final JdbcTemplate jdbc;
 
@@ -57,7 +58,9 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         Timestamp.from(c.checkedAt()),
         c.consent() == null ? null : c.consent().reference(),
         c.consent() == null ? null : c.consent().purpose(),
-        c.consent() == null ? null : Timestamp.from(c.consent().grantedAt()));
+        c.consent() == null ? null : Timestamp.from(c.consent().grantedAt()),
+        c.pin(),
+        c.pinExpiresAt() == null ? null : Timestamp.from(c.pinExpiresAt()));
   }
 
   @Override
@@ -86,6 +89,43 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         tenantId);
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public long countRecent(UUID subjectId, String tenantId, AssuranceKind kind, Duration window) {
+    Long count =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM identity_assurance_checks WHERE subject_id = ?"
+                + " AND tenant_id = ? AND kind = ? AND checked_at >= now() - (? * interval '1"
+                + " second')",
+            Long.class,
+            subjectId,
+            tenantId,
+            kind.name(),
+            window.toSeconds());
+    return count == null ? 0 : count;
+  }
+
+  /**
+   * {@code UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING *} numa única
+   * ida ao banco: reivindica e devolve as linhas já marcadas, na mesma transação curta que o
+   * {@code AssuranceResultPoller} abre antes de sair para a rede — a chamada ao provedor acontece
+   * depois, fora desta transação.
+   */
+  @Override
+  @Transactional
+  public List<AssuranceCheck> claimPendingBiometric(int limit, Duration lease) {
+    return jdbc.query(
+        "UPDATE identity_assurance_checks SET claimed_at = now() WHERE id IN ("
+            + " SELECT id FROM identity_assurance_checks"
+            + " WHERE kind = 'BIOMETRIC' AND outcome = 'PENDING'"
+            + " AND (claimed_at IS NULL OR claimed_at < now() - (? * interval '1 second'))"
+            + " ORDER BY checked_at LIMIT ? FOR UPDATE SKIP LOCKED"
+            + " ) RETURNING *",
+        (rs, i) -> map(rs),
+        lease.toSeconds(),
+        limit);
+  }
+
   private static AssuranceCheck map(ResultSet rs) throws SQLException {
     // rs.wasNull() reflete a ÚLTIMA coluna lida no ResultSet, não a coluna que se quer checar.
     // Passá-lo como argumento posicional do construtor é uma armadilha: os argumentos de Java são
@@ -105,6 +145,7 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
                 consentReference,
                 rs.getString("consent_purpose"),
                 consentGrantedAt == null ? null : consentGrantedAt.toInstant());
+    Timestamp pinExpiresAt = rs.getTimestamp("pin_expires_at");
     return new AssuranceCheck(
         UUID.fromString(rs.getString("id")),
         UUID.fromString(rs.getString("subject_id")),
@@ -119,7 +160,9 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         rs.getString("detail"),
         parseDivergences(rs.getString("divergent_fields")),
         rs.getTimestamp("checked_at").toInstant(),
-        consent);
+        consent,
+        rs.getString("pin"),
+        pinExpiresAt == null ? null : pinExpiresAt.toInstant());
   }
 
   private static Set<DivergentField> parseDivergences(String raw) {

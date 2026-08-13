@@ -25,7 +25,9 @@ import com.barrier.riskengine.screening.service.ScreeningService;
 import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfilePatch;
+import com.barrier.riskengine.subject.profile.domain.VerifiableField;
 import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
+import com.barrier.riskengine.subject.profile.service.RegistryValidationService;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import java.time.Duration;
 import java.time.Instant;
@@ -33,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -79,6 +82,7 @@ public class AssessmentProcessor {
   private final RiskScoringService riskScoringService;
   private final SubjectProfileService subjectProfileService;
   private final FieldVerificationService fieldVerificationService;
+  private final RegistryValidationService registryValidationService;
   private final AssuranceService assuranceService;
   private final AssessmentEventPublisher eventPublisher;
   private final AssessmentMetrics metrics;
@@ -95,6 +99,7 @@ public class AssessmentProcessor {
       RiskScoringService riskScoringService,
       SubjectProfileService subjectProfileService,
       FieldVerificationService fieldVerificationService,
+      RegistryValidationService registryValidationService,
       AssuranceService assuranceService,
       AssessmentEventPublisher eventPublisher,
       AssessmentMetrics metrics,
@@ -109,6 +114,7 @@ public class AssessmentProcessor {
     this.riskScoringService = riskScoringService;
     this.subjectProfileService = subjectProfileService;
     this.fieldVerificationService = fieldVerificationService;
+    this.registryValidationService = registryValidationService;
     this.assuranceService = assuranceService;
     this.eventPublisher = eventPublisher;
     this.metrics = metrics;
@@ -258,6 +264,31 @@ public class AssessmentProcessor {
                 profile,
                 fieldVerificationService.verifiedFields(subjectId, assessment.tenantId(), profile))
             : RegistrationCompleteness.evaluate(assessment.documentType().name(), profile);
+    // Validação cadastral (Datavalid/Serpro) só entra aqui: é o único ponto em que o gate está
+    // prestes a rebaixar a avaliação por causa exata que ela sabe fechar (nascimento declarado e
+    // não conferido). Chamar em qualquer outro caso queimaria consulta paga sem poder mudar o
+    // desfecho (ADR-0015) — cadastro já verificado por OTP/bureau, ou faltando campo que o
+    // Datavalid não cobre (ocupação, por exemplo), não passa por aqui.
+    if (requireVerification
+        && finalStatus == AssessmentStatus.APROVADO
+        && !completeness.complete()
+        && completeness.missingFields().contains(RegistrationCompleteness.BIRTH_DATE_NOT_VERIFIED)) {
+      Set<VerifiableField> updatedVerifiedFields =
+          registryValidationService.verifyIfWorthwhile(
+              subjectId,
+              assessment.tenantId(),
+              assessment.documentType().name(),
+              assessment.documentDigits(),
+              assessment.name(),
+              profile,
+              fieldVerificationService.verifiedFields(subjectId, assessment.tenantId(), profile),
+              assessment.id().asString());
+      // Reavaliar a completude é o que evita rebaixar uma avaliação que acabou de ser conferida
+      // — sem isso, a consulta paga teria sido feita e desperdiçada mesmo assim.
+      completeness =
+          RegistrationCompleteness.evaluate(
+              assessment.documentType().name(), profile, updatedVerifiedFields);
+    }
     if (!completeness.complete() && finalStatus == AssessmentStatus.APROVADO) {
       // Fila própria, não EDD: falta de campo cadastral não pede analista, pede o campo. Enquanto
       // isso virava EM_REVISAO, o que o time de operações mais via era justamente o que menos

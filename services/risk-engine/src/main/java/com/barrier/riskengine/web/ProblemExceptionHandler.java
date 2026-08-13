@@ -3,6 +3,7 @@ package com.barrier.riskengine.web;
 import com.barrier.riskengine.assessment.domain.exceptions.AssessmentNotFoundException;
 import com.barrier.riskengine.assessment.domain.exceptions.IdempotencyConflictException;
 import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
+import com.barrier.riskengine.assurance.domain.DocumentGateNotSatisfiedException;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -43,6 +44,17 @@ class ProblemExceptionHandler {
 
   @ExceptionHandler(IllegalStateException.class)
   ProblemDetail handleConflict(IllegalStateException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+  }
+
+  /**
+   * Biometria acionada sem documentoscopia {@code PASS} para o mesmo {@code (subjectId,
+   * tenantId)}. 409, mesma semântica do kill switch: pré-condição de estado não satisfeita, não
+   * erro de entrada — mas exceção própria, não {@code IllegalStateException}, porque o parceiro
+   * precisa distinguir as duas causas.
+   */
+  @ExceptionHandler(DocumentGateNotSatisfiedException.class)
+  ProblemDetail handleDocumentGateNotSatisfied(DocumentGateNotSatisfiedException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 

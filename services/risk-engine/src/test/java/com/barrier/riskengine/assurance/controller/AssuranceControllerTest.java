@@ -84,7 +84,8 @@ class AssuranceControllerTest {
             subjectService,
             fieldVerificationService,
             true,
-            0.85);
+            0.85,
+            java.time.Duration.ofHours(24));
     controller = new AssuranceController(subjectService, assuranceService);
   }
 
@@ -268,7 +269,8 @@ class AssuranceControllerTest {
             new SubjectService(subjectRepository),
             Mockito.mock(FieldVerificationService.class),
             true,
-            0.85);
+            0.85,
+            java.time.Duration.ofHours(24));
     AssuranceController controllerDeProducao =
         new AssuranceController(new SubjectService(subjectRepository), servicoComProvidersDeProducao);
 
@@ -283,6 +285,27 @@ class AssuranceControllerTest {
   @Test
   void submissaoBiometricaValidaDevolve200() {
     Subject subject = linkedSubject();
+    // Documentoscopia aprovada é pré-requisito da biometria (decisão de produto 2026-08-13) —
+    // sem este stub, requireDocumentPass recusa com DocumentGateNotSatisfiedException antes de
+    // acionar o biometricProvider.
+    AssuranceCheck documentPass =
+        new AssuranceCheck(
+            UUID.randomUUID(),
+            subject.id(),
+            TENANT_ID,
+            AssuranceKind.DOCUMENT,
+            AssuranceOutcome.PASS,
+            90,
+            "stub-document-provider",
+            "prov-ref-doc",
+            "v1.0.0",
+            "hash-doc",
+            null,
+            Set.of(),
+            Instant.now(),
+            null);
+    when(assuranceRepository.findLatest(subject.id(), TENANT_ID, AssuranceKind.DOCUMENT))
+        .thenReturn(Optional.of(documentPass));
     AssuranceCheck check =
         new AssuranceCheck(
             UUID.randomUUID(),
@@ -299,7 +322,7 @@ class AssuranceControllerTest {
             Set.of(),
             Instant.now(),
             null);
-    when(biometricProvider.verify(any(), any(), any())).thenReturn(check);
+    when(biometricProvider.requestVerification(any(), any(), any(), any())).thenReturn(check);
 
     SubmitBiometricRequest request =
         new SubmitBiometricRequest(

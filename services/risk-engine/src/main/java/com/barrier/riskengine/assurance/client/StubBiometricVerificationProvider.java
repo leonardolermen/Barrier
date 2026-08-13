@@ -6,8 +6,10 @@ import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +29,13 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Profile("!prod")
+// Mutuamente exclusivo com o provider real: os dois implementam a mesma interface, e o
+// construtor de AssuranceService exige exatamente um bean. Sem isto, ligar
+// barrier.serpro.enabled em dev criaria NoUniqueBeanDefinitionException.
+@ConditionalOnProperty(
+    name = "barrier.serpro.enabled",
+    havingValue = "false",
+    matchIfMissing = true)
 public class StubBiometricVerificationProvider implements BiometricVerificationProvider {
 
   private final Clock clock;
@@ -36,7 +45,8 @@ public class StubBiometricVerificationProvider implements BiometricVerificationP
   }
 
   @Override
-  public AssuranceCheck verify(UUID subjectId, String tenantId, BiometricSubmission submission) {
+  public AssuranceCheck requestVerification(
+      UUID subjectId, String tenantId, String document, BiometricSubmission submission) {
     String reference = submission.selfieReference() == null ? "" : submission.selfieReference();
     Instant now = clock.instant();
     AssuranceOutcome outcome =
@@ -62,6 +72,13 @@ public class StubBiometricVerificationProvider implements BiometricVerificationP
         Set.of(),
         now,
         null);
+  }
+
+  /** Síncrono: nunca produz um check PENDING, então o poller nunca deveria chamar isto. */
+  @Override
+  public Optional<AssuranceCheck> pollResult(AssuranceCheck pending, String document) {
+    throw new UnsupportedOperationException(
+        "biometria-simulada é síncrona; requestVerification já devolve o desfecho final");
   }
 
   @Override

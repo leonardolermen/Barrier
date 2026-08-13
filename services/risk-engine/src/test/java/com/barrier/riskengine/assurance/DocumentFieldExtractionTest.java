@@ -75,7 +75,8 @@ class DocumentFieldExtractionTest {
           subjectService,
           fieldVerificationService,
           true,
-          0.85);
+          0.85,
+          java.time.Duration.ofHours(24));
 
   private final IdentityAssuranceRiskRule rule =
       new IdentityAssuranceRiskRule(600, 100, 200, 3, 300);

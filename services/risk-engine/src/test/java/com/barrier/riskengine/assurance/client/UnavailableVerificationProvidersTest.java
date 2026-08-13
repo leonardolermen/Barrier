@@ -37,7 +37,9 @@ class UnavailableVerificationProvidersTest {
     UnavailableBiometricVerificationProvider provider =
         new UnavailableBiometricVerificationProvider(clock);
 
-    var check = provider.verify(SUBJECT, "tenant-1", new BiometricSubmission("s", "f", "hash"));
+    var check =
+        provider.requestVerification(
+            SUBJECT, "tenant-1", "12345678900", new BiometricSubmission("s", "f", "hash"));
 
     assertThat(check.outcome()).isEqualTo(AssuranceOutcome.UNAVAILABLE);
     assertThat(provider.name()).endsWith("-indisponivel");

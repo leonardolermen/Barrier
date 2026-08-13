@@ -3,6 +3,8 @@ package com.barrier.riskengine.rescreening;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -20,6 +22,7 @@ import com.barrier.riskengine.rescreening.service.AssuranceReassessmentTrigger;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.subject.service.SubjectService;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
@@ -35,6 +38,7 @@ class AssuranceReassessmentTriggerTest {
 
   private static final UUID SUBJECT_ID = UUID.randomUUID();
   private static final String TENANT = "tenant-1";
+  private static final Duration WINDOW = Duration.ofMinutes(5);
 
   @Mock AssessmentService assessments;
   @Mock SubjectService subjects;
@@ -43,7 +47,13 @@ class AssuranceReassessmentTriggerTest {
 
   @BeforeEach
   void setUp() {
-    trigger = new AssuranceReassessmentTrigger(assessments, subjects);
+    trigger = new AssuranceReassessmentTrigger(assessments, subjects, WINDOW);
+    // Padrão "sem dedup em jogo" para os testes que não exercitam a janela — evita repetir o
+    // stub em todo teste que só se importa com o resto do comportamento.
+    lenient()
+        .when(
+            assessments.existsRecentByOriginAndSubject(any(), anyString(), any(), any()))
+        .thenReturn(false);
   }
 
   private AssuranceCheck check(AssuranceOutcome outcome) {
@@ -128,7 +138,7 @@ class AssuranceReassessmentTriggerTest {
     assertThatCode(() -> trigger.onRecorded(check(AssuranceOutcome.PASS, "tenant-A")))
         .doesNotThrowAnyException();
 
-    verifyNoInteractions(assessments);
+    verify(assessments, never()).submit(any());
   }
 
   /**
@@ -169,6 +179,112 @@ class AssuranceReassessmentTriggerTest {
     assertThatCode(() -> trigger.onRecorded(check(AssuranceOutcome.PASS)))
         .doesNotThrowAnyException();
 
-    verifyNoInteractions(assessments);
+    verify(assessments, never()).submit(any());
+  }
+
+  /**
+   * PENDING não é desfecho (PIN emitido, biometria assíncrona ainda sem resultado) — ver Javadoc
+   * de {@code AssuranceOutcome#PENDING}. Reavaliar aqui reavaliaria com a mesma ausência de prova
+   * que já existia antes da submissão; o gatilho tem de tratar como "nada aconteceu ainda", nem
+   * consultando dedup nem resolvendo o subject.
+   */
+  @Test
+  void naoReavaliaQuandoODesfechoEPending() {
+    trigger.onRecorded(check(AssuranceOutcome.PENDING));
+
+    verify(assessments, never()).submit(any());
+    verifyNoInteractions(subjects);
+  }
+
+  // --- dedup por janela (item 1 do plano de throttle) ------------------------------------------
+
+  /**
+   * Já existe avaliação ASSURANCE recente para o (subject, tenant): a reavaliação é suprimida, e
+   * nem o subject é resolvido — a checagem de dedup roda antes de qualquer chamada dependente.
+   * A única interação com {@code assessments} é a própria checagem de dedup — {@code submit}
+   * nunca é chamado.
+   */
+  @Test
+  void naoReavaliaQuandoJaHaAvaliacaoAssuranceRecenteParaOMesmoSubjectETenant() {
+    when(assessments.existsRecentByOriginAndSubject(
+            SUBJECT_ID, TENANT, AssessmentOrigin.ASSURANCE, WINDOW))
+        .thenReturn(true);
+
+    trigger.onRecorded(check(AssuranceOutcome.PASS));
+
+    verify(assessments, never()).submit(any());
+    verifyNoInteractions(subjects);
+  }
+
+  /** Sem avaliação recente, a reavaliação segue disparando normalmente. */
+  @Test
+  void reavaliaQuandoNaoHaAvaliacaoAssuranceRecente() {
+    when(assessments.existsRecentByOriginAndSubject(
+            SUBJECT_ID, TENANT, AssessmentOrigin.ASSURANCE, WINDOW))
+        .thenReturn(false);
+    when(subjects.findById(SUBJECT_ID, TENANT)).thenReturn(subject());
+
+    trigger.onRecorded(check(AssuranceOutcome.PASS));
+
+    verify(assessments).submit(any());
+  }
+
+  /**
+   * A supressão vale mesmo em FAIL — a janela suprime a <b>reavaliação</b>, não decide por
+   * desfecho. O check em si (fora deste teste, na responsabilidade do {@code AssuranceService})
+   * continua sendo gravado independentemente do que acontece aqui.
+   */
+  @Test
+  void suprimeAReavaliacaoMesmoEmFailQuandoDentroDaJanela() {
+    when(assessments.existsRecentByOriginAndSubject(
+            SUBJECT_ID, TENANT, AssessmentOrigin.ASSURANCE, WINDOW))
+        .thenReturn(true);
+
+    trigger.onRecorded(check(AssuranceOutcome.FAIL));
+
+    verify(assessments, never()).submit(any());
+  }
+
+  /** O dedup é escopado por (subject, tenant): a consulta usa o tenant do próprio check. */
+  @Test
+  void consultaDedupComOTenantDoCheck() {
+    when(subjects.findById(SUBJECT_ID, TENANT)).thenReturn(subject());
+
+    trigger.onRecorded(check(AssuranceOutcome.PASS));
+
+    verify(assessments)
+        .existsRecentByOriginAndSubject(SUBJECT_ID, TENANT, AssessmentOrigin.ASSURANCE, WINDOW);
+  }
+
+  /**
+   * Cruzamento entre tenants (mesmo subject global, dois parceiros): a submissão do tenant A não
+   * pode suprimir a reavaliação do tenant B — seria vazamento de efeito entre parceiros, do
+   * mesmo tipo que a V024 fechou para dado de cadastro. Este teste fica vermelho se a consulta de
+   * dedup (aqui, ou na query SQL por trás dela) deixar de escopar por tenant: bastaria "apagar" o
+   * {@code AND tenant_id = ?} para os dois checks do mesmo subject passarem a colidir.
+   */
+  @Test
+  void dedupNaoCruzaEntreTenantsDoMesmoSubjectGlobal() {
+    when(assessments.existsRecentByOriginAndSubject(
+            SUBJECT_ID, "tenant-A", AssessmentOrigin.ASSURANCE, WINDOW))
+        .thenReturn(true);
+    when(assessments.existsRecentByOriginAndSubject(
+            SUBJECT_ID, "tenant-B", AssessmentOrigin.ASSURANCE, WINDOW))
+        .thenReturn(false);
+    when(subjects.findById(SUBJECT_ID, "tenant-B"))
+        .thenReturn(
+            new Subject(SUBJECT_ID, "CPF", "11144477735", "Fulano de Tal", Instant.now()));
+
+    trigger.onRecorded(check(AssuranceOutcome.PASS, "tenant-A"));
+    trigger.onRecorded(check(AssuranceOutcome.PASS, "tenant-B"));
+
+    verify(assessments, never())
+        .submit(
+            org.mockito.ArgumentMatchers.argThat(
+                cmd -> cmd != null && "tenant-A".equals(cmd.tenantId())));
+    verify(assessments)
+        .submit(
+            org.mockito.ArgumentMatchers.argThat(
+                cmd -> cmd != null && "tenant-B".equals(cmd.tenantId())));
   }
 }

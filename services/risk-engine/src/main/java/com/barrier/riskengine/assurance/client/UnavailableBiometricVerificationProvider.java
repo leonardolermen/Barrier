@@ -6,6 +6,7 @@ import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -34,7 +35,8 @@ public class UnavailableBiometricVerificationProvider implements BiometricVerifi
   }
 
   @Override
-  public AssuranceCheck verify(UUID subjectId, String tenantId, BiometricSubmission submission) {
+  public AssuranceCheck requestVerification(
+      UUID subjectId, String tenantId, String document, BiometricSubmission submission) {
     Instant now = clock.instant();
     return new AssuranceCheck(
         UUID.randomUUID(),
@@ -51,6 +53,13 @@ public class UnavailableBiometricVerificationProvider implements BiometricVerifi
         Set.of(),
         now,
         null);
+  }
+
+  /** Síncrono: nunca produz um check PENDING, então o poller nunca deveria chamar isto. */
+  @Override
+  public Optional<AssuranceCheck> pollResult(AssuranceCheck pending, String document) {
+    throw new UnsupportedOperationException(
+        "biometria-indisponivel é síncrona; requestVerification já devolve UNAVAILABLE");
   }
 
   @Override

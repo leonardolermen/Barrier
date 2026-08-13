@@ -170,3 +170,41 @@ TDD em tudo — teste vermelho antes de cada mudança de produção.
 - Cifragem em repouso (segue na Fase 6, agora sem bloquear esta frente).
 - Subsistema completo de consentimento (revogação, expiração, gestão por finalidade).
 - UBO além do 1º grau (etapa 4 do ADR-0016).
+
+## Decisão de produto: documentoscopia aprovada é pré-requisito da biometria (2026-08-13)
+
+`SubmitBiometricRequest.documentFaceReference` tinha `@NotBlank`. Isso exigia que o parceiro
+mandasse uma string — não verificava nada; `"x"` passava. Era campo obrigatório, não
+pré-requisito, e é o mesmo padrão de falha que este projeto já registrou como o pior: controle
+que existe, roda, produz evidência de que rodou, e não verifica nada (ver
+`RegistrationCompleteness` checando presença em vez de veracidade, e a `PepRiskRule` que nunca
+disparava, ambos em `plano-remediacao-auditoria.md`).
+
+O humano decidiu explicitamente: antes de acionar o provedor de biometria (chamada paga),
+`AssuranceService.verifyBiometrics` passa a exigir um `AssuranceCheck` de `kind = DOCUMENT` com
+`outcome = PASS` para aquele `(subjectId, tenantId)` — `AssuranceService.latest` já existia e faz
+a consulta, sempre escopada por tenant (o tipo do método é a defesa). Sem ele,
+`DocumentGateNotSatisfiedException` recusa com **409** (mesma semântica do kill switch:
+pré-condição de estado não satisfeita, não erro de entrada) — exceção própria, não
+`IllegalStateException` genérica, porque o parceiro precisa distinguir "assurance desligado" de
+"falta documentoscopia".
+
+Três consequências, deliberadas:
+
+1. **Só `PASS` libera.** Comparar rosto contra um documento que não passou na autenticidade prova
+   pouco — `FAIL`, `INCONCLUSIVE` e `UNAVAILABLE` não estabeleceram autenticidade nenhuma, então
+   nenhum dos três é base para liberar a biometria.
+2. **Provedor de documentoscopia indisponível trava a frente inteira, não só metade.** O cliente
+   não fica preso — `IdentityAssuranceRiskRule` já converte `UNAVAILABLE` em revisão humana — mas
+   não avança para a biometria sozinho.
+3. **Muda o contrato de integração**: a ordem documentoscopia → biometria passa a ser obrigatória,
+   não só recomendada. Viável agora porque o endpoint de biometria ainda não está em produção;
+   feito depois, seria breaking change.
+
+Fora desta rodada, decisões de produto separadas a levar ao humano:
+
+- **Validade temporal do `PASS`.** Hoje uma documentoscopia aprovada há dois anos continua
+  liberando biometria — não há janela de validade.
+- **Correspondência do `documentFaceReference`** com a referência da consulta do `AssuranceCheck`
+  de documento que autorizou. O campo continua obrigatório, mas não verificável contra o check;
+  amarrar os dois exige conhecer o formato do provedor real.
