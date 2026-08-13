@@ -334,12 +334,33 @@ de `AssuranceService` faria o contexto inteiro falhar na subida em produção;
 `AssuranceProviderReadinessGuard` só **avisa** quando são eles que estão ativos, no padrão de
 `CnpjBureauReadinessGuard`.
 
+Throttle da frente de assurance (branch `feat/assurance-throttle`): duas travas fecham o que faltava
+depois de ligar o gatilho de reavaliação. **Dedup por janela** —
+`barrier.assurance.reassessment-window` (default `PT5M`) — no máximo uma reavaliação por
+`(subject, tenant)` a cada janela; `AssuranceReassessmentTrigger` consulta
+`AssessmentService.existsRecentByOriginAndSubject` (avaliações com `origin = ASSURANCE` para
+aquele par, dentro da janela — a checagem mora no `AssessmentService`, não no repositório
+exposto direto a outro módulo: o service é o portão do módulo) antes de submeter, mesmo
+vocabulário do "uma avaliação por (subject, tenant) por importação" do `RescreeningService`. Vinte tentativas de biometria em
+sequência viravam vinte avaliações completas — vinte consultas pagas à BigBoost e vinte rodadas
+de screening pelo mesmo evento; agora só a primeira dentro da janela dispara. **A submissão dentro
+da janela continua gravando o `AssuranceCheck` normalmente** — só a reavaliação é suprimida (com
+log): a trilha de tentativas é o próprio sinal de fraude que a regra abaixo conta, e perdê-la
+seria pior que o problema que a janela resolve. **Janela na contagem de tentativas** —
+`barrier.assurance.attempts-window` (default `PT24H`) — `AssuranceService.attempts` deixou de
+contar o histórico inteiro (`repository.findAll(...).stream().count()`, materializando tudo no
+caminho quente de toda avaliação) e passou a um `COUNT(*)` no banco
+(`AssuranceCheckRepository.countRecent`) com a janela no `WHERE`; sem isso, três tentativas ao
+longo de anos (re-KYC periódico, troca de aparelho) travavam o cliente em `+200/REVIEW` para
+sempre, sem caminho de saída — o sinal que a regra quer capturar é fenômeno de sessão, não de
+vida inteira.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (440 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 520 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (451 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 531 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

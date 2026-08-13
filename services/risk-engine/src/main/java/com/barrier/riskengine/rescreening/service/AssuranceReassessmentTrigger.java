@@ -1,5 +1,6 @@
 package com.barrier.riskengine.rescreening.service;
 
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentService;
 import com.barrier.riskengine.assessment.service.SubmitAssessmentCommand;
@@ -7,8 +8,10 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.service.AssuranceRecordedListener;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +38,26 @@ import org.springframework.transaction.annotation.Transactional;
  * alheios, e o {@code AssessmentService.submit} chamado a seguir criaria o vínculo tenant↔subject
  * e um {@code Assessment} vazando dado de cliente de outro tenant — exatamente o vazamento que
  * {@code SubjectService.findById} com escopo de tenant existe para impedir.
+ *
+ * <p><b>Dedup por janela curta</b> ({@code barrier.assurance.reassessment-window}, default
+ * {@code PT5M}): no máximo uma reavaliação por {@code (subject, tenant)} a cada janela. Vinte
+ * tentativas de biometria de um parceiro em sequência — retry automático de app, dedo no botão —
+ * viravam vinte avaliações completas: vinte consultas pagas de bureau e vinte rodadas de
+ * screening pelo mesmo evento. Mesmo vocabulário do {@code RescreeningService} ("uma avaliação
+ * por (subject, tenant) por importação"), aqui por tempo em vez de por importação, porque não há
+ * um lote análogo para amarrar a trava.
+ *
+ * <p><b>A submissão dentro da janela continua gravando o {@code AssuranceCheck} normalmente</b> —
+ * o que se suprime é a reavaliação, não o registro. Deliberado: a trilha de tentativas é
+ * justamente o sinal de fraude que {@code IdentityAssuranceRiskRule}/{@code
+ * AssuranceService.attempts} contam (ver item 2 do plano de throttle) — perdê-la aqui seria pior
+ * que o problema que esta janela resolve. A verificação é feita consultando avaliações existentes
+ * com {@code origin = ASSURANCE} para aquele {@code (subject, tenant)} dentro da janela
+ * ({@code AssessmentService.existsRecentByOriginAndSubject}), não uma tabela nova. A checagem
+ * passa por {@code AssessmentService}, não pelo repositório de assessment direto: o service é o
+ * portão do módulo — é onde vivem transação, escopo por tenant e invariantes — e este trigger já
+ * depende dele para {@code submit}. Falar com o repositório alheio pularia esse portão e o
+ * próximo gatilho copiaria o atalho.
  */
 @Service
 public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
@@ -43,10 +66,15 @@ public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
 
   private final AssessmentService assessments;
   private final SubjectService subjects;
+  private final Duration reassessmentWindow;
 
-  public AssuranceReassessmentTrigger(AssessmentService assessments, SubjectService subjects) {
+  public AssuranceReassessmentTrigger(
+      AssessmentService assessments,
+      SubjectService subjects,
+      @Value("${barrier.assurance.reassessment-window:PT5M}") Duration reassessmentWindow) {
     this.assessments = assessments;
     this.subjects = subjects;
+    this.reassessmentWindow = reassessmentWindow;
   }
 
   /**
@@ -75,6 +103,18 @@ public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
   @Override
   public void onRecorded(AssuranceCheck check) {
     try {
+      if (assessments.existsRecentByOriginAndSubject(
+          check.subjectId(), check.tenantId(), AssessmentOrigin.ASSURANCE, reassessmentWindow)) {
+        log.info(
+            "Reavaliação por assurance suprimida (dedup): subject {} tenant {} já tem avaliação"
+                + " ASSURANCE nos últimos {}. A verificação {} foi gravada normalmente; só a"
+                + " reavaliação foi suprimida.",
+            check.subjectId(),
+            check.tenantId(),
+            reassessmentWindow,
+            check.id());
+        return;
+      }
       Subject subject = subjects.findById(check.subjectId(), check.tenantId());
       String originDetail = check.kind() + "@" + check.providerReference();
       assessments.submit(

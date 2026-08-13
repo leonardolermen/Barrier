@@ -56,7 +56,8 @@ class AssuranceServiceTest {
           subjectService,
           fieldVerificationService,
           true,
-          0.85);
+          0.85,
+          java.time.Duration.ofHours(24));
 
   private DocumentSubmission submissao() {
     return new DocumentSubmission("ref", "RG", "hash");
@@ -127,7 +128,8 @@ class AssuranceServiceTest {
             subjectService,
             fieldVerificationService,
             false,
-            0.85);
+            0.85,
+            java.time.Duration.ofHours(24));
 
     assertThatThrownBy(
             () -> desabilitado.verifyDocument(SUBJECT, "tenant-1", submissao(), consentimento()))
@@ -149,7 +151,8 @@ class AssuranceServiceTest {
             subjectService,
             fieldVerificationService,
             false,
-            0.85);
+            0.85,
+            java.time.Duration.ofHours(24));
 
     assertThatThrownBy(
             () ->
@@ -211,5 +214,38 @@ class AssuranceServiceTest {
               method.getName())
           .isTrue();
     }
+  }
+
+  // --- attempts: janela + contagem no banco (itens 2 e 3 do plano de throttle) ------------------
+
+  /**
+   * {@code attempts} tem de delegar a contagem para o repositório, passando a janela configurada
+   * — não materializar {@code findAll} e contar em memória. Este teste ficaria vermelho tanto se
+   * {@code attempts} voltasse a usar {@code findAll}/stream quanto se a janela passada não fosse
+   * a configurada no construtor.
+   */
+  @Test
+  void attemptsDelegaParaCountRecentComAJanelaConfigurada() {
+    java.time.Duration janela = java.time.Duration.ofHours(24);
+    AssuranceService servico =
+        new AssuranceService(
+            documentProvider,
+            biometricProvider,
+            repository,
+            List.of(listener),
+            subjectProfileService,
+            subjectService,
+            fieldVerificationService,
+            true,
+            0.85,
+            janela);
+    Mockito.when(repository.countRecent(SUBJECT, "tenant-1", AssuranceKind.BIOMETRIC, janela))
+        .thenReturn(3L);
+
+    long total = servico.attempts(SUBJECT, "tenant-1", AssuranceKind.BIOMETRIC);
+
+    org.assertj.core.api.Assertions.assertThat(total).isEqualTo(3L);
+    verify(repository).countRecent(SUBJECT, "tenant-1", AssuranceKind.BIOMETRIC, janela);
+    verify(repository, Mockito.never()).findAll(Mockito.any(), Mockito.any());
   }
 }

@@ -17,6 +17,7 @@ import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import com.barrier.riskengine.subject.service.SubjectService;
+import java.time.Duration;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +54,7 @@ public class AssuranceService {
   private final FieldVerificationService fieldVerificationService;
   private final boolean enabled;
   private final double nameMatchThreshold;
+  private final Duration attemptsWindow;
 
   public AssuranceService(
       DocumentVerificationProvider documentProvider,
@@ -68,7 +70,10 @@ public class AssuranceService {
       @Value("${barrier.assurance.enabled:true}") boolean enabled,
       // Mesmo mecanismo dos bureaus (BrasilApiBureauProvider/BigBoostBureauProvider): comparação
       // de nome por similaridade de token, não igualdade de string — ver #diverges.
-      @Value("${barrier.assurance.name-match.threshold:0.85}") double nameMatchThreshold) {
+      @Value("${barrier.assurance.name-match.threshold:0.85}") double nameMatchThreshold,
+      // Ver Javadoc de #attempts: sem janela, três tentativas ao longo de anos (re-KYC periódico,
+      // troca de aparelho) travariam o cliente em +200/REVIEW para sempre, sem caminho de saída.
+      @Value("${barrier.assurance.attempts-window:PT24H}") Duration attemptsWindow) {
     this.documentProvider = documentProvider;
     this.biometricProvider = biometricProvider;
     this.repository = repository;
@@ -78,6 +83,7 @@ public class AssuranceService {
     this.fieldVerificationService = fieldVerificationService;
     this.enabled = enabled;
     this.nameMatchThreshold = nameMatchThreshold;
+    this.attemptsWindow = attemptsWindow;
   }
 
   /**
@@ -301,9 +307,23 @@ public class AssuranceService {
     return repository.findLatest(subjectId, tenantId, kind);
   }
 
-  /** Quantas tentativas houve daquele tipo — insumo do sinal de risco, não trivialidade. */
+  /**
+   * Quantas tentativas houve daquele tipo <b>dentro da janela</b> ({@code
+   * barrier.assurance.attempts-window}, default 24h) — insumo do sinal de risco, não trivialidade.
+   *
+   * <p>Janela, não histórico inteiro: o sinal que {@code IdentityAssuranceRiskRule} quer capturar
+   * é "várias tentativas até uma passar", que é fenômeno de <b>sessão</b> — alguém testando
+   * artefato até vencer o detector, agora. Contar o histórico completo faria um cliente que
+   * refizesse a biometria três vezes ao longo de anos (re-KYC periódico, troca de aparelho,
+   * reavaliação por rescreening) ficar travado em {@code +200/REVIEW} <b>para sempre</b>, em toda
+   * avaliação futura, sem caminho de saída — o oposto de fenômeno de sessão.
+   *
+   * <p>Conta no banco ({@code COUNT(*)} com a janela no {@code WHERE}), não materializa a lista:
+   * este método roda no caminho quente de toda avaliação do sistema, inclusive as que nunca
+   * usaram assurance.
+   */
   @Transactional(readOnly = true)
   public long attempts(UUID subjectId, String tenantId, AssuranceKind kind) {
-    return repository.findAll(subjectId, tenantId).stream().filter(c -> c.kind() == kind).count();
+    return repository.countRecent(subjectId, tenantId, kind, attemptsWindow);
   }
 }

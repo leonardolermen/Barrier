@@ -9,6 +9,7 @@ import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepo
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -84,6 +85,22 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         (rs, i) -> map(rs),
         subjectId,
         tenantId);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public long countRecent(UUID subjectId, String tenantId, AssuranceKind kind, Duration window) {
+    Long count =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM identity_assurance_checks WHERE subject_id = ?"
+                + " AND tenant_id = ? AND kind = ? AND checked_at >= now() - (? * interval '1"
+                + " second')",
+            Long.class,
+            subjectId,
+            tenantId,
+            kind.name(),
+            window.toSeconds());
+    return count == null ? 0 : count;
   }
 
   private static AssuranceCheck map(ResultSet rs) throws SQLException {

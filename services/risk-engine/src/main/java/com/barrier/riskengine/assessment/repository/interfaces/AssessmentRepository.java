@@ -2,9 +2,11 @@ package com.barrier.riskengine.assessment.repository.interfaces;
 
 import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Repositório de domínio de avaliações. O {@code service} depende desta interface, não da
@@ -37,4 +39,15 @@ public interface AssessmentRepository {
    * @param lease por quanto tempo a posse vale antes de a avaliação voltar a ser reivindicável
    */
   List<AssessmentId> claimPending(int limit, Duration lease);
+
+  /**
+   * Já existe avaliação de {@code origin}, para aquele {@code (subject, tenant)}, criada dentro
+   * de {@code window} (contado a partir de agora)?
+   *
+   * <p>Base do dedup de reavaliação do assurance: vinte desfechos de biometria seguidos não podem
+   * virar vinte avaliações — só a primeira dentro da janela deve disparar. Ver Javadoc de {@code
+   * AssuranceReassessmentTrigger}.
+   */
+  boolean existsRecentByOriginAndSubject(
+      UUID subjectId, String tenantId, AssessmentOrigin origin, Duration window);
 }

@@ -84,7 +84,8 @@ class AssuranceControllerTest {
             subjectService,
             fieldVerificationService,
             true,
-            0.85);
+            0.85,
+            java.time.Duration.ofHours(24));
     controller = new AssuranceController(subjectService, assuranceService);
   }
 
@@ -268,7 +269,8 @@ class AssuranceControllerTest {
             new SubjectService(subjectRepository),
             Mockito.mock(FieldVerificationService.class),
             true,
-            0.85);
+            0.85,
+            java.time.Duration.ofHours(24));
     AssuranceController controllerDeProducao =
         new AssuranceController(new SubjectService(subjectRepository), servicoComProvidersDeProducao);
 
