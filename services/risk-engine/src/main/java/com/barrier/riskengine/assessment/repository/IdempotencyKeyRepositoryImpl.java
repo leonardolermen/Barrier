@@ -1,16 +1,18 @@
 package com.barrier.riskengine.assessment.repository;
 
-import com.barrier.riskengine.assessment.domain.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.domain.IdempotencyReservation;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.barrier.riskengine.assessment.repository.interfaces.IdempotencyKeyRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /** Implementação JDBC — a reserva é uma operação de linha, sem agregado a mapear. */
 @Repository
-class IdempotencyKeyRepositoryImpl implements IdempotencyKeyRepository {
+public class IdempotencyKeyRepositoryImpl implements IdempotencyKeyRepository {
 
   /**
    * Toma a posse da chave em uma única instrução: insere se não existe e reaproveita se a existente

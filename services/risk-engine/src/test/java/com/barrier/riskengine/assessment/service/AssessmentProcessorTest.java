@@ -9,10 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
-import com.barrier.riskengine.assessment.domain.AssessmentStatus;
-import com.barrier.riskengine.assessment.domain.DocumentType;
-import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.service.IdentityResult;
@@ -21,7 +21,7 @@ import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
-import com.barrier.riskengine.risk.rule.RiskContext;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.service.ScreeningCommand;
@@ -54,6 +54,7 @@ class AssessmentProcessorTest {
   @Mock ScreeningService screeningService;
   @Mock RiskScoringService riskScoringService;
   @Mock SubjectProfileService subjectProfileService;
+  @Mock com.barrier.riskengine.subject.profile.service.FieldVerificationService fieldVerificationService;
   @Mock AssessmentEventPublisher eventPublisher;
 
   private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -65,12 +66,14 @@ class AssessmentProcessorTest {
         screeningService,
         riskScoringService,
         subjectProfileService,
+        fieldVerificationService,
         eventPublisher,
         new AssessmentMetrics(registry),
         transactionTemplate(),
         Duration.ofMinutes(5),
         5,
-        Duration.ofSeconds(30));
+        Duration.ofSeconds(30),
+        true);
   }
 
   /**
@@ -110,6 +113,14 @@ class AssessmentProcessorTest {
     lenient()
         .when(subjectProfileService.find(any(UUID.class), anyString()))
         .thenReturn(completeCpfProfile());
+    // Cadastro verificado: o gate de veracidade tem teste próprio, e deixá-lo implícito aqui faria
+    // estes casos falharem por um motivo que não é o que eles provam.
+    lenient()
+        .when(fieldVerificationService.verifiedFields(any(UUID.class), anyString(), any()))
+        .thenReturn(
+            java.util.Set.of(
+                com.barrier.riskengine.subject.profile.domain.VerifiableField.BIRTH_DATE,
+                com.barrier.riskengine.subject.profile.domain.VerifiableField.PHONE));
     return a;
   }
 
@@ -155,6 +166,26 @@ class AssessmentProcessorTest {
     assertThat(pending.riskLevel()).isEqualTo(RiskLevel.LOW);
     verify(repository).save(pending);
     verify(eventPublisher).publishCompleted(pending);
+  }
+
+  /**
+   * O furo que a verificação fecha: cadastro preenchido com dado plausível e inventado liberava
+   * aprovação automática. Agora cai na mesma fila de "falta o campo" — não é reprovação, porque
+   * dado não verificado não é dado falso.
+   */
+  @Test
+  void cadastroNaoVerificadoNaoLiberaAprovacaoAutomatica() {
+    var processor = newProcessor();
+    Assessment pending = pendingAssessment();
+    when(fieldVerificationService.verifiedFields(any(UUID.class), anyString(), any()))
+        .thenReturn(java.util.Set.of());
+    stubRisk(RiskLevel.LOW, RiskRecommendation.APPROVE, 0);
+
+    processor.process();
+
+    assertThat(pending.status()).isEqualTo(AssessmentStatus.SOLICITAR_DOCUMENTO);
+    assertThat(pending.factors())
+        .anySatisfy(f -> assertThat(f).contains("telefone ou e-mail verificado"));
   }
 
   @Test

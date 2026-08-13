@@ -1,8 +1,8 @@
 package com.barrier.riskengine.web;
 
-import com.barrier.riskengine.assessment.domain.AssessmentNotFoundException;
-import com.barrier.riskengine.assessment.domain.IdempotencyConflictException;
-import com.barrier.riskengine.assessment.domain.InvalidDocumentException;
+import com.barrier.riskengine.assessment.domain.exceptions.AssessmentNotFoundException;
+import com.barrier.riskengine.assessment.domain.exceptions.IdempotencyConflictException;
+import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
 import org.springframework.dao.OptimisticLockingFailureException;

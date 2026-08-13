@@ -1,7 +1,10 @@
 package com.barrier.riskengine.tenant.config.controller;
 
+import com.barrier.riskengine.tenant.config.controller.dto.UpsertRiskConfigRequest;
+import com.barrier.riskengine.tenant.config.controller.dto.RiskConfigEntryResponse;
+
 import com.barrier.riskengine.tenant.config.domain.TenantRiskConfigEntry;
-import com.barrier.riskengine.tenant.config.repository.TenantRiskConfigRepository;
+import com.barrier.riskengine.tenant.config.service.TenantRiskConfigAdminService;
 import com.barrier.riskengine.tenant.config.validation.TenantRiskConfigValidator;
 import com.barrier.riskengine.tenant.domain.Tenant;
 import com.barrier.riskengine.tenant.service.TenantService;
@@ -32,15 +35,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class TenantRiskConfigController {
 
   private final TenantService tenantService;
-  private final TenantRiskConfigRepository repository;
+  private final TenantRiskConfigAdminService configService;
   private final TenantRiskConfigValidator validator;
 
   public TenantRiskConfigController(
       TenantService tenantService,
-      TenantRiskConfigRepository repository,
+      TenantRiskConfigAdminService configService,
       TenantRiskConfigValidator validator) {
     this.tenantService = tenantService;
-    this.repository = repository;
+    this.configService = configService;
     this.validator = validator;
   }
 
@@ -49,9 +52,8 @@ public class TenantRiskConfigController {
   public ResponseEntity<RiskConfigEntryResponse> upsert(
       @PathVariable String tenantId, @RequestBody UpsertRiskConfigRequest request) {
     Tenant tenant = tenantService.resolve(tenantId);
-    validator.validate(request.ruleCode(), request.paramKey(), request.paramValue());
     TenantRiskConfigEntry saved =
-        repository.upsert(
+        configService.upsert(
             tenant.id(),
             request.ruleCode(),
             request.paramKey(),
@@ -65,7 +67,7 @@ public class TenantRiskConfigController {
   public ResponseEntity<List<RiskConfigEntryResponse>> effective(@PathVariable String tenantId) {
     Tenant tenant = tenantService.resolve(tenantId);
     Map<String, TenantRiskConfigEntry> overrides = new HashMap<>();
-    for (TenantRiskConfigEntry entry : repository.findByTenant(tenant.id())) {
+    for (TenantRiskConfigEntry entry : configService.findByTenant(tenant.id())) {
       overrides.put(entry.ruleCode() + "/" + entry.paramKey(), entry);
     }
 

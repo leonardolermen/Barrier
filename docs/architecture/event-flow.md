@@ -21,13 +21,19 @@ O núcleo de decisão é **em processo** dentro da Risk Engine (os módulos iden
       (APPROVE/REVIEW/REJECT) → `RiskDecision`. As regras consomem identidade, screening,
       cadastro, sinais de rede (GeoIP/device/telefone/email) e histórico interno.
    4. A recomendação vira o status (APROVADO/EM_REVISAO/REPROVADO); se o cadastro (CMN
-      4.753) estiver incompleto, `APROVADO` é rebaixado para `EM_REVISAO`. Os fatores
-      explicáveis ficam gravados na avaliação.
+      4.753) estiver incompleto **ou não verificado**, `APROVADO` vira
+      `SOLICITAR_DOCUMENTO` — fila própria, não EDD: falta de campo não pede analista, pede o
+      campo. Os fatores explicáveis ficam gravados na avaliação.
 4. Na **mesma transação** da conclusão, grava `barrier.assessment.completed` na `outbox`.
 5. O **relay de outbox** (`@Scheduled`) publica o evento no Kafka.
 6. A **Webhook API** consome o evento, monta o corpo, assina com **HMAC** e faz `POST` no
    endpoint do cliente; registra a entrega em `deliveries` (idempotência por `eventId`,
    retry com backoff). O cliente também pode consultar `GET /v1/assessments/{id}`.
+
+Monitoramento contínuo: além do intake do parceiro, o `RescreeningService` cria avaliações por
+conta própria quando o **delta** de uma importação de lista passa a apontar um cliente já
+existente (`origin=RESCREENING`). Elas percorrem exatamente o mesmo pipeline e emitem o mesmo
+evento — o parceiro recebe pelo canal de sempre, sem contrato novo.
 
 Revisão manual (EDD): uma avaliação em `EM_REVISAO` é decidida por humano via
 `POST /v1/assessments/{id}/decision`, que reemite `barrier.assessment.completed` com o

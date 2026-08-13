@@ -9,11 +9,13 @@ import com.barrier.riskengine.risk.domain.model.RiskScore;
 import com.barrier.riskengine.risk.domain.model.RuleOutcome;
 import com.barrier.riskengine.risk.registry.domain.RegulatoryRiskRules;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
-import com.barrier.riskengine.risk.repository.RiskScoreRepository;
-import com.barrier.riskengine.risk.rule.RiskContext;
-import com.barrier.riskengine.risk.rule.RiskRule;
+import com.barrier.riskengine.risk.repository.interfaces.RiskScoreRepository;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import java.util.List;
 import java.util.Objects;
+
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -86,9 +88,14 @@ public class RiskScoringService {
                     return EvaluatedRule.suppressed(rule.code());
                   }
                   RiskResult result = rule.evaluate(context);
+                  // Parâmetros efetivos junto do desfecho, para toda regra que rodou — inclusive
+                  // as que passaram. É o que permite responder, meses depois, por que a regra não
+                  // pegou este cliente: o valor de hoje em `tenant_risk_config` pode não ser o de
+                  // então, e sem isso a pergunta não tem resposta.
+                  java.util.Map<String, String> parameters = rule.effectiveParameters(context);
                   return result.triggered()
-                      ? EvaluatedRule.triggered(rule.code(), result)
-                      : EvaluatedRule.passed(rule.code(), result);
+                      ? EvaluatedRule.triggered(rule.code(), result, parameters)
+                      : EvaluatedRule.passed(rule.code(), result, parameters);
                 })
             .toList();
 
@@ -156,7 +163,7 @@ public class RiskScoringService {
    * produziam, somadas, uma recusa sem humano nenhum.
    *
    * <p>Isso anulava as duas decisões mais deliberadas do motor: {@link
-   * com.barrier.riskengine.screening.domain.MatchBasis} existe para que match por nome não reprove
+   * MatchBasis} existe para que match por nome não reprove
    * homônimo sem revisão, e PEP não é impedimento de relacionamento — é gatilho de diligência
    * reforçada (Circular BCB 3.978). Pior: {@code SCREENING_COVERAGE} (+300) também pede REVIEW e
    * também é somável, então um cliente podia ser reprovado em definitivo em parte porque <i>a nossa

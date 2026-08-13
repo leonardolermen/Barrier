@@ -1,5 +1,7 @@
 package com.barrier.riskengine.subject.controller;
 
+import com.barrier.riskengine.subject.controller.dto.SubjectResponse;
+
 import com.barrier.commons.mask.Documents;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;

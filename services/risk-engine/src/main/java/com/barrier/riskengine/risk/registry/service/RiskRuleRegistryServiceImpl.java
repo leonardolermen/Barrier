@@ -2,7 +2,7 @@ package com.barrier.riskengine.risk.registry.service;
 
 import com.barrier.riskengine.risk.registry.domain.RegulatoryRiskRules;
 import com.barrier.riskengine.risk.registry.domain.RiskRuleRegistryEntry;
-import com.barrier.riskengine.risk.registry.repository.RiskRuleRegistryRepository;
+import com.barrier.riskengine.risk.registry.repository.interfaces.RiskRuleRegistryRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -55,7 +55,8 @@ public class RiskRuleRegistryServiceImpl implements RiskRuleRegistryService {
       String criticality,
       boolean enabled,
       Instant validFrom,
-      Instant validUntil) {
+      Instant validUntil,
+      String updatedBy) {
     if (RegulatoryRiskRules.isRegulatory(ruleCode)
         && (!enabled || validFrom != null || validUntil != null)) {
       throw new IllegalArgumentException(
@@ -64,6 +65,12 @@ public class RiskRuleRegistryServiceImpl implements RiskRuleRegistryService {
               + "' não pode ser desabilitada nem ter vigência limitada. Protegidas: "
               + RegulatoryRiskRules.codes());
     }
-    return repository.upsert(ruleCode, description, criticality, enabled, validFrom, validUntil);
+    if (updatedBy == null || updatedBy.isBlank()) {
+      // Mesma exigência do override por tenant. Ligar e desligar regra de risco sem autoria é
+      // trilha que não responde a pergunta que o regulador faz: quem autorizou.
+      throw new IllegalArgumentException("updatedBy obrigatório");
+    }
+    return repository.upsert(
+        ruleCode, description, criticality, enabled, validFrom, validUntil, updatedBy);
   }
 }

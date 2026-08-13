@@ -20,13 +20,14 @@ o esqueleto de camadas clássicas descrito na [visão geral](overview.md).
 
 ## Fase 2 (evolução — plataforma completa / system of record)
 
-| Contexto                | Responsabilidade                                                |
-|-------------------------|-----------------------------------------------------------------|
-| **Document Management** | Acervo de documentos, OCR, autenticidade                        |
-| **Biometrics**          | Liveness, biometria facial (dado sensível LGPD)                 |
-| **Ongoing Monitoring**  | Reavaliação periódica, monitoramento de transações, alertas     |
-| **Regulatory Reporting**| Comunicação COAF/SISCOAF, relatórios ao BACEN                   |
-| **Data Subject Rights** | Direitos do titular (LGPD): acesso, correção, anonimização      |
+| Contexto                | Responsabilidade                                                | Estado |
+|-------------------------|-----------------------------------------------------------------|--------|
+| **Field Verification**  | Veracidade do cadastro: OTP de telefone/e-mail, nascimento conferido contra bureau; o gate exige verificado, não só preenchido | ✅ módulo `subject.profile` |
+| **Ongoing Monitoring**  | Rescreening pelo delta de cada importação de lista               | ✅ módulo `rescreening`; reavaliação periódica por prazo e monitoramento de transações seguem abertos |
+| **Identity Assurance**  | Documentoscopia e biometria com prova de vida — guarda o **resultado**, nunca a imagem ([ADR-0016](../adr/0016-plataforma-completa-modelo-b.md)) | 🔌 pacote `assurance`: contrato, stubs, persistência e regra de risco escritos, **nenhum caminho de produção o executa** |
+| **Encryption at Rest**  | KMS/envelope para dado pessoal; pré-requisito da captura         | ⏳ aberto |
+| **Regulatory Reporting**| Comunicação COAF/SISCOAF, relatórios ao BACEN                    | ⏳ aberto |
+| **Data Subject Rights** | Direitos do titular (LGPD): acesso, correção, anonimização       | ⏳ aberto |
 
 ## Regras de fronteira
 

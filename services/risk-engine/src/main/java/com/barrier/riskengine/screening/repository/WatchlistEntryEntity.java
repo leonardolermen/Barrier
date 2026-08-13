@@ -1,6 +1,6 @@
 package com.barrier.riskengine.screening.repository;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -9,11 +9,23 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-/** Mapeamento JPA de uma entrada de lista restritiva ingerida. */
+/**
+ * Mapeamento JPA de uma entrada de lista restritiva ingerida.
+ *
+ * <p>Só leitura: a entrada nasce pronta pelo construtor e nunca é alterada, por isso {@code @Getter}
+ * sem {@code @Setter}.
+ */
 @Entity
 @Table(name = "watchlist_entries")
-class WatchlistEntryEntity {
+@Getter(AccessLevel.PACKAGE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PACKAGE)
+public class WatchlistEntryEntity {
 
   @Id
   @Column(name = "id", nullable = false)
@@ -45,52 +57,4 @@ class WatchlistEntryEntity {
   @Column(name = "imported_at", nullable = false)
   private Instant importedAt;
 
-  protected WatchlistEntryEntity() {
-    // JPA
-  }
-
-  WatchlistEntryEntity(
-      UUID id,
-      String source,
-      MatchType entryType,
-      String document,
-      String documentPartial,
-      String name,
-      String detail,
-      String listVersion,
-      Instant importedAt) {
-    this.id = id;
-    this.source = source;
-    this.entryType = entryType;
-    this.document = document;
-    this.documentPartial = documentPartial;
-    this.name = name;
-    this.detail = detail;
-    this.listVersion = listVersion;
-    this.importedAt = importedAt;
-  }
-
-  MatchType getEntryType() {
-    return entryType;
-  }
-
-  String getSource() {
-    return source;
-  }
-
-  String getDocument() {
-    return document;
-  }
-
-  String getDocumentPartial() {
-    return documentPartial;
-  }
-
-  String getName() {
-    return name;
-  }
-
-  String getDetail() {
-    return detail;
-  }
 }

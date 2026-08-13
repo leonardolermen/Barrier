@@ -7,15 +7,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
+import com.barrier.riskengine.screening.domain.WatchlistDelta;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
-import com.barrier.riskengine.screening.repository.WatchlistEntryRepository;
+import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
+
+import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -27,14 +30,16 @@ class WatchlistImporterTest {
   private static final Clock FIXED =
       Clock.fixed(Instant.parse("2026-08-07T10:00:00Z"), ZoneOffset.UTC);
 
-  @Mock WatchlistSource source;
+  @Mock
+  WatchlistSource source;
   @Mock WatchlistEntryRepository repository;
+  @Mock WatchlistImportListener listener;
 
   private final WatchlistImportStatus status =
       new WatchlistImportStatus(FIXED, Duration.ofHours(48));
 
   private WatchlistImporter importer() {
-    return new WatchlistImporter(List.of(source), repository, status);
+    return new WatchlistImporter(List.of(source), repository, status, List.of(listener));
   }
 
   private WatchlistBatch batchCom(int registros) {
@@ -50,6 +55,7 @@ class WatchlistImporterTest {
     when(source.source()).thenReturn("CEIS");
     when(source.provides()).thenReturn(Set.of(MatchType.SANCTION));
     when(source.fetch()).thenReturn(batchCom(2));
+    when(repository.replaceSource(eq("CEIS"), eq("v1"), anyList())).thenReturn(WatchlistDelta.firstLoad());
 
     importer().importAll();
 
@@ -95,6 +101,7 @@ class WatchlistImporterTest {
     when(source.source()).thenReturn("CEIS");
     when(source.provides()).thenReturn(Set.of(MatchType.SANCTION));
     when(source.fetch()).thenReturn(batchCom(2)).thenThrow(new RuntimeException("portal fora"));
+    when(repository.replaceSource(eq("CEIS"), eq("v1"), anyList())).thenReturn(WatchlistDelta.firstLoad());
 
     WatchlistImporter importer = importer();
     importer.importAll();
@@ -110,10 +117,47 @@ class WatchlistImporterTest {
     when(source.source()).thenReturn("CEIS");
     when(source.provides()).thenReturn(Set.of(MatchType.SANCTION));
     when(source.fetch()).thenReturn(batchCom(2));
+    when(repository.replaceSource(eq("CEIS"), eq("v1"), anyList())).thenReturn(WatchlistDelta.firstLoad());
 
     WatchlistImportStatus curto = new WatchlistImportStatus(FIXED, Duration.ofSeconds(-1));
-    new WatchlistImporter(List.of(source), repository, curto).importAll();
+    new WatchlistImporter(List.of(source), repository, curto, List.of(listener)).importAll();
 
     assertThat(curto.coverage()).isEmpty();
+  }
+
+  /**
+   * O delta é o gatilho do monitoramento contínuo, e chega ao rescreening com a fonte e a versão
+   * que o produziram — sem isso a reavaliação não sabe dizer por que existe.
+   */
+  @Test
+  void repassaODeltaParaOMonitoramentoContinuo() {
+    WatchlistDelta delta =
+        WatchlistDelta.of(
+            List.of(new WatchlistRecord("CEIS", MatchType.SANCTION, "1", "NOVO", "d")));
+    when(source.source()).thenReturn("CEIS");
+    when(source.provides()).thenReturn(Set.of(MatchType.SANCTION));
+    when(source.fetch()).thenReturn(batchCom(2));
+    when(repository.replaceSource(eq("CEIS"), eq("v1"), anyList())).thenReturn(delta);
+
+    importer().importAll();
+
+    verify(listener).onImported("CEIS", "v1", delta);
+  }
+
+  /** Rescreening é consequência da importação, não condição: falha dele não desfaz a lista. */
+  @Test
+  void falhaDoRescreeningNaoInvalidaAImportacao() {
+    when(source.source()).thenReturn("CEIS");
+    when(source.provides()).thenReturn(Set.of(MatchType.SANCTION));
+    when(source.fetch()).thenReturn(batchCom(2));
+    when(repository.replaceSource(eq("CEIS"), eq("v1"), anyList())).thenReturn(WatchlistDelta.firstLoad());
+    org.mockito.Mockito.doThrow(new RuntimeException("banco fora"))
+        .when(listener)
+        .onImported(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+    importer().importAll();
+
+    assertThat(status.of("CEIS").orElseThrow().records()).isEqualTo(2);
+    assertThat(status.coverage()).containsExactly(MatchType.SANCTION);
   }
 }

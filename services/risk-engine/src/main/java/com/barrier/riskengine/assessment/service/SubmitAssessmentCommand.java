@@ -1,6 +1,7 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -17,12 +18,49 @@ public record SubmitAssessmentCommand(
     DocumentType documentType,
     String document,
     String name,
-    String idempotencyKey) {
+    String idempotencyKey,
+    AssessmentOrigin origin,
+    String originDetail) {
+
+  /** Submissão do parceiro, com a chave de idempotência que ele mandou (ou {@code null}). */
+  public SubmitAssessmentCommand(
+      String tenantId,
+      DocumentType documentType,
+      String document,
+      String name,
+      String idempotencyKey) {
+    this(
+        tenantId,
+        documentType,
+        document,
+        name,
+        idempotencyKey,
+        AssessmentOrigin.ONBOARDING,
+        null);
+  }
 
   /** Sem chave: cada submissão é nova. Usado pelos chamadores internos e por testes. */
   public SubmitAssessmentCommand(
       String tenantId, DocumentType documentType, String document, String name) {
     this(tenantId, documentType, document, name, null);
+  }
+
+  /**
+   * Reavaliação criada pelo monitoramento contínuo.
+   *
+   * <p>Sem {@code Idempotency-Key} de propósito: a chave existe para o parceiro poder reenviar a
+   * mesma requisição sem duplicar avaliação. Aqui quem pede é o motor, e o ponto da reavaliação é
+   * justamente decidir de novo — reaproveitar uma decisão anterior devolveria o resultado tomado
+   * antes de o cliente estar na lista.
+   */
+  public static SubmitAssessmentCommand rescreening(
+      String tenantId,
+      DocumentType documentType,
+      String document,
+      String name,
+      String originDetail) {
+    return new SubmitAssessmentCommand(
+        tenantId, documentType, document, name, null, AssessmentOrigin.RESCREENING, originDetail);
   }
 
   public boolean hasIdempotencyKey() {

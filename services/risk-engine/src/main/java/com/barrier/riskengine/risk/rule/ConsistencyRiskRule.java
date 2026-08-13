@@ -2,6 +2,8 @@ package com.barrier.riskengine.risk.rule;
 
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;

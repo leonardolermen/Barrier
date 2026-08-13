@@ -1,7 +1,7 @@
 package com.barrier.riskengine.assessment.service;
 
 import com.barrier.commons.outbox.OutboxRecorder;
-import com.barrier.riskengine.assessment.domain.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 

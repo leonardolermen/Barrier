@@ -3,9 +3,11 @@ package com.barrier.riskengine.screening.watchlist;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import java.util.List;
 import java.util.Set;
+
+import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 

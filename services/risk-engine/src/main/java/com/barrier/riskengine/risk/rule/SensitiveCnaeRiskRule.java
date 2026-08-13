@@ -3,8 +3,11 @@ package com.barrier.riskengine.risk.rule;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.tenant.config.service.TenantRiskConfigService;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -69,6 +72,22 @@ public class SensitiveCnaeRiskRule implements RiskRule {
 
   @Override
   public String code() {
-    return "SENSITIVE_CNAE";
+    return RULE_CODE;
+  }
+
+  /**
+   * O conjunto de CNAEs entra como contagem e como lista ordenada: é o parâmetro que decide se a
+   * regra pega ou não pega o cliente, e "a lista de então" não é recuperável de outro jeito — o
+   * override do tenant é sobrescrito no lugar.
+   */
+  @Override
+  public Map<String, String> effectiveParameters(RiskContext context) {
+    Set<String> cnaeCodes =
+        tenantConfig.getStringSet(context.tenantId(), RULE_CODE, "cnae-codes", defaultSensitiveCnae);
+    return Map.of(
+        "cnae-codes",
+        cnaeCodes.stream().sorted().collect(java.util.stream.Collectors.joining(",")),
+        "score",
+        String.valueOf(tenantConfig.getInt(context.tenantId(), RULE_CODE, "score", defaultScore)));
   }
 }

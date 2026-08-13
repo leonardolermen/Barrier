@@ -1,0 +1,24 @@
+package com.barrier.riskengine.assurance.domain;
+
+/**
+ * Desfecho de uma verificação de documentoscopia ou biometria.
+ *
+ * <p>{@link #INCONCLUSIVE} e {@link #UNAVAILABLE} são estados distintos de propósito, pelo mesmo
+ * motivo que a cadeia de bureaus separa "não encontrado" de "indisponível": foto ruim exige nova
+ * tentativa do cliente, provedor fora do ar exige nada dele — e tratar os dois como reprovação
+ * recusaria clientes legítimos por falha nossa.
+ */
+public enum AssuranceOutcome {
+
+  /** Documento autêntico / face confere com prova de vida. */
+  PASS,
+
+  /** Adulteração detectada, ou face não confere, ou prova de vida falhou. */
+  FAIL,
+
+  /** Qualidade insuficiente para decidir (foto tremida, reflexo, corte). */
+  INCONCLUSIVE,
+
+  /** Provedor indisponível — nada foi verificado, e isso não é culpa do cliente. */
+  UNAVAILABLE
+}

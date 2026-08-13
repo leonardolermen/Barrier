@@ -2,7 +2,7 @@ package com.barrier.riskengine.risk.domain.model;
 
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
-import com.barrier.riskengine.risk.rule.RiskContext;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;

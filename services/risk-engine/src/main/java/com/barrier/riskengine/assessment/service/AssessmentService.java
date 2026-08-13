@@ -1,12 +1,12 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
-import com.barrier.riskengine.assessment.domain.AssessmentId;
-import com.barrier.riskengine.assessment.domain.AssessmentNotFoundException;
-import com.barrier.riskengine.assessment.domain.Documents;
-import com.barrier.riskengine.assessment.domain.IdempotencyConflictException;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.exceptions.AssessmentNotFoundException;
+import com.barrier.riskengine.assessment.domain.documents.Documents;
+import com.barrier.riskengine.assessment.domain.exceptions.IdempotencyConflictException;
 import com.barrier.riskengine.assessment.domain.IdempotencyReservation;
-import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
 import java.util.Optional;
@@ -99,12 +99,23 @@ public class AssessmentService {
     subjectService.link(command.tenantId(), subject.id());
 
     Assessment assessment =
-        Assessment.submit(
-            command.tenantId(),
-            subject.id().toString(),
-            command.documentType(),
-            command.document(),
-            command.name());
+        switch (command.origin()) {
+          case ONBOARDING ->
+              Assessment.submit(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name());
+          case RESCREENING ->
+              Assessment.rescreen(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name(),
+                  command.originDetail());
+        };
     return repository.save(assessment);
   }
 

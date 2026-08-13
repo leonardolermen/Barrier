@@ -1,5 +1,8 @@
 package com.barrier.riskengine.risk.registry.controller;
 
+import com.barrier.riskengine.risk.registry.controller.dto.UpsertRiskRuleRegistryRequest;
+import com.barrier.riskengine.risk.registry.controller.dto.RiskRuleRegistryEntryResponse;
+
 import com.barrier.riskengine.risk.registry.domain.RiskRuleCriticality;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import java.util.List;
@@ -47,7 +50,8 @@ public class RiskRuleRegistryController {
             request.criticality(),
             request.enabled(),
             request.validFrom(),
-            request.validUntil());
+            request.validUntil(),
+            request.updatedBy());
     return ResponseEntity.ok(RiskRuleRegistryEntryResponse.of(saved));
   }
 

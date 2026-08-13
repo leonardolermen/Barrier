@@ -2,12 +2,12 @@
   "info": {
     "name": "Barrier — Risk Engine",
     "_postman_id": "b0a11e00-0000-4000-8000-000000000001",
-    "description": "API da Risk Engine (KYC/PLD-FT). Toda operação é escopada por tenant via header `X-Client-Id` (seed `default`).\n\nFluxos cobertos:\n- **Automático:** POST assessment → processamento assíncrono → GET reflete APROVADO/REPROVADO/EM_REVISAO.\n- **Revisão manual (EDD):** documento com apontamento (ex.: PEP) cai em EM_REVISAO → POST /decision aprova/reprova.\n- **CNPJ real:** bureau via BrasilAPI popula o CompanyProfile (abertura/CNAE/QSA) que alimenta as regras de risco de PJ.\n\nVariáveis: `baseUrl`, `clientId`, `assessmentId` (capturada automaticamente no POST), `document`.",
+    "description": "API da Risk Engine (KYC/PLD-FT). Toda operação é autenticada por API key do tenant: `Authorization: Bearer brr_<keyId>_<secret>`. Em dev a chave é emitida no startup e sai no log da aplicação (procure por 'API key de DESENVOLVIMENTO'); copie para a variável `apiKey`.\n\nFluxos cobertos:\n- **Automático:** POST assessment → processamento assíncrono → GET reflete APROVADO/REPROVADO/EM_REVISAO.\n- **Revisão manual (EDD):** documento com apontamento (ex.: PEP) cai em EM_REVISAO → POST /decision aprova/reprova.\n- **CNPJ real:** bureau via BrasilAPI popula o CompanyProfile (abertura/CNAE/QSA) que alimenta as regras de risco de PJ.\n\nVariáveis: `baseUrl`, `clientId`, `assessmentId` (capturada automaticamente no POST), `document`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
-    { "key": "clientId", "value": "default", "type": "string" },
+    { "key": "apiKey", "value": "", "type": "string" },
     { "key": "assessmentId", "value": "", "type": "string" },
     { "key": "document", "value": "11144477735", "type": "string" }
   ],
@@ -45,7 +45,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Client-Id", "value": "{{clientId}}" }
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
             ],
             "body": {
               "mode": "raw",
@@ -74,7 +74,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Client-Id", "value": "{{clientId}}" }
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
             ],
             "body": {
               "mode": "raw",
@@ -103,7 +103,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Client-Id", "value": "{{clientId}}" }
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
             ],
             "body": {
               "mode": "raw",
@@ -130,7 +130,7 @@
           ],
           "request": {
             "method": "GET",
-            "header": [ { "key": "X-Client-Id", "value": "{{clientId}}" } ],
+            "header": [ { "key": "Authorization", "value": "Bearer {{apiKey}}" } ],
             "url": {
               "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}",
               "host": ["{{baseUrl}}"],
@@ -159,7 +159,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Client-Id", "value": "{{clientId}}" }
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
             ],
             "body": {
               "mode": "raw",
@@ -179,7 +179,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Client-Id", "value": "{{clientId}}" }
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
             ],
             "body": {
               "mode": "raw",
@@ -202,7 +202,7 @@
           "name": "Get subject por documento",
           "request": {
             "method": "GET",
-            "header": [ { "key": "X-Client-Id", "value": "{{clientId}}" } ],
+            "header": [ { "key": "Authorization", "value": "Bearer {{apiKey}}" } ],
             "url": {
               "raw": "{{baseUrl}}/v1/subjects/{{document}}",
               "host": ["{{baseUrl}}"],
@@ -217,7 +217,7 @@
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Client-Id", "value": "{{clientId}}" }
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
             ],
             "body": {
               "mode": "raw",
@@ -237,7 +237,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Client-Id", "value": "{{clientId}}" }
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
             ],
             "body": {
               "mode": "raw",
@@ -255,7 +255,7 @@
           "name": "List history events",
           "request": {
             "method": "GET",
-            "header": [ { "key": "X-Client-Id", "value": "{{clientId}}" } ],
+            "header": [ { "key": "Authorization", "value": "Bearer {{apiKey}}" } ],
             "url": {
               "raw": "{{baseUrl}}/v1/subjects/{{document}}/history",
               "host": ["{{baseUrl}}"],

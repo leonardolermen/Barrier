@@ -1,5 +1,8 @@
 package com.barrier.riskengine.screening.domain;
 
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
+
 /**
  * Um apontamento encontrado no screening.
  *

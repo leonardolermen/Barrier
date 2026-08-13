@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.barrier.riskengine.screening.client.WatchlistEntry;
 import com.barrier.riskengine.screening.client.WatchlistQuery;
-import com.barrier.riskengine.screening.domain.MatchBasis;
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreenedParty;
 import java.util.List;
+
+import com.barrier.riskengine.screening.rule.context.ScreeningContext;
 import org.junit.jupiter.api.Test;
 
 class ScreeningRulesTest {

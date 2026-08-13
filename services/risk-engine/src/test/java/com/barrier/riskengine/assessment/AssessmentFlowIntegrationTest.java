@@ -6,13 +6,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.barrier.commons.outbox.OutboxRelay;
 import com.barrier.commons.outbox.OutboxRepository;
 import com.barrier.commons.outbox.OutboxStatus;
-import com.barrier.riskengine.assessment.controller.AssessmentResponse;
-import com.barrier.riskengine.assessment.controller.SubmitAssessmentRequest;
-import com.barrier.riskengine.subject.controller.SubjectResponse;
-import com.barrier.riskengine.assessment.domain.DocumentType;
+import com.barrier.riskengine.assessment.controller.dto.AssessmentResponse;
+import com.barrier.riskengine.assessment.controller.dto.SubmitAssessmentRequest;
+import com.barrier.riskengine.subject.controller.dto.SubjectResponse;
+import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentProcessor;
 import com.barrier.riskengine.tenant.service.ApiKeyService;
-import com.barrier.riskengine.subject.profile.controller.UpdateProfileRequest;
+import com.barrier.riskengine.subject.profile.controller.dto.UpdateProfileRequest;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -43,7 +43,12 @@ import org.testcontainers.utility.DockerImageName;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
       "barrier.assessment.processor-delay-ms=3600000",
-      "barrier.outbox.relay-delay-ms=3600000"
+      "barrier.outbox.relay-delay-ms=3600000",
+      // O que este teste prova é o fluxo ponta a ponta (intake → processamento → evento → GET).
+      // Com a exigência de verificação ligada, toda PF sem OTP para em SOLICITAR_DOCUMENTO e o
+      // fluxo deixaria de ser exercitável até o fim — o gate de veracidade tem cobertura própria
+      // em AssessmentProcessorTest e FieldVerificationServiceTest.
+      "barrier.verification.required=false"
     })
 @Testcontainers
 class AssessmentFlowIntegrationTest {
@@ -134,7 +139,9 @@ class AssessmentFlowIntegrationTest {
         client().get().uri("/v1/assessments/" + id).retrieve().toEntity(AssessmentResponse.class);
     assertThat(fetched.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(fetched.getBody()).isNotNull();
-    assertThat(fetched.getBody().status()).isEqualTo("APROVADO");
+    assertThat(fetched.getBody().status())
+        .withFailMessage("fatores: %s", fetched.getBody().factors())
+        .isEqualTo("APROVADO");
     assertThat(fetched.getBody().riskLevel()).isEqualTo("LOW");
 
     // evento foi efetivamente publicado (outbox marcada como SENT)

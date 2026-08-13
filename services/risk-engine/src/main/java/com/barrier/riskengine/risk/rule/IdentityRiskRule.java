@@ -4,6 +4,9 @@ import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import java.util.List;
+
+import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import org.springframework.stereotype.Component;
 
 /**

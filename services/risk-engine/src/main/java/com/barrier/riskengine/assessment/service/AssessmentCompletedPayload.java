@@ -1,6 +1,6 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import java.time.Instant;
 
 /** Payload do evento {@code barrier.assessment.completed} (contrato v1). */

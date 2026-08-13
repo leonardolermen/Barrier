@@ -2,7 +2,7 @@ package com.barrier.riskengine.screening.watchlist;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import org.junit.jupiter.api.Test;
 
 class SeedFileWatchlistSourceTest {

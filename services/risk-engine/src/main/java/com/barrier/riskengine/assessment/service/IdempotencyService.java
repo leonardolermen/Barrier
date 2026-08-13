@@ -1,8 +1,9 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.domain.IdempotencyReservation;
-import com.barrier.riskengine.assessment.repository.IdempotencyKeyRepository;
+import com.barrier.riskengine.assessment.repository.interfaces.IdempotencyKeyRepository;
+
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

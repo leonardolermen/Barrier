@@ -15,15 +15,15 @@ import com.barrier.riskengine.risk.domain.model.RiskDecision;
 import com.barrier.riskengine.risk.domain.model.RuleOutcome;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
-import com.barrier.riskengine.risk.repository.RiskScoreRepository;
+import com.barrier.riskengine.risk.repository.interfaces.RiskScoreRepository;
 import com.barrier.riskengine.risk.rule.CorporateStructureRiskRule;
 import com.barrier.riskengine.risk.rule.IdentityRiskRule;
 import com.barrier.riskengine.risk.rule.PepRiskRule;
-import com.barrier.riskengine.risk.rule.RiskContext;
-import com.barrier.riskengine.risk.rule.RiskRule;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.risk.rule.SanctionRiskRule;
-import com.barrier.riskengine.screening.domain.MatchBasis;
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
@@ -243,6 +243,54 @@ class RiskScoringServiceTest {
 
     assertThat(d.level()).isEqualTo(RiskLevel.HIGH);
     assertThat(d.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
+  }
+
+  /**
+   * O parâmetro efetivo vai junto da regra que <b>passou</b>, não só da que disparou.
+   *
+   * <p>É o que torna uma decisão antiga explicável: {@code tenant_risk_config} é sobrescrito no
+   * lugar, então "por que a regra de empresa nova não pegou este cliente em março?" respondia com
+   * a janela de hoje, que pode nunca ter valido em março.
+   */
+  @Test
+  void parametroEfetivoFicaNaTrilhaAteQuandoARegraPassa() {
+    RiskDecision d = comRegraExtra(regraComParametro()).score(context(IdentityStatus.VERIFIED));
+
+    assertThat(d.evaluated())
+        .filteredOn(rule -> rule.ruleCode().equals("PARAMETRIZADA"))
+        .singleElement()
+        .satisfies(
+            rule -> {
+              assertThat(rule.outcome()).isEqualTo(RuleOutcome.NOT_TRIGGERED);
+              assertThat(rule.parameters()).containsEntry("months", "6");
+            });
+  }
+
+  /** Regra sem configuração não polui a trilha com mapa vazio de parâmetros. */
+  @Test
+  void regraSemConfiguracaoNaoRegistraParametro() {
+    RiskDecision d = service.score(context(IdentityStatus.VERIFIED));
+
+    assertThat(d.evaluated()).allSatisfy(rule -> assertThat(rule.parameters()).isEmpty());
+  }
+
+  private static RiskRule regraComParametro() {
+    return new RiskRule() {
+      @Override
+      public com.barrier.riskengine.risk.domain.model.RiskResult evaluate(RiskContext context) {
+        return com.barrier.riskengine.risk.domain.model.RiskResult.notApplicable("PARAMETRIZADA");
+      }
+
+      @Override
+      public String code() {
+        return "PARAMETRIZADA";
+      }
+
+      @Override
+      public java.util.Map<String, String> effectiveParameters(RiskContext context) {
+        return java.util.Map.of("months", "6");
+      }
+    };
   }
 
   private RiskScoringService comRegraExtra(RiskRule extra) {

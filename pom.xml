@@ -29,7 +29,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- versões não gerenciadas pelo BOM do Spring Boot -->
         <mapstruct.version>1.6.3</mapstruct.version>
-        <archunit.version>1.4.0</archunit.version>
+        <archunit.version>1.5.0</archunit.version>
         <spotless.version>2.44.0</spotless.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <!-- Testes de carga ficam fora do build; rode com -DexcludedGroups= -Dgroups=load -->
@@ -65,6 +65,25 @@
     </dependencyManagement>
 
     <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- do JDK 23 em diante o javac não descobre processador pelo classpath
+                         (-proc:none é o padrão); o caminho precisa ser declarado. Módulo que
+                         sobrescreve annotationProcessorPaths tem de repetir o lombok. -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+
         <pluginManagement>
             <plugins>
                 <plugin>

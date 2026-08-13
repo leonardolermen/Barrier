@@ -1,5 +1,8 @@
 package com.barrier.riskengine.tenant.controller;
 
+import com.barrier.riskengine.tenant.controller.dto.IssuedApiKeyResponse;
+import com.barrier.riskengine.tenant.controller.dto.IssueApiKeyRequest;
+
 import com.barrier.riskengine.tenant.domain.ApiKeyMaterial;
 import com.barrier.riskengine.tenant.service.ApiKeyService;
 import org.springframework.http.HttpStatus;

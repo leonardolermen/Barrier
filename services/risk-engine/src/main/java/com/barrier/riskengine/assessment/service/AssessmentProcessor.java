@@ -1,9 +1,9 @@
 package com.barrier.riskengine.assessment.service;
 
-import com.barrier.riskengine.assessment.domain.Assessment;
-import com.barrier.riskengine.assessment.domain.AssessmentId;
-import com.barrier.riskengine.assessment.domain.AssessmentStatus;
-import com.barrier.riskengine.assessment.repository.AssessmentRepository;
+import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
+import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.domain.PersonProfile;
 import com.barrier.riskengine.identity.service.IdentityResult;
@@ -11,7 +11,7 @@ import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
-import com.barrier.riskengine.risk.rule.RiskContext;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.commons.name.NameNormalizer;
 import com.barrier.commons.observability.Correlation;
@@ -22,6 +22,7 @@ import com.barrier.riskengine.screening.service.ScreeningService;
 import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfilePatch;
+import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import java.time.Duration;
 import java.time.Instant;
@@ -74,12 +75,14 @@ public class AssessmentProcessor {
   private final ScreeningService screeningService;
   private final RiskScoringService riskScoringService;
   private final SubjectProfileService subjectProfileService;
+  private final FieldVerificationService fieldVerificationService;
   private final AssessmentEventPublisher eventPublisher;
   private final AssessmentMetrics metrics;
   private final TransactionTemplate transactionTemplate;
   private final Duration lease;
   private final int maxAttempts;
   private final Duration baseBackoff;
+  private final boolean requireVerification;
 
   public AssessmentProcessor(
       AssessmentRepository repository,
@@ -87,23 +90,27 @@ public class AssessmentProcessor {
       ScreeningService screeningService,
       RiskScoringService riskScoringService,
       SubjectProfileService subjectProfileService,
+      FieldVerificationService fieldVerificationService,
       AssessmentEventPublisher eventPublisher,
       AssessmentMetrics metrics,
       TransactionTemplate transactionTemplate,
       @Value("${barrier.assessment.lease:PT5M}") Duration lease,
       @Value("${barrier.assessment.max-attempts:5}") int maxAttempts,
-      @Value("${barrier.assessment.base-backoff:PT30S}") Duration baseBackoff) {
+      @Value("${barrier.assessment.base-backoff:PT30S}") Duration baseBackoff,
+      @Value("${barrier.verification.required:true}") boolean requireVerification) {
     this.repository = repository;
     this.identityService = identityService;
     this.screeningService = screeningService;
     this.riskScoringService = riskScoringService;
     this.subjectProfileService = subjectProfileService;
+    this.fieldVerificationService = fieldVerificationService;
     this.eventPublisher = eventPublisher;
     this.metrics = metrics;
     this.transactionTemplate = transactionTemplate;
     this.lease = lease;
     this.maxAttempts = maxAttempts;
     this.baseBackoff = baseBackoff;
+    this.requireVerification = requireVerification;
   }
 
   /** Executado periodicamente; também chamável diretamente (ex.: em testes). */
@@ -187,6 +194,18 @@ public class AssessmentProcessor {
     // O cadastro é lido ANTES do screening: é dele que sai o representante legal a consultar.
     SubjectProfile profile = subjectProfileService.find(subjectId, assessment.tenantId());
 
+    // Nascimento declarado × nascimento do bureau. Concordância vira verificação; divergência não
+    // vira exceção nem reprovação — cai no gate de completude como campo não conferido, e o
+    // desfecho é pedir documento, não recusar.
+    if (identity.person() != null) {
+      fieldVerificationService.recordBirthDateFromBureau(
+          subjectId,
+          assessment.tenantId(),
+          profile.birthDate(),
+          identity.person().birthDate(),
+          identity.check() == null ? null : "identity-check:" + assessment.id().asString());
+    }
+
     ScreeningResult screening =
         screeningService.screen(
             new ScreeningCommand(
@@ -208,8 +227,17 @@ public class AssessmentProcessor {
 
     AssessmentStatus finalStatus = toStatus(decision.recommendation());
     List<String> factors = new ArrayList<>(decision.explanations());
+    // Com verificação exigida, cadastro preenchido e não conferido deixa de liberar aprovação
+    // automática. É mudança de contrato para quem já integra: toda PF passa a cair em
+    // SOLICITAR_DOCUMENTO até o parceiro rodar o OTP. A chave existe para a migração ser
+    // escalonada, e nasce LIGADA — desligada por padrão, seria o controle que não controla.
     RegistrationCompleteness completeness =
-        RegistrationCompleteness.evaluate(assessment.documentType().name(), profile);
+        requireVerification
+            ? RegistrationCompleteness.evaluate(
+                assessment.documentType().name(),
+                profile,
+                fieldVerificationService.verifiedFields(subjectId, assessment.tenantId(), profile))
+            : RegistrationCompleteness.evaluate(assessment.documentType().name(), profile);
     if (!completeness.complete() && finalStatus == AssessmentStatus.APROVADO) {
       // Fila própria, não EDD: falta de campo cadastral não pede analista, pede o campo. Enquanto
       // isso virava EM_REVISAO, o que o time de operações mais via era justamente o que menos

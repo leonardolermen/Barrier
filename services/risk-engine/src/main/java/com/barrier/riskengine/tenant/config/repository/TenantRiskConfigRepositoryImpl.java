@@ -5,15 +5,23 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 class TenantRiskConfigRepositoryImpl implements TenantRiskConfigRepository {
 
-  private final TenantRiskConfigJpaRepository jpa;
+  private static final String INSERT_HISTORY =
+      "INSERT INTO tenant_risk_config_history"
+          + " (id, tenant_id, rule_code, param_key, param_value, updated_by, changed_at)"
+          + " VALUES (?, ?, ?, ?, ?, ?, ?)";
 
-  TenantRiskConfigRepositoryImpl(TenantRiskConfigJpaRepository jpa) {
+  private final TenantRiskConfigJpaRepository jpa;
+  private final JdbcTemplate jdbc;
+
+  TenantRiskConfigRepositoryImpl(TenantRiskConfigJpaRepository jpa, JdbcTemplate jdbc) {
     this.jpa = jpa;
+    this.jdbc = jdbc;
   }
 
   @Override
@@ -46,7 +54,19 @@ class TenantRiskConfigRepositoryImpl implements TenantRiskConfigRepository {
                         paramValue,
                         updatedBy,
                         Instant.now()));
-    return toDomain(jpa.save(entity));
+    TenantRiskConfigEntry saved = toDomain(jpa.save(entity));
+    // Mesma transação da alteração: histórico gravado à parte pode faltar exatamente quando a
+    // mudança aconteceu, que é quando ele importa.
+    jdbc.update(
+        INSERT_HISTORY,
+        UUID.randomUUID(),
+        tenantId,
+        ruleCode,
+        paramKey,
+        paramValue,
+        updatedBy,
+        java.sql.Timestamp.from(saved.updatedAt()));
+    return saved;
   }
 
   private TenantRiskConfigEntry toDomain(TenantRiskConfigEntity e) {

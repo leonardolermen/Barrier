@@ -15,6 +15,7 @@ e o `CLAUDE.md` apontam para cá.
 | Mensageria  | Apache Kafka (Spring for Apache Kafka)              |
 | Mapeamento  | Mappers escritos à mão (`XyzEntityMapper`/`XyzDtoMapper`, classes `final` com métodos estáticos) — MapStruct está no `pom.xml` mas ainda sem uso real |
 | Testes      | JUnit 5, Mockito, AssertJ, Testcontainers, ArchUnit |
+| Boilerplate | Lombok **só em entidade JPA**, para acessores — ver regra abaixo     |
 | API docs    | Nenhuma ainda — springdoc-openapi previsto para a Fase 5 (ver [risk-engine-plan.md](risk-engine-plan.md)) |
 | Observ.     | Micrometer + logs estruturados (JSON)               |
 
@@ -69,6 +70,25 @@ abstração especulativa.
 - **Outbox obrigatório** para eventos: na mesma `@Transactional` que altera estado, grave
   em `outbox`. Um relay agendado publica no Kafka e marca como enviado.
 - Componente de outbox mora no `commons` e é reutilizado (não reimplementar por serviço).
+
+### Lombok (escopo fechado)
+
+Lombok existe **só para os acessores das entidades JPA** — é onde o boilerplate se acumula.
+Fora disso, nada: DTO e value object são `record`, e agregado de domínio muda de estado por
+método de domínio.
+
+- Permitido: `@Getter`/`@Setter` (em `AccessLevel.PACKAGE`, para a entidade não vazar do
+  `repository`), `@NoArgsConstructor(access = PROTECTED)` para o construtor do JPA e
+  `@AllArgsConstructor(access = PACKAGE)` quando já existia um construtor completo à mão.
+- **Proibido** em entidade: `@Data`, `@EqualsAndHashCode`, `@ToString`, `@Builder`. Os três
+  primeiros disparam lazy loading e quebram o contrato de identidade do Hibernate; em
+  `ApiKeyEntity`/`WebhookEndpointEntity` o `@ToString` ainda imprimiria segredo em log.
+- Campo `@Version` leva `@Setter(AccessLevel.NONE)`: quem escreve é o Hibernate.
+- Sem `@Setter` onde a entidade só é escrita por construtor ou por um método `update`.
+- Do JDK 23 em diante o javac não descobre processador pelo classpath, então o `lombok` está
+  em `annotationProcessorPaths` no POM pai. Módulo que sobrescreva essa lista (hoje só a
+  risk-engine, por causa do MapStruct) precisa repetir a entrada do lombok **antes** do
+  `mapstruct-processor`.
 
 ## Kafka
 

@@ -1,7 +1,8 @@
 package com.barrier.riskengine.screening.client;
 
-import com.barrier.riskengine.screening.domain.MatchBasis;
-import com.barrier.riskengine.screening.domain.MatchType;
+import com.barrier.riskengine.screening.client.interfaces.WatchlistProvider;
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreenedParty;
 
 /**

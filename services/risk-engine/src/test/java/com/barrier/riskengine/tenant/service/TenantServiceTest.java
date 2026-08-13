@@ -6,7 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.tenant.domain.Tenant;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
-import com.barrier.riskengine.tenant.repository.TenantRepository;
+import com.barrier.riskengine.tenant.repository.interfaces.TenantRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

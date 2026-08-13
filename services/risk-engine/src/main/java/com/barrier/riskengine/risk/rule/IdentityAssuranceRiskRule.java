@@ -1,0 +1,110 @@
+package com.barrier.riskengine.risk.rule;
+
+import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
+import com.barrier.riskengine.risk.domain.enums.Severity;
+import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.AssuranceSummary;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+/**
+ * Documentoscopia e biometria como fator de risco.
+ *
+ * <p>Desfechos deliberadamente separados, porque exigem condutas diferentes:
+ *
+ * <ul>
+ *   <li><b>falha</b> (documento adulterado, face não confere, prova de vida reprovada) — sinal
+ *       forte de fraude, pontua alto e força revisão humana. Não recusa sozinha: detector de
+ *       documentoscopia erra com documento velho, plastificado ou de estado com layout antigo, e
+ *       recusa automática por isso nega serviço a cliente legítimo sem ninguém olhar;
+ *   <li><b>inconclusivo/indisponível</b> — pontua pouco e não opina. Foto tremida e provedor fora
+ *       do ar não são fato sobre o cliente; tratá-los como falha seria transformar problema nosso
+ *       em recusa dele;
+ *   <li><b>muitas tentativas de biometria</b> — pontua mesmo quando a última passou. Quem testa
+ *       artefato até vencer o detector deixa exatamente esse rastro, e olhar só a última tentativa
+ *       apaga o único lugar onde ele aparece.
+ * </ul>
+ *
+ * <p>Regra de <b>apetite</b>, não regulatória: nenhuma norma do Bacen exige biometria, então pode
+ * ser desligada pelo registry como qualquer outra. O que a exige é a política do parceiro.
+ */
+@Component
+public class IdentityAssuranceRiskRule implements RiskRule {
+
+  private static final String RULE_CODE = "IDENTITY_ASSURANCE";
+
+  private final int failScore;
+  private final int inconclusiveScore;
+  private final int retryScore;
+  private final int retryThreshold;
+
+  public IdentityAssuranceRiskRule(
+      @Value("${barrier.risk.assurance.fail-score:600}") int failScore,
+      @Value("${barrier.risk.assurance.inconclusive-score:100}") int inconclusiveScore,
+      @Value("${barrier.risk.assurance.retry-score:200}") int retryScore,
+      @Value("${barrier.risk.assurance.retry-threshold:3}") int retryThreshold) {
+    this.failScore = failScore;
+    this.inconclusiveScore = inconclusiveScore;
+    this.retryScore = retryScore;
+    this.retryThreshold = retryThreshold;
+  }
+
+  @Override
+  public RiskResult evaluate(RiskContext context) {
+    AssuranceSummary assurance = context.assurance();
+    // Ausência não é falha: o parceiro pode não usar esta etapa. Quem cobra a presença dela é o
+    // gate de completude, com o desfecho de "pedir o que falta" — não o motor de risco, que
+    // pontuaria como se algo tivesse dado errado.
+    if (assurance == null) {
+      return RiskResult.notApplicable(RULE_CODE);
+    }
+
+    List<String> evidence = new ArrayList<>();
+    int score = 0;
+    RiskRecommendation recommendation = null;
+
+    if (assurance.documentFailed()) {
+      score += failScore;
+      recommendation = RiskRecommendation.REVIEW;
+      evidence.add("documentoscopia:FAIL " + detailOf(assurance.document()));
+    }
+    if (assurance.biometricFailed()) {
+      score += failScore;
+      recommendation = RiskRecommendation.REVIEW;
+      evidence.add("biometria:FAIL " + detailOf(assurance.biometric()));
+    }
+    if (assurance.anyInconclusive()) {
+      score += inconclusiveScore;
+      evidence.add("verificação inconclusiva ou provedor indisponível");
+    }
+    if (assurance.biometricAttempts() >= retryThreshold) {
+      score += retryScore;
+      recommendation = RiskRecommendation.REVIEW;
+      evidence.add("biometria: " + assurance.biometricAttempts() + " tentativas");
+    }
+
+    if (score == 0) {
+      return RiskResult.notApplicable(RULE_CODE);
+    }
+    return new RiskResult(
+        RULE_CODE,
+        score,
+        recommendation == null ? Severity.LOW : Severity.HIGH,
+        "Verificação de titularidade com apontamento",
+        evidence,
+        recommendation);
+  }
+
+  private static String detailOf(com.barrier.riskengine.assurance.domain.AssuranceCheck check) {
+    return check.provider() + " ref " + check.providerReference();
+  }
+
+  @Override
+  public String code() {
+    return RULE_CODE;
+  }
+}

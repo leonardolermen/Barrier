@@ -525,32 +525,98 @@ de outro tenant.
 - [ ] **UBO ≥25%** — provedor KYB com percentual de participação; QSA da BrasilAPI não traz.
   *Pronto quando:* UBO indeterminado força REVIEW.
 
-- [ ] **Rescreening / monitoramento contínuo**
-  O motor roda **uma vez, no onboarding**. Cliente aprovado em janeiro e sancionado em março
-  nunca é reavaliado. Exigência direta da Circular 3.978, e o gap mais silencioso de todos —
-  não falha, simplesmente nunca acontece.
-  *Pronto quando:* delta de cada importação dispara reavaliação dos subjects ativos.
+- [x] **Rescreening / monitoramento contínuo** 🔴
+  O motor rodava **uma vez, no onboarding**: cliente aprovado em janeiro e sancionado em março
+  seguia aprovado para sempre. Não falhava — simplesmente nunca acontecia, que é por que não
+  aparecia em log nem em métrica.
+  O gatilho é o **delta** de cada importação (`WatchlistDelta`, calculado dentro do
+  `replaceSource` — único ponto onde as duas versões da lista coexistem, já que a base é
+  substituída inteira). Quem casa com uma entrada nova é reavaliado: **por documento** (CEIS/CNEP
+  e parte da OFAC) e **por nome** (OFAC e CSNU não publicam documento — sem esse caminho o
+  monitoramento cobriria só inidoneidade e ignoraria sanção financeira, que é a obrigação legal).
+  O limiar e o piso de tamanho de nome são os mesmos do screening da avaliação: divergir produziria
+  cliente que o monitoramento levanta e a avaliação resultante não confirma.
+  Reavaliar é **submeter uma avaliação nova pelo mesmo pipeline** (`AssessmentService.submit`, com
+  `origin = RESCREENING` e `origin_detail = fonte@versão`, migration V032). Um caminho paralelo que
+  só refizesse o screening decidiria diferente do onboarding sobre o mesmo cliente e não produziria
+  decisão, evento nem webhook — o parceiro fica sabendo pelo canal de sempre. Sem
+  `Idempotency-Key`: reaproveitar a decisão anterior devolveria exatamente o resultado tomado antes
+  de o cliente estar na lista.
+  Três travas contra a avalanche: **linha de base** (importação sobre fonte vazia não dispara nada
+  — senão subir o sistema ou ligar uma fonte nova reavaliaria toda a base), **teto por importação**
+  (acima dele aborta e grita, porque delta gigante é fonte que mudou de layout e cada reavaliação
+  custa uma consulta de bureau paga) e **uma avaliação por (subject, tenant) por importação**.
+  Reavaliação é por tenant, não por subject: o subject é global, a decisão não.
+  *Verificado:* `RescreeningServiceTest` (9 casos — documento; nome invertido `SILVA, JOSE ANTONIO`
+  casando com `Jose Antonio da Silva`; homônimo parcial que não casa; um por tenant vinculado;
+  cliente afetado por duas entradas gerando uma avaliação só; linha de base; teto; falha em um
+  cliente não interrompe os demais; desligado não toca na base) e `WatchlistImporterTest` (delta
+  repassado com fonte e versão; falha do rescreening não invalida a importação).
+  ⚠️ Custo: o match por nome é entradas novas × clientes, uma vez por importação. A base de
+  clientes é percorrida em páginas, mas continua sendo varredura sem índice — é o mesmo problema
+  do `findNameEntries()` listado na Onda 3, e escala junto com ele.
+  ⚠️ Cobre quem **entra** na lista. Quem sai dela não dispara nada, e reavaliação periódica de
+  quem nunca casou com nada (revisão cadastral por prazo) continua aberta.
 
 - [ ] **Verificar dados, não só presença**
   `RegistrationCompleteness` checa se o campo está preenchido, não se é verdadeiro: preencher
   com dados plausíveis satisfaz o gate e libera aprovação automática.
   *Pronto quando:* OTP de telefone/e-mail, validação de endereço, nascimento contra bureau.
 
-- [ ] **Proveniência por tenant no `SubjectProfile`**
-  O cadastro é **global e gravável por qualquer tenant vinculado** — e o vínculo nasce de um
-  simples `POST`. Um tenant pode completar o cadastro de um subject alheio e **induzir aprovação
-  automática** em outro parceiro.
-  *Pronto quando:* escrita é atribuída ao tenant; um tenant não altera o que outro declarou.
+- [x] **Proveniência por tenant no `SubjectProfile`** 🔴 — `fix/audit-top10`
+  O cadastro era **global e gravável por qualquer tenant vinculado**, e o vínculo nasce de um
+  simples `POST /v1/assessments`. Isso furava nas duas direções:
+  **escrita** — um tenant completava o cadastro de um subject alheio e satisfazia o gate de
+  `RegistrationCompleteness` de outro parceiro, induzindo aprovação automática numa avaliação que
+  deveria cair em revisão; **leitura** — o `PUT .../profile` devolvia o cadastro depois do merge e
+  patch vazio não altera nada, então duas chamadas (POST para criar o vínculo, `PUT {}` para ler)
+  entregavam endereço, telefone, e-mail, nascimento, renda declarada e representante legal do
+  cliente de outro parceiro.
+  A chave virou `(subject_id, tenant_id)` (V024, com backfill atribuindo cada perfil ao tenant que
+  primeiro se vinculou ao subject). O `Subject` continua global — é o que sustenta a deduplicação
+  por documento; o que deixou de ser compartilhado é o dossiê. `SubjectProfileRepository` e
+  `SubjectProfileService` **não têm assinatura que aceite só o `subjectId`**: o tipo do método é a
+  defesa, um endpoint novo não tem como esquecer de passar o tenant. O enriquecimento pelo bureau
+  (`persistPersonProfile`/`persistCompanyProfile`) grava sob o tenant da avaliação, e o
+  `ProfileResponse` passou a devolver só completude, não o cadastro.
+  *Verificado:* `TenantIsolationIntegrationTest` — `cadastroDeclaradoPorUmTenantNaoVazaParaOutro`
+  (a asserção é sobre a completude do tenant B, não sobre o formato da resposta: se B enxergasse o
+  cadastro de A, o checklist de B viria completo sem B ter declarado nada) e
+  `escritaDeUmTenantNaoAlteraOCadastroDoOutro`.
+  ⚠️ Consequência: o mesmo dado pessoal passa a existir uma vez por tenant declarante. Retenção e
+  criptografia em repouso (Fase 6) valem por linha. E o cadastro segue **sem histórico** — quem
+  mudou o quê e quando é o item de histórico versionado, logo abaixo.
 
-- [ ] **Histórico versionado de configuração** — *parcialmente fechado*
-  Já resolvido: **quais regras estavam ativas** (`evaluated_json` distingue `SUPPRESSED` de
-  `NOT_TRIGGERED`) e **contra qual lista** (`sources_json`).
-  Aberto: `tenant_risk_config`, `risk_rule_registry` e `subject_profiles` seguem mutáveis sem
-  histórico. O parâmetro efetivo aparece na evidência da regra que disparou (`config:months=`), mas
-  não o de uma regra que passou — então "com que parâmetros" ainda não é respondível em geral.
-  `risk_rule_registry` nem tem coluna `updated_by`, que `tenant_risk_config` tem.
-  *Pronto quando:* uma decisão antiga é reproduzível a partir do que está gravado, incluindo os
-  parâmetros efetivos de todas as regras.
+- [x] **Histórico versionado de configuração**
+  Já vinha resolvido: **quais regras estavam ativas** (`evaluated_json` distingue `SUPPRESSED` de
+  `NOT_TRIGGERED`) e **contra qual lista** (`sources_json`). Faltavam as duas metades abaixo, que
+  são complementares — uma responde sobre a decisão, a outra sobre a configuração.
+  **1. Parâmetro efetivo de toda regra que rodou**, inclusive das que passaram:
+  `RiskRule.effectiveParameters(context)` (default vazio — regra sem configuração não polui a
+  trilha) entra no `evaluated_json` junto do desfecho. Antes, o valor só aparecia na evidência da
+  regra que *disparou*; uma regra que passou não deixava rastro do valor usado, e como
+  `tenant_risk_config` é sobrescrito no lugar, "por que a regra de empresa nova não pegou este
+  cliente em março?" era respondido com a janela de hoje, que pode nunca ter valido em março.
+  Implementado em `NewCompanyRiskRule` (`months`/`score`) e `SensitiveCnaeRiskRule` (`cnae-codes`
+  como lista ordenada, `score`) — as duas configuráveis por tenant.
+  **2. Linha do tempo da configuração** (V033): `tenant_risk_config_history` e
+  `risk_rule_registry_history`, append-only, escritas pelo mesmo repositório que faz a alteração e
+  **na mesma transação** — histórico gravado à parte falta exatamente quando a mudança aconteceu.
+  Sem trigger de banco de propósito: esconderia a escrita de quem lê o serviço. `param_value` nulo
+  no histórico significa "voltou ao default global", que é uma mudança de controle como outra
+  qualquer. O caso que mais precisava disso é o kill switch — regra desligada por uma semana e
+  religada não deixava nenhum vestígio da semana em que não rodou.
+  **3. `updated_by` no registry**, que `tenant_risk_config` já tinha e era obrigatório lá:
+  desligar uma regra de risco é a operação mais sensível do sistema e era a única sem autoria. O
+  `X-Admin-Key` prova que quem chamou tinha a chave, não quem decidiu. Agora é exigido no `PUT`.
+  *Verificado:* `ConfigHistoryIntegrationTest` (Postgres real — o que se testa aqui é o SQL, e um
+  mock confirmaria a chamada, não a linha: duas alterações de override viram duas entradas com
+  autores distintos e a tabela viva mantém o valor corrente; desligar e religar deixa os dois
+  estados), `RiskScoringServiceTest` (parâmetro efetivo presente em regra que passou; regra sem
+  configuração não registra nada) e `RiskRuleRegistryServiceImplTest` (registry exige autoria).
+  ⚠️ Fica aberto o histórico de `subject_profiles`: é dado pessoal, e versionar cadastro multiplica
+  o volume sujeito a retenção de 10 anos e criptografia em repouso (Fase 6) — decidir junto com
+  aquele item, não antes.
 
 - [ ] **Fila de EDD separada e 4-eyes** — *parcialmente fechado*
   Fechado: **`SOLICITAR_DOCUMENTO`** (`fix/audit-top10`). "Falta um campo cadastral" e "é PEP"

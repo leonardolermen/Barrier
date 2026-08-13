@@ -20,5 +20,6 @@ public interface RiskRuleRegistryService {
       String criticality,
       boolean enabled,
       java.time.Instant validFrom,
-      java.time.Instant validUntil);
+      java.time.Instant validUntil,
+      String updatedBy);
 }
