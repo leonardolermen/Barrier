@@ -50,6 +50,15 @@ public class IdentityAssuranceRiskRule implements RiskRule {
       @Value("${barrier.risk.assurance.retry-score:200}") int retryScore,
       @Value("${barrier.risk.assurance.retry-threshold:3}") int retryThreshold,
       @Value("${barrier.risk.assurance.divergence-score:300}") int divergenceScore) {
+    // 0 (ou negativo) faria `attempts >= retryThreshold` valer para toda avaliação, mesmo a que
+    // nunca usou biometria (attempts=0) — o sistema inteiro cairia em REVIEW por config errada.
+    // Antes desta task isso era inalcançável (assurance nascia sempre nulo); agora é uma linha de
+    // configuração de distância, então falha cedo em vez de virar apetite de risco de fato.
+    if (retryThreshold <= 0) {
+      throw new IllegalArgumentException(
+          "barrier.risk.assurance.retry-threshold precisa ser positivo, recebido: "
+              + retryThreshold);
+    }
     this.failScore = failScore;
     this.inconclusiveScore = inconclusiveScore;
     this.retryScore = retryScore;

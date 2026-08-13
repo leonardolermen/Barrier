@@ -1,6 +1,7 @@
 package com.barrier.riskengine.assurance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
@@ -156,5 +157,39 @@ class IdentityAssuranceRiskRuleTest {
         new AssuranceSummary(check(AssuranceKind.DOCUMENT, AssuranceOutcome.PASS, Set.of()), null, 0);
 
     assertThat(rule.evaluate(contexto(ok)).triggered()).isFalse();
+  }
+
+  /**
+   * Este é o caso que virou maioria depois da Task 7: o {@code AssessmentProcessor} passou a
+   * montar o {@code AssuranceSummary} sempre, mesmo quando o parceiro nunca submeteu
+   * documentoscopia/biometria — o que antes chegava como {@code contexto(null)} agora chega como
+   * um summary vazio. A segurança inteira depende do portão {@code if (score == 0) return
+   * notApplicable}: sem este teste, mover esse {@code return} para fora do {@code if}, ou fazer a
+   * regra sempre devolver evidência, quebraria em silêncio para toda avaliação sem assurance.
+   */
+  @Test
+  void summaryVazioNaoPontuaNemOpina() {
+    AssuranceSummary vazio = new AssuranceSummary(null, null, 0);
+
+    RiskResult result = rule.evaluate(contexto(vazio));
+
+    assertThat(result.triggered()).isFalse();
+    assertThat(result.score()).isZero();
+    assertThat(result.recommendation()).isNull();
+    assertThat(result.evidences()).isEmpty();
+  }
+
+  /**
+   * {@code 0} (ou negativo) faria {@code attempts >= retryThreshold} valer para toda avaliação,
+   * mesmo quem nunca usou biometria ({@code attempts=0}) — o sistema inteiro cairia em REVIEW por
+   * um erro de configuração. Antes da Task 7 isso era inalcançável (assurance nascia sempre
+   * nulo); agora é uma linha de config de distância, então o construtor falha cedo.
+   */
+  @Test
+  void retryThresholdZeroOuNegativoRejeitaNoConstrutor() {
+    assertThatThrownBy(() -> new IdentityAssuranceRiskRule(600, 100, 200, 0, 300))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new IdentityAssuranceRiskRule(600, 100, 200, -1, 300))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

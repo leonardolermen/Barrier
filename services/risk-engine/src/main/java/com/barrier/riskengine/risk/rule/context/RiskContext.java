@@ -26,16 +26,4 @@ public record RiskContext(
     ScreeningResult screening,
     CompanyProfile company,
     SubjectProfile profile,
-    AssuranceSummary assurance) {
-
-  /** Compatibilidade para os caminhos que ainda não passam pela etapa de documentoscopia. */
-  public RiskContext(
-      String assessmentId,
-      String tenantId,
-      IdentityCheck identity,
-      ScreeningResult screening,
-      CompanyProfile company,
-      SubjectProfile profile) {
-    this(assessmentId, tenantId, identity, screening, company, profile, null);
-  }
-}
+    AssuranceSummary assurance) {}
