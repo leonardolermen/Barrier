@@ -338,6 +338,12 @@ class AssuranceCheckRepositoryIntegrationTest {
    * O índice é {@code (subject_id, tenant_id, kind, checked_at DESC)} — refazer a biometria depois
    * de uma falha é o fluxo normal, e a decisão tem de olhar a última tentativa, não a primeira que
    * o Postgres decidir devolver sem o {@code ORDER BY}.
+   *
+   * <p>A checagem mais recente é gravada <b>primeiro</b>, e a mais antiga depois, de propósito:
+   * numa tabela pequena recém-populada o Postgres tende a devolver as linhas na ordem física de
+   * inserção, então se a ordem de inserção coincidisse com {@code checked_at DESC} este teste
+   * passaria mesmo sem o {@code ORDER BY} no SQL — não provaria nada. Gravando fora de ordem, só
+   * o {@code ORDER BY checked_at DESC} explica {@code findLatest} devolver a mais recente.
    */
   @Test
   void findLatestDevolveOMaisRecenteQuandoHaVariosDoMesmoTipo() {
@@ -345,16 +351,8 @@ class AssuranceCheckRepositoryIntegrationTest {
     Instant maisAntigo = Instant.now().minus(2, ChronoUnit.DAYS);
     Instant maisRecente = Instant.now();
 
-    repository.save(
-        checagem(
-            subjectId,
-            "default",
-            AssuranceKind.DOCUMENT,
-            30,
-            "ref-antigo",
-            Set.of(DivergentField.NAME),
-            maisAntigo,
-            null));
+    // grava a mais RECENTE primeiro — fora da ordem cronológica e fora da ordem que o SQL tem de
+    // devolver, para que só o ORDER BY explique o resultado, não a ordem física de inserção.
     repository.save(
         checagem(
             subjectId,
@@ -364,6 +362,16 @@ class AssuranceCheckRepositoryIntegrationTest {
             "ref-novo",
             Set.of(),
             maisRecente,
+            null));
+    repository.save(
+        checagem(
+            subjectId,
+            "default",
+            AssuranceKind.DOCUMENT,
+            30,
+            "ref-antigo",
+            Set.of(DivergentField.NAME),
+            maisAntigo,
             null));
 
     AssuranceCheck lido =
