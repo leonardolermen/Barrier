@@ -11,6 +11,7 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.DivergentField;
+import com.barrier.riskengine.assurance.domain.DocumentGateNotSatisfiedException;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
@@ -181,14 +182,53 @@ public class AssuranceService {
     return !NameSimilarity.matchesEitherWay(declared, extracted, nameMatchThreshold);
   }
 
-  /** Ver {@link #verifyDocument}: mesmo motivo para o consentimento entrar aqui. */
+  /**
+   * Ver {@link #verifyDocument}: mesmo motivo para o consentimento entrar aqui.
+   *
+   * <p>Documentoscopia aprovada é pré-requisito da biometria (decisão de produto, 2026-08-13) —
+   * ver {@link #requireDocumentPass}, chamado antes de acionar o provedor.
+   */
   @Transactional
   public AssuranceCheck verifyBiometrics(
       UUID subjectId, String tenantId, BiometricSubmission submission, AssuranceConsent consent) {
     requireEnabled();
     requireConsent(consent);
+    requireDocumentPass(subjectId, tenantId);
     AssuranceCheck check = biometricProvider.verify(subjectId, tenantId, submission);
     return persist(check.withConsent(consent));
+  }
+
+  /**
+   * Documentoscopia aprovada é pré-requisito da biometria, não campo obrigatório — a diferença
+   * entre exigir uma string qualquer ({@code @NotBlank} em {@code documentFaceReference}, que
+   * um cliente satisfaz com {@code "x"} sem provar nada) e exigir que a autenticidade do
+   * documento já tenha sido verificada e aprovada. Escopado por {@code (subjectId, tenantId)},
+   * nunca só por {@code subjectId} — o tipo do método é a defesa (ver {@code
+   * SubjectProfileService}): sem o tenant na consulta, documentoscopia aprovada por um parceiro
+   * liberaria biometria de outro parceiro para o mesmo subject global.
+   *
+   * <p>Só {@link AssuranceOutcome#PASS} libera. {@code FAIL} é reprovação explícita; {@code
+   * INCONCLUSIVE} e {@code UNAVAILABLE} não estabeleceram autenticidade nenhuma — nenhum dos três
+   * é base para comparar rosto contra documento. Provedor de documentoscopia indisponível trava a
+   * frente inteira, não avança sozinho para a biometria; o cliente não fica preso para sempre
+   * porque {@code IdentityAssuranceRiskRule} já converte {@code UNAVAILABLE} em revisão humana —
+   * só não avança automaticamente.
+   *
+   * <p>Recusa antes de acionar {@code biometricProvider}, que é chamada paga: sem isto, um
+   * parceiro poderia gastar consultas de biometria contra um subject cuja documentoscopia nunca
+   * passou.
+   */
+  private void requireDocumentPass(UUID subjectId, String tenantId) {
+    boolean documentApproved =
+        repository
+            .findLatest(subjectId, tenantId, AssuranceKind.DOCUMENT)
+            .map(AssuranceCheck::passed)
+            .orElse(false);
+    if (!documentApproved) {
+      throw new DocumentGateNotSatisfiedException(
+          "biometria exige documentoscopia aprovada (outcome=PASS) para este subject e tenant;"
+              + " nenhuma encontrada");
+    }
   }
 
   /**

@@ -17,6 +17,7 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
+import com.barrier.riskengine.assurance.domain.DocumentGateNotSatisfiedException;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
 import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
 import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
@@ -25,6 +26,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -247,5 +249,89 @@ class AssuranceServiceTest {
     org.assertj.core.api.Assertions.assertThat(total).isEqualTo(3L);
     verify(repository).countRecent(SUBJECT, "tenant-1", AssuranceKind.BIOMETRIC, janela);
     verify(repository, Mockito.never()).findAll(Mockito.any(), Mockito.any());
+  }
+
+  // --- documentoscopia como pré-requisito da biometria (decisão de produto 2026-08-13) ----------
+
+  private AssuranceCheck checkComOutcome(AssuranceKind kind, AssuranceOutcome outcome) {
+    return new AssuranceCheck(
+        UUID.randomUUID(),
+        SUBJECT,
+        "tenant-1",
+        kind,
+        outcome,
+        90,
+        "stub",
+        "abc-123",
+        "v1",
+        "hash",
+        "ok",
+        Set.of(),
+        Instant.now(),
+        null);
+  }
+
+  private BiometricSubmission biometricSubmission() {
+    return new BiometricSubmission("selfie", "face", "hash");
+  }
+
+  /**
+   * Sem nenhum {@code AssuranceCheck} de DOCUMENT para o par, a biometria recusa antes de acionar
+   * o provider — que é chamada paga. {@code DocumentGateNotSatisfiedException}, não {@code
+   * IllegalStateException}: o parceiro precisa distinguir "falta documentoscopia" de "kill switch
+   * desligado".
+   */
+  @Test
+  void recusaBiometriaSemDocumentoscopiaAlguma() {
+    when(repository.findLatest(SUBJECT, "tenant-1", AssuranceKind.DOCUMENT))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                service.verifyBiometrics(
+                    SUBJECT, "tenant-1", biometricSubmission(), consentimento()))
+        .isInstanceOf(DocumentGateNotSatisfiedException.class);
+
+    verifyNoInteractions(biometricProvider);
+    verify(repository, Mockito.never()).save(Mockito.any());
+  }
+
+  /**
+   * Comparar rosto contra um documento que não passou na autenticidade prova pouco — só {@code
+   * PASS} libera. FAIL/INCONCLUSIVE/UNAVAILABLE recusam do mesmo jeito que ausência total.
+   */
+  @Test
+  void recusaBiometriaQuandoDocumentoscopiaNaoPassou() {
+    for (AssuranceOutcome outcome :
+        Set.of(AssuranceOutcome.FAIL, AssuranceOutcome.INCONCLUSIVE, AssuranceOutcome.UNAVAILABLE)) {
+      when(repository.findLatest(SUBJECT, "tenant-1", AssuranceKind.DOCUMENT))
+          .thenReturn(Optional.of(checkComOutcome(AssuranceKind.DOCUMENT, outcome)));
+
+      assertThatThrownBy(
+              () ->
+                  service.verifyBiometrics(
+                      SUBJECT, "tenant-1", biometricSubmission(), consentimento()))
+          .as("outcome %s não pode liberar a biometria", outcome)
+          .isInstanceOf(DocumentGateNotSatisfiedException.class);
+    }
+
+    verifyNoInteractions(biometricProvider);
+    verify(repository, Mockito.never()).save(Mockito.any());
+  }
+
+  /** Documentoscopia PASS libera a biometria normalmente, acionando o provider. */
+  @Test
+  void processaBiometriaQuandoDocumentoscopiaPassou() {
+    when(repository.findLatest(SUBJECT, "tenant-1", AssuranceKind.DOCUMENT))
+        .thenReturn(Optional.of(checkComOutcome(AssuranceKind.DOCUMENT, AssuranceOutcome.PASS)));
+    when(biometricProvider.verify(any(), any(), any()))
+        .thenReturn(checkComOutcome(AssuranceKind.BIOMETRIC, AssuranceOutcome.PASS));
+
+    AssuranceCheck result =
+        service.verifyBiometrics(SUBJECT, "tenant-1", biometricSubmission(), consentimento());
+
+    org.assertj.core.api.Assertions.assertThat(result.kind()).isEqualTo(AssuranceKind.BIOMETRIC);
+    verify(biometricProvider).verify(any(), any(), any());
+    verify(repository).save(Mockito.any());
   }
 }

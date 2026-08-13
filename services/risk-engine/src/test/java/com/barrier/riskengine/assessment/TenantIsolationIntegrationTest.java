@@ -444,6 +444,26 @@ class TenantIsolationIntegrationTest {
     String tenant = credencialDe("parceiro-size-2");
     submete(com(tenant), CPF_ALVO, "Fulano de Tal");
 
+    // Documentoscopia aprovada é pré-requisito da biometria (decisão de produto 2026-08-13);
+    // sem isto, o POST abaixo recusaria com 409 antes de chegar ao cascade de @Valid que este
+    // teste quer exercitar. StubDocumentVerificationProvider aprova qualquer referência sem os
+    // prefixos fail-/inconclusive-/unavailable-.
+    com(tenant)
+        .post()
+        .uri("/v1/subjects/{doc}/assurance/document", CPF_ALVO.replaceAll("\\D", ""))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            new SubmitDocumentRequest(
+                "ref-doc-cascata",
+                "RG",
+                "hash-doc-cascata",
+                new ConsentRequest(
+                    "consent-doc-cascata",
+                    "verificação de identidade",
+                    Instant.now().minusSeconds(60))))
+        .retrieve()
+        .toBodilessEntity();
+
     AssuranceCheckResponse resposta =
         com(tenant)
             .post()

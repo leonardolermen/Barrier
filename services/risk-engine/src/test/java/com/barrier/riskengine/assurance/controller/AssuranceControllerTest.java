@@ -285,6 +285,27 @@ class AssuranceControllerTest {
   @Test
   void submissaoBiometricaValidaDevolve200() {
     Subject subject = linkedSubject();
+    // Documentoscopia aprovada é pré-requisito da biometria (decisão de produto 2026-08-13) —
+    // sem este stub, requireDocumentPass recusa com DocumentGateNotSatisfiedException antes de
+    // acionar o biometricProvider.
+    AssuranceCheck documentPass =
+        new AssuranceCheck(
+            UUID.randomUUID(),
+            subject.id(),
+            TENANT_ID,
+            AssuranceKind.DOCUMENT,
+            AssuranceOutcome.PASS,
+            90,
+            "stub-document-provider",
+            "prov-ref-doc",
+            "v1.0.0",
+            "hash-doc",
+            null,
+            Set.of(),
+            Instant.now(),
+            null);
+    when(assuranceRepository.findLatest(subject.id(), TENANT_ID, AssuranceKind.DOCUMENT))
+        .thenReturn(Optional.of(documentPass));
     AssuranceCheck check =
         new AssuranceCheck(
             UUID.randomUUID(),

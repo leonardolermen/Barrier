@@ -334,6 +334,23 @@ de `AssuranceService` faria o contexto inteiro falhar na subida em produção;
 `AssuranceProviderReadinessGuard` só **avisa** quando são eles que estão ativos, no padrão de
 `CnpjBureauReadinessGuard`.
 
+**Decisão de produto (2026-08-13): documentoscopia aprovada é pré-requisito da biometria.**
+`documentFaceReference` tinha `@NotBlank` — exigia uma string, não verificava nada; `"x"` passava.
+Era campo obrigatório, não pré-requisito, o mesmo padrão de falha (controle que roda e não
+verifica) do `RegistrationCompleteness`/`PepRiskRule` citados em `plano-remediacao-auditoria.md`.
+Agora `AssuranceService.verifyBiometrics` exige um `AssuranceCheck` de `kind = DOCUMENT` com
+`outcome = PASS` para o `(subjectId, tenantId)` antes de acionar o provedor de biometria (chamada
+paga); sem ele, `DocumentGateNotSatisfiedException` recusa com 409 — exceção própria, não
+`IllegalStateException`, para o parceiro distinguir "assurance desligado" de "falta
+documentoscopia". Só `PASS` libera: comparar rosto contra documento que não passou na
+autenticidade prova pouco, então `FAIL`/`INCONCLUSIVE`/`UNAVAILABLE` recusam do mesmo jeito que
+ausência total. Consequência operacional: provedor de documentoscopia indisponível trava a frente
+inteira, não só metade (o cliente não fica preso — `IdentityAssuranceRiskRule` converte
+`UNAVAILABLE` em revisão humana — mas não avança sozinho). Muda o contrato de integração (ordem
+passa a ser obrigatória); viável agora porque o endpoint ainda não está em produção. Fora de
+escopo, decisões de produto separadas: validade temporal do `PASS` (hoje sem janela) e
+correspondência do `documentFaceReference` com a referência do check que autorizou.
+
 Throttle da frente de assurance (branch `feat/assurance-throttle`): duas travas fecham o que faltava
 depois de ligar o gatilho de reavaliação. **Dedup por janela** —
 `barrier.assurance.reassessment-window` (default `PT5M`) — no máximo uma reavaliação por
