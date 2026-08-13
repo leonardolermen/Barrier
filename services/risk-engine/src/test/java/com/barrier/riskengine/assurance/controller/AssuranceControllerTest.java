@@ -82,7 +82,9 @@ class AssuranceControllerTest {
             List.of(),
             subjectProfileService,
             subjectService,
-            fieldVerificationService);
+            fieldVerificationService,
+            true,
+            0.85);
     controller = new AssuranceController(subjectService, assuranceService);
   }
 
@@ -242,6 +244,40 @@ class AssuranceControllerTest {
     String json = mapper.writeValueAsString(response.getBody());
     assertThat(json).doesNotContain("Fulano de Tal");
     assertThat(json).doesNotContain("12345678900");
+  }
+
+  /**
+   * O caso que o CRITICAL da revisão final fecha: com os providers de produção (que nunca
+   * lançam, sempre devolvem {@code UNAVAILABLE} — ver {@code UnavailableDocumentVerificationProvider}),
+   * a submissão completa normalmente com 200 e desfecho {@code UNAVAILABLE}, em vez de a
+   * aplicação sequer subir (era {@code UnsatisfiedDependencyException} de contexto antes desta
+   * correção).
+   */
+  @Test
+  void semProvedorRealContratadoDevolveUnavailableEmVezDeEstourar() {
+    linkedSubject();
+    AssuranceService servicoComProvidersDeProducao =
+        new AssuranceService(
+            new com.barrier.riskengine.assurance.client.UnavailableDocumentVerificationProvider(
+                java.time.Clock.systemUTC()),
+            new com.barrier.riskengine.assurance.client.UnavailableBiometricVerificationProvider(
+                java.time.Clock.systemUTC()),
+            assuranceRepository,
+            List.of(),
+            Mockito.mock(SubjectProfileService.class),
+            new SubjectService(subjectRepository),
+            Mockito.mock(FieldVerificationService.class),
+            true,
+            0.85);
+    AssuranceController controllerDeProducao =
+        new AssuranceController(new SubjectService(subjectRepository), servicoComProvidersDeProducao);
+
+    ResponseEntity<AssuranceCheckResponse> response =
+        controllerDeProducao.submitDocument(tenant(), DOCUMENT, documentRequestWithConsent());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().outcome()).isEqualTo("UNAVAILABLE");
   }
 
   @Test

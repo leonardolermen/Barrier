@@ -1,6 +1,7 @@
 package com.barrier.riskengine.risk.rule;
 
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
+import com.barrier.riskengine.assurance.domain.DivergentField;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
@@ -9,6 +10,8 @@ import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -102,11 +105,16 @@ public class IdentityAssuranceRiskRule implements RiskRule {
     // Nome pertence ao Subject, não ao cadastro — não há campo verificável equivalente a
     // VerifiableField para ele, então a divergência lida do documento vira sinal de risco aqui,
     // não campo faltando no gate de completude. AssuranceCheck.divergences nunca carrega o valor
-    // declarado nem o extraído (PII) — só quais campos divergiram.
+    // declarado nem o extraído (PII) — só quais campos divergiram, e é isso (só o nome do campo,
+    // nunca o valor) que entra na evidência: sem isso o analista que abre o EM_REVISAO não sabia
+    // se a pontuação veio do nome ou da data de nascimento.
     if (assurance.document() != null && !assurance.document().divergences().isEmpty()) {
       score += divergenceScore;
       recommendation = RiskRecommendation.REVIEW;
-      evidence.add("documentoscopia: dado lido do documento diverge do cadastro declarado");
+      evidence.add(
+          "documentoscopia: dado lido do documento diverge do cadastro declarado (campos: "
+              + fieldNames(assurance.document().divergences())
+              + ")");
     }
 
     if (score == 0) {
@@ -123,6 +131,11 @@ public class IdentityAssuranceRiskRule implements RiskRule {
 
   private static String detailOf(AssuranceCheck check) {
     return check.provider() + " ref " + check.providerReference();
+  }
+
+  /** Só os nomes dos campos (NAME/BIRTH_DATE), nunca o valor declarado nem o extraído. */
+  private static String fieldNames(Set<DivergentField> fields) {
+    return fields.stream().map(Enum::name).sorted().collect(Collectors.joining(", "));
   }
 
   @Override

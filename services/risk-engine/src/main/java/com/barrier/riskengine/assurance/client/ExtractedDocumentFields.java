@@ -10,4 +10,16 @@ import java.time.LocalDate;
  * declara: divergência entre os dois é sinal, não os dados em si. Por isso não é persistido aqui
  * — quem grava a divergência, se houver, é quem consome este resultado.
  */
-public record ExtractedDocumentFields(String name, String document, LocalDate birthDate) {}
+public record ExtractedDocumentFields(String name, String document, LocalDate birthDate) {
+
+  /**
+   * O {@code toString} automático do record imprimiria {@code name} e {@code document} — nome e
+   * CPF/CNPJ do titular. "Nunca logar CPF/CNPJ sem mascarar" (CLAUDE.md) vale para qualquer log
+   * de depuração que capture este objeto, inclusive um provedor real futuro que logue a entrada;
+   * a data de nascimento também não é dado para aparecer solto em log.
+   */
+  @Override
+  public String toString() {
+    return "ExtractedDocumentFields[name=<redacted>, document=<redacted>, birthDate=<redacted>]";
+  }
+}

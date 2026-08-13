@@ -2,6 +2,7 @@ package com.barrier.riskengine.assurance.controller.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 
 /**
@@ -16,10 +17,16 @@ import java.time.Instant;
  * AssuranceConsent.validate()} é a segunda linha de defesa (chamadores internos que não passam
  * pelo controller), não a única.
  *
+ * <p>{@code @Size(120)} nos dois campos de texto: colunas {@code consent_reference}/{@code
+ * consent_purpose VARCHAR(120)} (migration V036) — sem limite, entrada maior estoura {@code
+ * DataIntegrityViolationException} sem handler (500 em vez de 400).
+ *
  * @param reference identificador do registro de consentimento (ex.: id da tela de aceite) — sem
  *     ele não há prova do aceite perante a LGPD
  * @param purpose finalidade declarada ao titular no momento da coleta
  * @param grantedAt quando o titular consentiu
  */
 public record ConsentRequest(
-    @NotBlank String reference, @NotBlank String purpose, @NotNull Instant grantedAt) {}
+    @NotBlank @Size(max = 120) String reference,
+    @NotBlank @Size(max = 120) String purpose,
+    @NotNull Instant grantedAt) {}

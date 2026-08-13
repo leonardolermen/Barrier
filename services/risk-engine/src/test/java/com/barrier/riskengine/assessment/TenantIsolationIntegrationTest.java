@@ -8,6 +8,7 @@ import com.barrier.riskengine.assessment.controller.dto.SubmitAssessmentRequest;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assurance.controller.dto.AssuranceCheckResponse;
 import com.barrier.riskengine.assurance.controller.dto.ConsentRequest;
+import com.barrier.riskengine.assurance.controller.dto.SubmitBiometricRequest;
 import com.barrier.riskengine.assurance.controller.dto.SubmitDocumentRequest;
 import com.barrier.riskengine.subject.profile.controller.dto.ProfileResponse;
 import com.barrier.riskengine.subject.profile.controller.dto.UpdateProfileRequest;
@@ -330,5 +331,91 @@ class TenantIsolationIntegrationTest {
         .retrieve()
         .toEntity(AssuranceCheckResponse.class)
         .getBody();
+  }
+
+  // --- Bean Validation por HTTP (achados MINOR/IMPORTANT da revisão final) ------------------
+
+  /**
+   * Fecha o "apague a checagem e o teste tem de ficar vermelho" para {@code @Size}: sem ele, um
+   * hash maior que {@code submitted_hash VARCHAR(64)} (V035) estourava
+   * {@code DataIntegrityViolationException} sem handler — 500 em vez de 400. Confirmado: remover
+   * o {@code @Size(max = 64)} de {@code SubmitDocumentRequest.submittedHash} faz este teste
+   * falhar (a requisição para de dar 400 e passa a dar 500 ao tentar persistir).
+   */
+  @Test
+  void hashMaiorQueAColunaDevolve400EmVezDe500() {
+    String tenant = credencialDe("parceiro-size-1");
+    submete(com(tenant), CPF_ALVO, "Fulano de Tal");
+    String hashMuitoGrande = "a".repeat(200);
+
+    assertThatThrownBy(
+            () ->
+                com(tenant)
+                    .post()
+                    .uri("/v1/subjects/{doc}/assurance/document", CPF_ALVO.replaceAll("\\D", ""))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(
+                        new SubmitDocumentRequest(
+                            "capture-ref",
+                            "RG",
+                            hashMuitoGrande,
+                            new ConsentRequest(
+                                "consent-ref",
+                                "verificação de identidade",
+                                Instant.now().minusSeconds(60))))
+                    .retrieve()
+                    .toEntity(AssuranceCheckResponse.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.BAD_REQUEST));
+  }
+
+  /**
+   * Fecha o segundo buraco da mesma convenção: {@code /assurance/biometric} não passava pela
+   * camada HTTP em nenhum teste, então o cascade de {@code @Valid} do consentimento dele nunca
+   * foi exercitado de verdade (só via chamada direta ao controller, em teste unitário). Este é o
+   * primeiro teste HTTP do endpoint — sucesso e recusa de consentimento incompleto no mesmo lugar.
+   */
+  @Test
+  void submissaoBiometricaPorHttpValidaConsentimentoEmCascata() {
+    String tenant = credencialDe("parceiro-size-2");
+    submete(com(tenant), CPF_ALVO, "Fulano de Tal");
+
+    AssuranceCheckResponse resposta =
+        com(tenant)
+            .post()
+            .uri("/v1/subjects/{doc}/assurance/biometric", CPF_ALVO.replaceAll("\\D", ""))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                new SubmitBiometricRequest(
+                    "selfie-ref",
+                    "doc-face-ref",
+                    "hash-abc",
+                    new ConsentRequest(
+                        "consent-ref", "verificação de identidade", Instant.now().minusSeconds(60))))
+            .retrieve()
+            .toEntity(AssuranceCheckResponse.class)
+            .getBody();
+
+    assertThat(resposta).isNotNull();
+    assertThat(resposta.id()).isNotBlank();
+
+    // Consentimento presente mas com referência em branco: @Valid em cascata (ConsentRequest
+    // dentro de SubmitBiometricRequest) tem de recusar com 400 antes de chegar ao service.
+    assertThatThrownBy(
+            () ->
+                com(tenant)
+                    .post()
+                    .uri("/v1/subjects/{doc}/assurance/biometric", CPF_ALVO.replaceAll("\\D", ""))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(
+                        new SubmitBiometricRequest(
+                            "selfie-ref",
+                            "doc-face-ref",
+                            "hash-abc",
+                            new ConsentRequest("  ", "KYC", Instant.now())))
+                    .retrieve()
+                    .toEntity(AssuranceCheckResponse.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.BAD_REQUEST));
   }
 }

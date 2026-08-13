@@ -73,7 +73,9 @@ class DocumentFieldExtractionTest {
           List.<AssuranceRecordedListener>of(),
           subjectProfileService,
           subjectService,
-          fieldVerificationService);
+          fieldVerificationService,
+          true,
+          0.85);
 
   private final IdentityAssuranceRiskRule rule =
       new IdentityAssuranceRiskRule(600, 100, 200, 3, 300);
@@ -195,6 +197,8 @@ class DocumentFieldExtractionTest {
     assertThat(resultado.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
     // PII: o fator diz QUE divergiu, nunca os valores declarado/extraído.
     assertThat(resultado.evidences()).noneMatch(e -> e.contains("1990") || e.contains("1991"));
+    // Explicável: o analista que abre o EM_REVISAO precisa saber QUAL campo divergiu.
+    assertThat(resultado.evidences()).anyMatch(e -> e.contains("BIRTH_DATE"));
   }
 
   /** 3. Nome extraído diferente do declarado -> fator de risco (nascimento à parte permanece). */
@@ -224,6 +228,7 @@ class DocumentFieldExtractionTest {
     RiskResult resultado = rule.evaluate(contexto(persisted));
     assertThat(resultado.triggered()).isTrue();
     assertThat(resultado.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
+    assertThat(resultado.evidences()).anyMatch(e -> e.contains("NAME"));
   }
 
   /**
@@ -287,6 +292,52 @@ class DocumentFieldExtractionTest {
     when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
     when(subjectService.findById(SUBJECT, TENANT))
         .thenReturn(subject("MARIA SILVA", "52998224725"));
+
+    DocumentVerificationResult resultado =
+        service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+
+    assertThat(resultado.check().divergences()).isEmpty();
+  }
+
+  /**
+   * OCR real abrevia nome do meio: comparação por similaridade (não igualdade exata) não pode
+   * marcar isso como divergência. Reproduz o achado da revisão final — antes desta correção,
+   * {@code NameNormalizer.normalize(a).equals(normalize(b))} classificava este par como
+   * divergente e o cliente legítimo caía em EM_REVISAO.
+   */
+  @Test
+  void nomeComMeioAbreviadoPeloOcrNaoDiverge() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+    when(documentProvider.verify(any(), any(), any()))
+        .thenReturn(
+            new DocumentVerificationResult(
+                checkAprovado(), new ExtractedDocumentFields("MARIA S SILVA", "12345678900", nascimento)));
+    when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
+    when(subjectService.findById(SUBJECT, TENANT))
+        .thenReturn(subject("MARIA SILVA", "12345678900"));
+
+    DocumentVerificationResult resultado =
+        service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+
+    assertThat(resultado.check().divergences()).isEmpty();
+  }
+
+  /**
+   * Mesmo caso, na outra direção: sobrenome composto cortado pelo OCR (fica só o primeiro). Um
+   * único token não cobre nome nenhum ({@code NameTokens.coveredBy}, MIN_TOKENS=2) — por isso o
+   * caso realista é o OCR perder só uma parte do sobrenome composto, não o sobrenome inteiro.
+   */
+  @Test
+  void sobrenomeCompostoCortadoPeloOcrNaoDiverge() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+    when(documentProvider.verify(any(), any(), any()))
+        .thenReturn(
+            new DocumentVerificationResult(
+                checkAprovado(),
+                new ExtractedDocumentFields("MARIA SILVA", "12345678900", nascimento)));
+    when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
+    when(subjectService.findById(SUBJECT, TENANT))
+        .thenReturn(subject("MARIA SILVA SANTOS", "12345678900"));
 
     DocumentVerificationResult resultado =
         service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());

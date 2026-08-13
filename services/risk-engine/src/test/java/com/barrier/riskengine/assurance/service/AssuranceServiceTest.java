@@ -54,7 +54,9 @@ class AssuranceServiceTest {
           List.of(listener),
           subjectProfileService,
           subjectService,
-          fieldVerificationService);
+          fieldVerificationService,
+          true,
+          0.85);
 
   private DocumentSubmission submissao() {
     return new DocumentSubmission("ref", "RG", "hash");
@@ -109,6 +111,59 @@ class AssuranceServiceTest {
    * pode ser acionado nesse caminho: chamá-lo antes de saber que o consentimento é inválido
    * gastaria uma consulta (possivelmente paga) à toa.
    */
+  /**
+   * Kill switch: desligado, o serviço recusa antes de acionar qualquer provedor — nenhum
+   * {@code AssuranceCheck} nasce, então nenhuma reavaliação é disparada.
+   */
+  @Test
+  void recusaVerificacaoDeDocumentoQuandoDesabilitado() {
+    AssuranceService desabilitado =
+        new AssuranceService(
+            documentProvider,
+            biometricProvider,
+            repository,
+            List.of(listener),
+            subjectProfileService,
+            subjectService,
+            fieldVerificationService,
+            false,
+            0.85);
+
+    assertThatThrownBy(
+            () -> desabilitado.verifyDocument(SUBJECT, "tenant-1", submissao(), consentimento()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("desabilitada");
+
+    verifyNoInteractions(documentProvider, repository, listener);
+  }
+
+  @Test
+  void recusaVerificacaoBiometricaQuandoDesabilitado() {
+    AssuranceService desabilitado =
+        new AssuranceService(
+            documentProvider,
+            biometricProvider,
+            repository,
+            List.of(listener),
+            subjectProfileService,
+            subjectService,
+            fieldVerificationService,
+            false,
+            0.85);
+
+    assertThatThrownBy(
+            () ->
+                desabilitado.verifyBiometrics(
+                    SUBJECT,
+                    "tenant-1",
+                    new BiometricSubmission("selfie", "face", "hash"),
+                    consentimento()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("desabilitada");
+
+    verifyNoInteractions(biometricProvider, repository, listener);
+  }
+
   @Test
   void recusaDocumentoSemConsentimento() {
     assertThatThrownBy(

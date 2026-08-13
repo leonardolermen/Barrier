@@ -6,7 +6,7 @@ import com.barrier.riskengine.assurance.client.DocumentVerificationResult;
 import com.barrier.riskengine.assurance.client.ExtractedDocumentFields;
 import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationProvider;
 import com.barrier.riskengine.assurance.client.interfaces.DocumentVerificationProvider;
-import com.barrier.commons.name.NameNormalizer;
+import com.barrier.commons.name.NameSimilarity;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -50,6 +51,8 @@ public class AssuranceService {
   private final SubjectProfileService subjectProfileService;
   private final SubjectService subjectService;
   private final FieldVerificationService fieldVerificationService;
+  private final boolean enabled;
+  private final double nameMatchThreshold;
 
   public AssuranceService(
       DocumentVerificationProvider documentProvider,
@@ -58,7 +61,14 @@ public class AssuranceService {
       List<AssuranceRecordedListener> listeners,
       SubjectProfileService subjectProfileService,
       SubjectService subjectService,
-      FieldVerificationService fieldVerificationService) {
+      FieldVerificationService fieldVerificationService,
+      // Kill switch, mesmo padrão de barrier.rescreening.enabled: desligado, o endpoint recusa
+      // (409, IllegalStateException) e nenhum AssuranceCheck nasce — logo nenhuma reavaliação é
+      // disparada, porque não há o que notificar. Nasce LIGADO: a etapa já está em uso.
+      @Value("${barrier.assurance.enabled:true}") boolean enabled,
+      // Mesmo mecanismo dos bureaus (BrasilApiBureauProvider/BigBoostBureauProvider): comparação
+      // de nome por similaridade de token, não igualdade de string — ver #diverges.
+      @Value("${barrier.assurance.name-match.threshold:0.85}") double nameMatchThreshold) {
     this.documentProvider = documentProvider;
     this.biometricProvider = biometricProvider;
     this.repository = repository;
@@ -66,6 +76,8 @@ public class AssuranceService {
     this.subjectProfileService = subjectProfileService;
     this.subjectService = subjectService;
     this.fieldVerificationService = fieldVerificationService;
+    this.enabled = enabled;
+    this.nameMatchThreshold = nameMatchThreshold;
   }
 
   /**
@@ -77,6 +89,7 @@ public class AssuranceService {
   @Transactional
   public DocumentVerificationResult verifyDocument(
       UUID subjectId, String tenantId, DocumentSubmission submission, AssuranceConsent consent) {
+    requireEnabled();
     requireConsent(consent);
     DocumentVerificationResult result = documentProvider.verify(subjectId, tenantId, submission);
     AssuranceCheck check = result.check().withConsent(consent);
@@ -98,10 +111,11 @@ public class AssuranceService {
    *
    * <p>Nascimento que confere é evento independente confirmando o valor declarado, então vira
    * {@link FieldVerificationService#recordBirthDateFromDocument}, o mesmo padrão de
-   * {@code recordBirthDateFromBureau} já usado para o bureau. Nome ou nascimento que
-   * <b>divergem</b> não têm campo verificável equivalente (nome pertence ao {@code Subject}, não
-   * ao cadastro) — é sinal de possível fraude, não campo faltando, e vira
-   * {@link AssuranceCheck#divergences()} para {@code IdentityAssuranceRiskRule} pontuar. Nunca
+   * {@code recordBirthDateFromBureau} já usado para o bureau. Nascimento que <b>diverge</b> vira
+   * {@link AssuranceCheck#divergences()} para {@code IdentityAssuranceRiskRule} pontuar — é sinal
+   * de possível fraude, não campo faltando. Nome é diferente: pertence ao {@code Subject}, não ao
+   * cadastro (CMN 4.753), então não tem campo verificável equivalente <b>para ele</b> — divergir
+   * também vira {@code divergences()}, mas nunca {@code FieldVerification}. Nenhum dos dois casos
    * carrega o valor declarado nem o extraído — só quais campos divergiram.
    *
    * <p><b>Documento não entra nesta comparação.</b> {@code ExtractedDocumentFields.document} é o
@@ -134,21 +148,32 @@ public class AssuranceService {
   }
 
   /**
-   * Compara ignorando acento e caixa — o mesmo normalizador do fuzzy match ({@code
-   * NameNormalizer}). Pontuação não é removida, vira separador (espaço) e depois é colapsada com
-   * os demais espaços: {@code "D'ÁVILA"} normaliza para {@code "D AVILA"}, não {@code "DAVILA"}.
+   * Similaridade por token ({@code NameSimilarity}), não igualdade de string — o mesmo mecanismo
+   * que {@code BrasilApiBureauProvider}/{@code BigBoostBureauProvider} usam para comparar nome
+   * declarado contra fonte independente, e pelo mesmo motivo: OCR real abrevia nome do meio, corta
+   * sobrenome ou perde acento ("MARIA S SILVA" × "MARIA SILVA"), e igualdade exata transformaria
+   * cada uma dessas variações em falso positivo sistemático — cliente legítimo caindo em
+   * {@code EM_REVISAO} porque a documentoscopia leu o nome de um jeito ligeiramente diferente do
+   * cadastro. Nascimento continua comparação exata: data é data, não string livre sujeita a OCR.
+   *
+   * <p>Simétrica ({@link NameSimilarity#matchesEitherWay}), não direcional: diferente do bureau
+   * (onde o lado oficial é sempre a fonte externa), aqui tanto o nome declarado pelo titular no
+   * cadastro quanto o lido do documento podem ser o mais completo dos dois — OCR corta sobrenome
+   * (documento fica menor) ou abrevia nome do meio (documento fica igual, cadastro que veio maior
+   * de outra fonte), então exigir uma direção fixa deixaria passar metade dos casos reais.
    */
-  private static boolean diverges(String declared, String extracted) {
+  private boolean diverges(String declared, String extracted) {
     if (declared == null || extracted == null) {
       return false;
     }
-    return !NameNormalizer.normalize(declared).equals(NameNormalizer.normalize(extracted));
+    return !NameSimilarity.matchesEitherWay(declared, extracted, nameMatchThreshold);
   }
 
   /** Ver {@link #verifyDocument}: mesmo motivo para o consentimento entrar aqui. */
   @Transactional
   public AssuranceCheck verifyBiometrics(
       UUID subjectId, String tenantId, BiometricSubmission submission, AssuranceConsent consent) {
+    requireEnabled();
     requireConsent(consent);
     AssuranceCheck check = biometricProvider.verify(subjectId, tenantId, submission);
     return persist(check.withConsent(consent));
@@ -161,6 +186,20 @@ public class AssuranceService {
    * é o controller (Task 5): lá, "esqueceram de mandar o consentimento" é o caminho normal de um
    * cliente mal-implementado, não uma situação excepcional de programação.
    */
+  /**
+   * Kill switch de {@code barrier.assurance.enabled}. 409, não 500 nem 404: é uma recusa
+   * deliberada de operação, o mesmo tratamento que {@code ProblemExceptionHandler} já dá a
+   * {@code IllegalStateException}. Roda antes de {@code requireConsent} — desligado, nem a
+   * validação de consentimento importa.
+   */
+  private void requireEnabled() {
+    if (!enabled) {
+      throw new IllegalStateException(
+          "verificação de documentoscopia/biometria está desabilitada"
+              + " (barrier.assurance.enabled=false)");
+    }
+  }
+
   private void requireConsent(AssuranceConsent consent) {
     if (consent == null) {
       throw new IllegalArgumentException("consentimento é obrigatório para esta verificação");
