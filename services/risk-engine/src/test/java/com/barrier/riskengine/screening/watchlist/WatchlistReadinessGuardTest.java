@@ -59,6 +59,18 @@ class WatchlistReadinessGuardTest {
         .hasMessageContaining("PEP");
   }
 
+  /**
+   * Regressão desta branch: ADVERSE_MEDIA some da exigência que barra a subida — sem provedor
+   * contratado (o único é o StubNegativeMediaProvider, que não é WatchlistSource), barrar a subida
+   * derrubaria a plataforma inteira por falta de algo que ninguém contratou. O guard segue subindo
+   * e só avisa; quem fecha o fail-open de verdade é o ScreeningCoverageRiskRule.
+   */
+  @Test
+  void naoFalhaEmProducaoSemFonteDeMidiaNegativa() {
+    assertThatCode(() -> new WatchlistReadinessGuard(List.of(SEED, CEIS, OFAC, PEP), prod()).run(null))
+        .doesNotThrowAnyException();
+  }
+
   @Test
   void naoFalhaForaDeProducaoMesmoComApenasSeedAtiva() {
     MockEnvironment dev = new MockEnvironment();

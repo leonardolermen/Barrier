@@ -42,6 +42,14 @@ public class RiskScoringService {
 
   private static final Logger log = LoggerFactory.getLogger(RiskScoringService.class);
 
+  // 1.8.0: CorporateStructureCoverageRiskRule (regulatória) força REVIEW quando o bureau confirma
+  // a PJ mas o CompanyProfile chega sem QSA (basic_data da BigBoost não traz sócios) — antes,
+  // sócio sancionado numa PJ atendida por esse bureau não gerava apontamento nenhum e a avaliação
+  // concluía APROVADO em silêncio. Também: ScreeningCoverageRiskRule passou a exigir cobertura de
+  // ADVERSE_MEDIA além de SANCTION/PEP — sem provedor de mídia negativa contratado (o único é o
+  // StubNegativeMediaProvider, CSV vazio por padrão), a cobertura passa a faltar em prod e força
+  // REVIEW em vez de aprovar com NegativeMediaRiskRule permanentemente inerte.
+  //
   // 1.7.0: o AssessmentProcessor passou a montar o AssuranceSummary (antes o RiskContext nascia
   // sem ele) e a IdentityAssuranceRiskRule, que já existia e nunca disparava, passou a rodar de
   // verdade em produção. Nenhuma regra nem peso mudou, mas uma regra que existia e não pontuava
@@ -65,7 +73,7 @@ public class RiskScoringService {
   //
   // 1.2.0: IDENTITY_UNAVAILABLE passou a forçar REVIEW (era fail-open para APPROVE) e SANCTION
   // separou match por documento (REJECT) de match por nome (REVIEW).
-  static final String ENGINE_VERSION = "barrier-risk-rules/1.7.0";
+  static final String ENGINE_VERSION = "barrier-risk-rules/1.8.0";
   private static final int MAX_SCORE = 1000;
 
   private final List<RiskRule> rules;

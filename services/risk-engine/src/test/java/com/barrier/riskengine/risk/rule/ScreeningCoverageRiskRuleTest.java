@@ -26,7 +26,8 @@ class ScreeningCoverageRiskRuleTest {
 
   @Test
   void comCoberturaCompletaNaoSeAplica() {
-    when(status.coverage()).thenReturn(Set.of(MatchType.SANCTION, MatchType.PEP));
+    when(status.coverage())
+        .thenReturn(Set.of(MatchType.SANCTION, MatchType.PEP, MatchType.ADVERSE_MEDIA));
 
     assertThat(evaluate().triggered()).isFalse();
   }
@@ -43,17 +44,33 @@ class ScreeningCoverageRiskRuleTest {
 
     assertThat(result.triggered()).isTrue();
     assertThat(result.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
-    assertThat(result.reason()).contains("PEP").contains("SANCTION");
+    assertThat(result.reason()).contains("PEP").contains("SANCTION").contains("ADVERSE_MEDIA");
   }
 
   @Test
   void coberturaParcialTambemForcaRevisaoEDizOQueFalta() {
-    when(status.coverage()).thenReturn(Set.of(MatchType.SANCTION));
+    when(status.coverage()).thenReturn(Set.of(MatchType.SANCTION, MatchType.ADVERSE_MEDIA));
 
     RiskResult result = evaluate();
 
     assertThat(result.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
     assertThat(result.reason()).contains("PEP").doesNotContain("SANCTION");
     assertThat(result.evidences()).containsExactly("cobertura ausente:PEP");
+  }
+
+  /**
+   * Regressão desta branch: ADVERSE_MEDIA agora é obrigatória. Sem esta checagem, o único provedor
+   * (StubNegativeMediaProvider, CSV vazio por padrão em prod) deixava NegativeMediaRiskRule inerte
+   * sem nenhum registro de que mídia negativa nunca foi consultada de verdade.
+   */
+  @Test
+  void semCoberturaDeMidiaNegativaForcaRevisao() {
+    when(status.coverage()).thenReturn(Set.of(MatchType.SANCTION, MatchType.PEP));
+
+    RiskResult result = evaluate();
+
+    assertThat(result.triggered()).isTrue();
+    assertThat(result.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
+    assertThat(result.evidences()).containsExactly("cobertura ausente:ADVERSE_MEDIA");
   }
 }

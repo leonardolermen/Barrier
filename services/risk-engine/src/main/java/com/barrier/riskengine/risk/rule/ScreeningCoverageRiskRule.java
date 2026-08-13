@@ -28,7 +28,12 @@ import org.springframework.stereotype.Component;
 public class ScreeningCoverageRiskRule implements RiskRule {
 
   private static final String RULE_CODE = "SCREENING_COVERAGE";
-  private static final Set<MatchType> REQUIRED = Set.of(MatchType.SANCTION, MatchType.PEP);
+  // ADVERSE_MEDIA entra aqui (não em WatchlistReadinessGuard) de propósito: em prod, sem provedor
+  // de mídia negativa contratado, o único é o StubNegativeMediaProvider (CSV vazio por padrão) —
+  // NegativeMediaRiskRule nunca dispara e, sem esta linha, nada registrava isso. DEBARMENT fica de
+  // fora porque é apetite de risco (ver DebarmentRiskRule), não obrigação regulatória.
+  private static final Set<MatchType> REQUIRED =
+      Set.of(MatchType.SANCTION, MatchType.PEP, MatchType.ADVERSE_MEDIA);
   private static final int SCORE = 300;
 
   private final WatchlistImportStatus status;

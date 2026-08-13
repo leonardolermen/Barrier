@@ -20,7 +20,13 @@ import java.util.Set;
 public final class RegulatoryRiskRules {
 
   private static final Set<String> CODES =
-      Set.of("IDENTITY", "SANCTION", "PEP", "NEGATIVE_MEDIA", "SCREENING_COVERAGE");
+      Set.of(
+          "IDENTITY",
+          "SANCTION",
+          "PEP",
+          "NEGATIVE_MEDIA",
+          "SCREENING_COVERAGE",
+          "CORPORATE_STRUCTURE_COVERAGE");
 
   private RegulatoryRiskRules() {}
 

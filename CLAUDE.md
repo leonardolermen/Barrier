@@ -211,7 +211,36 @@ quando a BrasilAPI é a única fonte de PJ (API pública sem SLA sustentando con
 `barrier.identity.brasilapi.enabled` permite desligá-la; `application-prod.yml` liga a BigBoost.
 ⚠️ `basic_data` de empresas **não traz QSA** — perfil vem com abertura/CNAE e sócios vazios, então
 `CorporateStructureRiskRule` fica sem entrada quando este provider atende; e o schema ainda não foi
-verificado contra a API real.
+verificado contra a API real. Ver `CorporateStructureCoverageRiskRule`, abaixo, para o guard que
+fecha o silêncio disso.
+
+Guard de cobertura de QSA (branch `feat/kyb-coverage-gaps`): mesmo modo de falha que o projeto já
+fechou para watchlist — importação/bureau falha → dado vazio → CLEAR → todos aprovados, com trilha
+"limpa" — reaparecendo na estrutura societária. Quando a BigBoost atende sem QSA,
+`CorporateStructureRiskRule` fica sem entrada (nenhum sócio para achar estrangeiro/PJ) e o
+screening de partes relacionadas roda sobre lista vazia (nenhum sócio conferido contra
+OFAC/CSNU/PEP) — nada registrava isso, e a avaliação concluía APROVADO.
+`CorporateStructureCoverageRiskRule` força REVIEW quando o bureau confirma a PJ
+(`CompanyProfile != null`) mas `partners()` vem vazio; a evidência cita o bureau que atendeu
+(`IdentityCheck.provider()`), para o analista distinguir limite de fonte de empresa sem sócio.
+**Regulatória** (entra em `RegulatoryRiskRules`, migration V039) — diferente do
+`CorporateStructureRiskRule`, que pontua sinais *dentro* de um QSA existente e é apetite: esta
+regra detecta a *ausência* do QSA, o mesmo tipo de gap que `ScreeningCoverageRiskRule` fecha para
+listas. Não dá para distinguir "bureau sem QSA" de "empresa legitimamente sem sócio"
+(MEI/empresário individual) com o dado disponível hoje — `CompanyProfile` não carrega natureza
+jurídica/porte, e nenhum provider de CNPJ expõe isso; a regra é fail-closed de propósito,
+registrado no Javadoc.
+
+`ADVERSE_MEDIA` na exigência de cobertura (mesma branch): `ScreeningCoverageRiskRule.REQUIRED`
+passou a incluir `MatchType.ADVERSE_MEDIA` — o único provedor de mídia negativa é o
+`StubNegativeMediaProvider`, que casa contra CSV vazio por padrão, então em produção sem provedor
+contratado `NegativeMediaRiskRule` nunca disparava e nada acusava. `WatchlistReadinessGuard`
+**não** ganhou a mesma exigência: adicionar `ADVERSE_MEDIA` à lista que barra a subida em `prod`
+derrubaria a aplicação inteira por falta de um provedor que hoje ninguém contratou — mais forte
+que o problema justifica. Em vez disso, o guard só **avisa** quando falta cobertura de mídia
+negativa, no mesmo padrão do `CnpjBureauReadinessGuard` para a BrasilAPI como único bureau de PJ.
+`DEBARMENT` segue de fora da exigência de cobertura, de propósito — é apetite de risco (ver
+acima), não obrigação regulatória. `ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
 
 Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
 (`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode
