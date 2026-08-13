@@ -3,12 +3,19 @@ package com.barrier.riskengine.assurance.service;
 import com.barrier.riskengine.assurance.client.BiometricSubmission;
 import com.barrier.riskengine.assurance.client.DocumentSubmission;
 import com.barrier.riskengine.assurance.client.DocumentVerificationResult;
+import com.barrier.riskengine.assurance.client.ExtractedDocumentFields;
 import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationProvider;
 import com.barrier.riskengine.assurance.client.interfaces.DocumentVerificationProvider;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
+import com.barrier.riskengine.subject.domain.Subject;
+import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
+import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
+import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
+import com.barrier.riskengine.subject.service.SubjectService;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,16 +44,25 @@ public class AssuranceService {
   private final BiometricVerificationProvider biometricProvider;
   private final AssuranceCheckRepository repository;
   private final List<AssuranceRecordedListener> listeners;
+  private final SubjectProfileService subjectProfileService;
+  private final SubjectService subjectService;
+  private final FieldVerificationService fieldVerificationService;
 
   public AssuranceService(
       DocumentVerificationProvider documentProvider,
       BiometricVerificationProvider biometricProvider,
       AssuranceCheckRepository repository,
-      List<AssuranceRecordedListener> listeners) {
+      List<AssuranceRecordedListener> listeners,
+      SubjectProfileService subjectProfileService,
+      SubjectService subjectService,
+      FieldVerificationService fieldVerificationService) {
     this.documentProvider = documentProvider;
     this.biometricProvider = biometricProvider;
     this.repository = repository;
     this.listeners = listeners;
+    this.subjectProfileService = subjectProfileService;
+    this.subjectService = subjectService;
+    this.fieldVerificationService = fieldVerificationService;
   }
 
   /**
@@ -60,8 +76,79 @@ public class AssuranceService {
       UUID subjectId, String tenantId, DocumentSubmission submission, AssuranceConsent consent) {
     requireConsent(consent);
     DocumentVerificationResult result = documentProvider.verify(subjectId, tenantId, submission);
-    AssuranceCheck persisted = persist(result.check().withConsent(consent));
-    return new DocumentVerificationResult(persisted, result.extracted());
+    AssuranceCheck check = result.check().withConsent(consent);
+    ExtractedDocumentFields extracted = result.extracted();
+    if (extracted != null) {
+      check = reconcileWithCadastro(subjectId, tenantId, extracted, check);
+    }
+    AssuranceCheck persisted = persist(check);
+    return new DocumentVerificationResult(persisted, extracted);
+  }
+
+  /**
+   * Compara o que a documentoscopia leu contra o que o cadastro (CMN 4.753) e o {@code Subject}
+   * declaram — nunca escreve os campos extraídos no {@code SubjectProfile}.
+   *
+   * <p>Nascimento que confere é evento independente confirmando o valor declarado, então vira
+   * {@link FieldVerificationService#recordBirthDateFromDocument}, o mesmo padrão de
+   * {@code recordBirthDateFromBureau} já usado para o bureau. Nome, documento ou nascimento que
+   * <b>divergem</b> não têm campo verificável equivalente (nome/documento pertencem ao
+   * {@code Subject}, não ao cadastro) — é sinal de possível fraude, não campo faltando, e vira
+   * marcador em {@link AssuranceCheck#detail()} para {@code IdentityAssuranceRiskRule} pontuar.
+   * O marcador nunca carrega o valor declarado nem o extraído — só que houve divergência: a
+   * evidência vai para a trilha de auditoria, e CPF/CNPJ/nome não podem aparecer lá sem máscara.
+   */
+  private AssuranceCheck reconcileWithCadastro(
+      UUID subjectId, String tenantId, ExtractedDocumentFields extracted, AssuranceCheck check) {
+    SubjectProfile profile = subjectProfileService.find(subjectId, tenantId);
+    Subject subject = subjectService.findById(subjectId, tenantId);
+
+    List<String> divergences = new ArrayList<>();
+    if (extracted.birthDate() != null && profile.birthDate() != null) {
+      if (extracted.birthDate().equals(profile.birthDate())) {
+        fieldVerificationService.recordBirthDateFromDocument(
+            subjectId, tenantId, profile.birthDate(), extracted.birthDate(), check.providerReference());
+      } else {
+        divergences.add("nascimento");
+      }
+    }
+    if (diverges(subject.name(), extracted.name())) {
+      divergences.add("nome");
+    }
+    if (diverges(subject.document(), extracted.document())) {
+      divergences.add("documento");
+    }
+    if (divergences.isEmpty()) {
+      return check;
+    }
+    String note = AssuranceCheck.CADASTRO_DIVERGENCE_MARKER + ":" + String.join(",", divergences);
+    String detail = check.detail() == null ? note : check.detail() + " | " + note;
+    return new AssuranceCheck(
+        check.id(),
+        check.subjectId(),
+        check.tenantId(),
+        check.kind(),
+        check.outcome(),
+        check.score(),
+        check.provider(),
+        check.providerReference(),
+        check.algorithmVersion(),
+        check.submittedHash(),
+        detail,
+        check.checkedAt(),
+        check.consent());
+  }
+
+  /** Compara ignorando caixa e pontuação — CPF pontuado × sem pontuação não é divergência. */
+  private static boolean diverges(String declared, String extracted) {
+    if (declared == null || extracted == null) {
+      return false;
+    }
+    return !normalize(declared).equals(normalize(extracted));
+  }
+
+  private static String normalize(String value) {
+    return value.replaceAll("[^\\p{L}\\p{N}]", "").toUpperCase();
   }
 
   /** Ver {@link #verifyDocument}: mesmo motivo para o consentimento entrar aqui. */

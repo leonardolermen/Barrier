@@ -103,6 +103,12 @@ class AssuranceListenerCommitIsolationIntegrationTest {
     // identity_assurance_checks.subject_id tem FK para subjects — precisa existir de verdade.
     Subject subject = subjectService.findOrCreate("CPF", "52998224725", "Fulano de Tal");
     UUID subjectId = subject.id();
+    // Em produção o controller (AssuranceController) só chega a chamar verifyDocument depois de
+    // resolver o subject com vínculo exigido (SubjectService.getForTenant) — aqui o teste chama o
+    // service direto, então precisa criar o mesmo vínculo à mão para reproduzir o caminho real:
+    // reconcileWithCadastro agora lê o Subject via SubjectService.findById, que também exige
+    // vínculo (mesma defesa, um nível abaixo).
+    subjectService.link("default", subjectId);
 
     assertThatCode(
             () ->

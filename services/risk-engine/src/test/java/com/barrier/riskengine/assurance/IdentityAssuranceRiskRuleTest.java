@@ -16,7 +16,8 @@ import org.junit.jupiter.api.Test;
 
 class IdentityAssuranceRiskRuleTest {
 
-  private final IdentityAssuranceRiskRule rule = new IdentityAssuranceRiskRule(600, 100, 200, 3);
+  private final IdentityAssuranceRiskRule rule =
+      new IdentityAssuranceRiskRule(600, 100, 200, 3, 300);
 
   private static AssuranceCheck check(AssuranceKind kind, AssuranceOutcome outcome) {
     return new AssuranceCheck(

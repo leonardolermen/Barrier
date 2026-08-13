@@ -147,6 +147,34 @@ public class FieldVerificationService {
   }
 
   /**
+   * Registra a concordância entre o nascimento declarado e o que a documentoscopia leu do
+   * documento apresentado.
+   *
+   * <p>Mesmo precedente de {@link #recordBirthDateFromBureau}, com {@code method = DOCUMENT}: a
+   * fonte independente aqui é a documentoscopia, não o bureau, e a trilha precisa distinguir as
+   * duas — são forças de prova diferentes numa contestação. Divergência também não vira exceção
+   * aqui; quem decide o que fazer com ela é a regra de risco de documentoscopia, não este
+   * serviço.
+   */
+  @Transactional
+  public void recordBirthDateFromDocument(
+      UUID subjectId, String tenantId, LocalDate declared, LocalDate fromDocument, String evidence) {
+    if (declared == null || fromDocument == null || !declared.equals(fromDocument)) {
+      return;
+    }
+    repository.save(
+        new FieldVerification(
+            UUID.randomUUID(),
+            subjectId,
+            tenantId,
+            VerifiableField.BIRTH_DATE,
+            VerificationMethod.DOCUMENT,
+            declared.toString(),
+            evidence,
+            clock.instant()));
+  }
+
+  /**
    * Campos verificados <b>e ainda válidos</b> para o cadastro atual.
    *
    * <p>O cruzamento com o valor corrente é o que impede o truque de verificar um telefone e trocar

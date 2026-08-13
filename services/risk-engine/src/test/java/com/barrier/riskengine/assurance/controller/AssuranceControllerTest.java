@@ -22,6 +22,9 @@ import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepo
 import com.barrier.riskengine.assurance.service.AssuranceService;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
+import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
+import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
+import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
 import com.barrier.riskengine.subject.repository.interfaces.SubjectRepository;
 import com.barrier.riskengine.subject.service.SubjectService;
 import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
@@ -63,9 +66,22 @@ class AssuranceControllerTest {
     biometricProvider = Mockito.mock(BiometricVerificationProvider.class);
 
     SubjectService subjectService = new SubjectService(subjectRepository);
+    SubjectProfileService subjectProfileService = Mockito.mock(SubjectProfileService.class);
+    Mockito.when(subjectProfileService.find(Mockito.any(), Mockito.any()))
+        .thenAnswer(
+            invocation ->
+                SubjectProfile.blank(invocation.getArgument(0), invocation.getArgument(1)));
+    FieldVerificationService fieldVerificationService =
+        Mockito.mock(FieldVerificationService.class);
     AssuranceService assuranceService =
         new AssuranceService(
-            documentProvider, biometricProvider, assuranceRepository, List.of());
+            documentProvider,
+            biometricProvider,
+            assuranceRepository,
+            List.of(),
+            subjectProfileService,
+            subjectService,
+            fieldVerificationService);
     controller = new AssuranceController(subjectService, assuranceService);
   }
 
@@ -76,6 +92,7 @@ class AssuranceControllerTest {
   private Subject linkedSubject() {
     Subject subject = Subject.create("CPF", DOCUMENT, "Fulano de Tal");
     when(subjectRepository.findByDocument("CPF", DOCUMENT)).thenReturn(Optional.of(subject));
+    when(subjectRepository.findById(subject.id())).thenReturn(Optional.of(subject));
     when(subjectRepository.isLinked(TENANT_ID, subject.id())).thenReturn(true);
     return subject;
   }

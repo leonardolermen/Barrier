@@ -35,6 +35,18 @@ public record AssuranceCheck(
     Instant checkedAt,
     AssuranceConsent consent) {
 
+  /**
+   * Marcador gravado em {@link #detail} quando nome, documento ou nascimento lidos da
+   * documentoscopia divergem do que o cadastro (CMN 4.753) ou o {@code Subject} declaram.
+   *
+   * <p>Vive aqui, em vez de em {@code AssuranceSummary}/{@code RiskContext}, porque este é o
+   * único lugar que {@code AssuranceService} (módulo {@code assurance}) e
+   * {@code IdentityAssuranceRiskRule} (módulo {@code risk}) já compartilham sem violar a regra de
+   * camadas do ArchUnit — {@code risk.rule} não pode depender de uma classe do pacote
+   * {@code service} de outro módulo, só de {@code domain}.
+   */
+  public static final String CADASTRO_DIVERGENCE_MARKER = "cadastro-divergente";
+
   /** Verificação que sustenta aprovação automática: só o desfecho positivo serve. */
   public boolean passed() {
     return outcome == AssuranceOutcome.PASS;

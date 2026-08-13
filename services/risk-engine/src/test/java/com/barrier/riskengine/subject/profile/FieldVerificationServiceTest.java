@@ -8,6 +8,7 @@ import com.barrier.riskengine.subject.profile.domain.FieldVerification;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.domain.VerifiableField;
 import com.barrier.riskengine.subject.profile.domain.VerificationChallenge;
+import com.barrier.riskengine.subject.profile.domain.VerificationMethod;
 import com.barrier.riskengine.subject.profile.repository.interfaces.FieldVerificationRepository;
 import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
 import java.time.Clock;
@@ -201,6 +202,36 @@ class FieldVerificationServiceTest {
     service(AGORA)
         .recordBirthDateFromBureau(
             SUBJECT, TENANT, LocalDate.of(1990, 5, 20), LocalDate.of(1991, 5, 20), "x");
+
+    assertThat(repo.verifications).isEmpty();
+  }
+
+  /**
+   * Mesmo precedente do bureau ({@link #nascimentoQueBateComOBureauViraVerificacao}), mas com
+   * {@code method = DOCUMENT}: a fonte independente aqui é a documentoscopia, não o bureau, e a
+   * trilha precisa distinguir as duas — são forças de prova diferentes numa contestação.
+   */
+  @Test
+  void nascimentoQueBateComODocumentoViraVerificacao() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+
+    service(AGORA)
+        .recordBirthDateFromDocument(SUBJECT, TENANT, nascimento, nascimento, "doc-check:1");
+
+    assertThat(repo.verifications).hasSize(1);
+    FieldVerification verificacao = repo.verifications.getFirst();
+    assertThat(verificacao.method()).isEqualTo(VerificationMethod.DOCUMENT);
+    assertThat(verificacao.evidence()).isEqualTo("doc-check:1");
+    assertThat(service(AGORA).verifiedFields(SUBJECT, TENANT, perfil(null, nascimento)))
+        .containsExactly(VerifiableField.BIRTH_DATE);
+  }
+
+  /** Mesmo motivo do caso do bureau: divergência não vira verificação, nem exceção. */
+  @Test
+  void nascimentoDivergenteDoDocumentoNaoViraVerificacao() {
+    service(AGORA)
+        .recordBirthDateFromDocument(
+            SUBJECT, TENANT, LocalDate.of(1990, 5, 20), LocalDate.of(1991, 5, 20), "doc-check:1");
 
     assertThat(repo.verifications).isEmpty();
   }

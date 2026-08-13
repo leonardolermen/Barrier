@@ -37,8 +37,24 @@ class AssuranceServiceTest {
       Mockito.mock(BiometricVerificationProvider.class);
   private final AssuranceCheckRepository repository = Mockito.mock(AssuranceCheckRepository.class);
   private final AssuranceRecordedListener listener = Mockito.mock(AssuranceRecordedListener.class);
+  private final com.barrier.riskengine.subject.profile.service.SubjectProfileService
+      subjectProfileService =
+          Mockito.mock(com.barrier.riskengine.subject.profile.service.SubjectProfileService.class);
+  private final com.barrier.riskengine.subject.service.SubjectService subjectService =
+      Mockito.mock(com.barrier.riskengine.subject.service.SubjectService.class);
+  private final com.barrier.riskengine.subject.profile.service.FieldVerificationService
+      fieldVerificationService =
+          Mockito.mock(
+              com.barrier.riskengine.subject.profile.service.FieldVerificationService.class);
   private final AssuranceService service =
-      new AssuranceService(documentProvider, biometricProvider, repository, List.of(listener));
+      new AssuranceService(
+          documentProvider,
+          biometricProvider,
+          repository,
+          List.of(listener),
+          subjectProfileService,
+          subjectService,
+          fieldVerificationService);
 
   private DocumentSubmission submissao() {
     return new DocumentSubmission("ref", "RG", "hash");

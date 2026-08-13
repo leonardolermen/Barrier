@@ -14,5 +14,8 @@ public enum VerificationMethod {
   BUREAU,
 
   /** Valor conferido contra base de endereçamento. */
-  ADDRESS_LOOKUP
+  ADDRESS_LOOKUP,
+
+  /** Valor declarado bate com o que a documentoscopia leu do documento apresentado. */
+  DOCUMENT
 }

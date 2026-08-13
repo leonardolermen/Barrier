@@ -41,16 +41,19 @@ public class IdentityAssuranceRiskRule implements RiskRule {
   private final int inconclusiveScore;
   private final int retryScore;
   private final int retryThreshold;
+  private final int divergenceScore;
 
   public IdentityAssuranceRiskRule(
       @Value("${barrier.risk.assurance.fail-score:600}") int failScore,
       @Value("${barrier.risk.assurance.inconclusive-score:100}") int inconclusiveScore,
       @Value("${barrier.risk.assurance.retry-score:200}") int retryScore,
-      @Value("${barrier.risk.assurance.retry-threshold:3}") int retryThreshold) {
+      @Value("${barrier.risk.assurance.retry-threshold:3}") int retryThreshold,
+      @Value("${barrier.risk.assurance.divergence-score:300}") int divergenceScore) {
     this.failScore = failScore;
     this.inconclusiveScore = inconclusiveScore;
     this.retryScore = retryScore;
     this.retryThreshold = retryThreshold;
+    this.divergenceScore = divergenceScore;
   }
 
   @Override
@@ -86,6 +89,15 @@ public class IdentityAssuranceRiskRule implements RiskRule {
       recommendation = RiskRecommendation.REVIEW;
       evidence.add("biometria: " + assurance.biometricAttempts() + " tentativas");
     }
+    // Nome/documento pertencem ao Subject, não ao cadastro — não há campo verificável
+    // equivalente a VerifiableField para eles, então a divergência lida do documento vira sinal
+    // de risco aqui, não campo faltando no gate de completude. O marcador nunca carrega o valor
+    // declarado nem o extraído (PII) — só que houve divergência.
+    if (documentDataDiverges(assurance)) {
+      score += divergenceScore;
+      recommendation = RiskRecommendation.REVIEW;
+      evidence.add("documentoscopia: dado lido do documento diverge do cadastro declarado");
+    }
 
     if (score == 0) {
       return RiskResult.notApplicable(RULE_CODE);
@@ -101,6 +113,15 @@ public class IdentityAssuranceRiskRule implements RiskRule {
 
   private static String detailOf(com.barrier.riskengine.assurance.domain.AssuranceCheck check) {
     return check.provider() + " ref " + check.providerReference();
+  }
+
+  private static boolean documentDataDiverges(AssuranceSummary assurance) {
+    com.barrier.riskengine.assurance.domain.AssuranceCheck document = assurance.document();
+    return document != null
+        && document.detail() != null
+        && document
+            .detail()
+            .contains(com.barrier.riskengine.assurance.domain.AssuranceCheck.CADASTRO_DIVERGENCE_MARKER);
   }
 
   @Override
