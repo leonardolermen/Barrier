@@ -10,9 +10,11 @@ import com.barrier.riskengine.assurance.controller.dto.SubmitDocumentRequest;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.service.AssuranceService;
+import com.barrier.riskengine.subject.domain.DocumentTypeResolver;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
 import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -55,7 +57,7 @@ public class AssuranceController {
   public ResponseEntity<AssuranceCheckResponse> submitDocument(
       AuthenticatedTenant tenant,
       @PathVariable String document,
-      @RequestBody SubmitDocumentRequest request) {
+      @Valid @RequestBody SubmitDocumentRequest request) {
     Subject subject = resolveSubject(tenant.id(), document);
     AssuranceConsent consent = toConsent(request.consent());
     DocumentSubmission submission =
@@ -71,7 +73,7 @@ public class AssuranceController {
   public ResponseEntity<AssuranceCheckResponse> submitBiometric(
       AuthenticatedTenant tenant,
       @PathVariable String document,
-      @RequestBody SubmitBiometricRequest request) {
+      @Valid @RequestBody SubmitBiometricRequest request) {
     Subject subject = resolveSubject(tenant.id(), document);
     AssuranceConsent consent = toConsent(request.consent());
     BiometricSubmission submission =
@@ -83,19 +85,13 @@ public class AssuranceController {
   }
 
   /**
-   * Mesma resolução de {@code SubjectProfileController}/{@code SubjectController}: documento →
-   * tipo pelo tamanho, subject buscado com vínculo do tenant exigido. É o gate deste controller —
-   * ver Javadoc da classe.
+   * Mesma resolução de {@code SubjectProfileController}/{@code SubjectController} (agora via
+   * {@code DocumentTypeResolver} compartilhado): documento → tipo pelo tamanho, subject buscado
+   * com vínculo do tenant exigido. É o gate deste controller — ver Javadoc da classe.
    */
   private Subject resolveSubject(String tenantId, String document) {
-    String digits = document.replaceAll("\\D", "");
-    String documentType =
-        switch (digits.length()) {
-          case 11 -> "CPF";
-          case 14 -> "CNPJ";
-          default -> throw new IllegalArgumentException("Documento inválido");
-        };
-    return subjectService.getForTenant(tenantId, documentType, digits);
+    DocumentTypeResolver.Resolved resolved = DocumentTypeResolver.resolve(document);
+    return subjectService.getForTenant(tenantId, resolved.documentType(), resolved.digits());
   }
 
   private static AssuranceConsent toConsent(ConsentRequest request) {

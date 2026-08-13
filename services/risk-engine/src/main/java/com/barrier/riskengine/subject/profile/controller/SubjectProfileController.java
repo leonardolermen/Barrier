@@ -3,6 +3,7 @@ package com.barrier.riskengine.subject.profile.controller;
 import com.barrier.riskengine.subject.profile.controller.dto.UpdateProfileRequest;
 import com.barrier.riskengine.subject.profile.controller.dto.ProfileResponse;
 
+import com.barrier.riskengine.subject.domain.DocumentTypeResolver;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
@@ -44,14 +45,9 @@ public class SubjectProfileController {
       AuthenticatedTenant tenant,
       @PathVariable String document,
       @RequestBody UpdateProfileRequest request) {
-    String digits = document.replaceAll("\\D", "");
-    String documentType =
-        switch (digits.length()) {
-          case 11 -> "CPF";
-          case 14 -> "CNPJ";
-          default -> throw new IllegalArgumentException("Documento inválido");
-        };
-    Subject subject = subjectService.getForTenant(tenant.id(), documentType, digits);
+    DocumentTypeResolver.Resolved resolved = DocumentTypeResolver.resolve(document);
+    Subject subject =
+        subjectService.getForTenant(tenant.id(), resolved.documentType(), resolved.digits());
 
     SubjectProfile profile = profileService.upsert(subject.id(), tenant.id(), request.toPatch());
     // A resposta precisa incluir as lacunas de verificação, não só as de preenchimento: senão o
@@ -59,7 +55,7 @@ public class SubjectProfileController {
     // explique a contradição.
     RegistrationCompleteness completeness =
         RegistrationCompleteness.evaluate(
-            documentType,
+            resolved.documentType(),
             profile,
             verificationService.verifiedFields(subject.id(), tenant.id(), profile));
     return ResponseEntity.ok(ProfileResponse.of(completeness));

@@ -6,11 +6,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.barrier.riskengine.assessment.controller.dto.AssessmentResponse;
 import com.barrier.riskengine.assessment.controller.dto.SubmitAssessmentRequest;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
+import com.barrier.riskengine.assurance.controller.dto.AssuranceCheckResponse;
+import com.barrier.riskengine.assurance.controller.dto.ConsentRequest;
+import com.barrier.riskengine.assurance.controller.dto.SubmitDocumentRequest;
 import com.barrier.riskengine.subject.profile.controller.dto.ProfileResponse;
 import com.barrier.riskengine.subject.profile.controller.dto.UpdateProfileRequest;
 import com.barrier.riskengine.tenant.repository.interfaces.TenantRepository;
 import com.barrier.riskengine.tenant.service.ApiKeyService;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -271,5 +275,60 @@ class TenantIsolationIntegrationTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null));
     assertThat(deA.missingFields())
         .doesNotContain("data de nascimento", "nacionalidade", "ocupação", "endereço");
+  }
+
+  // --- Isolamento de assurance (Task 5) ------------------------------------------------------
+
+  /**
+   * O caso que a revisão da Task 5 pediu explicitamente: dois tenants reais, credenciais reais,
+   * atravessando o {@code ProblemExceptionHandler} de verdade — não a exceção mockada de um teste
+   * unitário. A pergunta que este teste responde não é "o service lança
+   * SubjectNotFoundException", é "o parceiro que não tem vínculo recebe 404 HTTP, e nenhum
+   * AssuranceCheck nasce com o par (subject de A, tenant de B)".
+   */
+  @Test
+  void submissaoDeAssuranceDeUmTenantNaoVazaParaOutro() {
+    String tenantA = credencialDe("parceiro-assurance-a");
+    String tenantB = credencialDe("parceiro-assurance-b");
+
+    // Só A cria o vínculo com o subject (POST /v1/assessments acha-ou-cria e vincula).
+    submete(com(tenantA), CPF_ALVO, "Fulano de Tal");
+
+    // B nunca viu esse CPF: sem vínculo, a submissão de assurance tem de responder 404 — e não
+    // 403, que confirmaria que o cliente existe em outro parceiro.
+    assertThatThrownBy(() -> submeteAssuranceDocumento(com(tenantB)))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.NOT_FOUND));
+
+    // E nenhum AssuranceCheck foi gravado para o tenant B — a tentativa recusada não deixou
+    // rastro no par cruzado que o ADR-0011 existe para impedir.
+    Integer checksDeB =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM identity_assurance_checks WHERE tenant_id = ?",
+            Integer.class,
+            "parceiro-assurance-b");
+    assertThat(checksDeB).isZero();
+
+    // Controle: A, que tem vínculo, consegue submeter normalmente (prova que o 404 acima é
+    // isolamento, não um endpoint quebrado).
+    AssuranceCheckResponse respostaDeA = submeteAssuranceDocumento(com(tenantA));
+    assertThat(respostaDeA.id()).isNotBlank();
+  }
+
+  private AssuranceCheckResponse submeteAssuranceDocumento(RestClient client) {
+    return client
+        .post()
+        .uri("/v1/subjects/{doc}/assurance/document", CPF_ALVO.replaceAll("\\D", ""))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            new SubmitDocumentRequest(
+                "capture-ref",
+                "RG",
+                "hash-abc",
+                new ConsentRequest(
+                    "consent-ref", "verificação de identidade", Instant.now().minusSeconds(60))))
+        .retrieve()
+        .toEntity(AssuranceCheckResponse.class)
+        .getBody();
   }
 }

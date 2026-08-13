@@ -11,6 +11,7 @@ import com.barrier.riskengine.assurance.client.DocumentVerificationResult;
 import com.barrier.riskengine.assurance.client.ExtractedDocumentFields;
 import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationProvider;
 import com.barrier.riskengine.assurance.client.interfaces.DocumentVerificationProvider;
+import com.barrier.riskengine.assurance.controller.dto.AssuranceCheckResponse;
 import com.barrier.riskengine.assurance.controller.dto.ConsentRequest;
 import com.barrier.riskengine.assurance.controller.dto.SubmitBiometricRequest;
 import com.barrier.riskengine.assurance.controller.dto.SubmitDocumentRequest;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * O controller é o perímetro (CLAUDE.md/ADR-0011): resolve o subject pelo documento exigindo
@@ -51,6 +53,7 @@ class AssuranceControllerTest {
   private DocumentVerificationProvider documentProvider;
   private BiometricVerificationProvider biometricProvider;
   private AssuranceController controller;
+  private final ObjectMapper mapper = new ObjectMapper();
 
   @BeforeEach
   void setUp() {
@@ -82,7 +85,8 @@ class AssuranceControllerTest {
         "capture-ref",
         "RG",
         "hash-abc",
-        new ConsentRequest("consent-ref", "verificação de identidade", Instant.now().minusSeconds(60)));
+        new ConsentRequest(
+            "consent-ref", "verificação de identidade", Instant.now().minusSeconds(60)));
   }
 
   @Test
@@ -97,8 +101,52 @@ class AssuranceControllerTest {
     verify(documentProvider, never()).verify(any(), any(), any());
   }
 
+  /**
+   * Consentimento presente mas incompleto (fix round 1): no HTTP real, {@code @Valid} em cascata
+   * já barra isto antes de chegar aqui — mas o controller não pode contar só com a anotação;
+   * {@code AssuranceConsent.validate()} (chamada por {@code AssuranceService.requireConsent}) é a
+   * segunda linha de defesa, e é ela que este teste prova ao chamar o controller direto, sem
+   * passar pela infraestrutura de Bean Validation do MVC.
+   */
   @Test
-  void subjectSemVinculoDevolveNotFound() {
+  void consentimentoPresenteMasInvalidoRecusaAntesDeChamarProvedor() {
+    linkedSubject();
+    SubmitDocumentRequest request =
+        new SubmitDocumentRequest(
+            "capture-ref", "RG", "hash-abc", new ConsentRequest("  ", "KYC", Instant.now()));
+
+    assertThatThrownBy(() -> controller.submitDocument(tenant(), DOCUMENT, request))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("referência");
+
+    verify(documentProvider, never()).verify(any(), any(), any());
+  }
+
+  /**
+   * O caso que a Task 5 existe para fechar: o subject <b>existe</b> (outro parceiro já o
+   * conhece), mas não tem vínculo com este tenant. Diferente de "documento não existe em lugar
+   * nenhum" — é exatamente o cenário em que 403 vazaria a existência do cliente alheio. Sem o
+   * stub de {@code isLinked} devolvendo {@code false}, este teste continuaria verde mesmo que o
+   * filtro de vínculo fosse removido de {@code SubjectService.getForTenant} (confirmado: comentar
+   * o {@code .filter(...)} lá faz este teste falhar).
+   */
+  @Test
+  void subjectExistenteSemVinculoDevolveNotFound() {
+    Subject subjectDeOutroTenant = Subject.create("CPF", DOCUMENT, "Fulano de Tal");
+    when(subjectRepository.findByDocument("CPF", DOCUMENT))
+        .thenReturn(Optional.of(subjectDeOutroTenant));
+    when(subjectRepository.isLinked(TENANT_ID, subjectDeOutroTenant.id())).thenReturn(false);
+    SubmitDocumentRequest request = documentRequestWithConsent();
+
+    assertThatThrownBy(() -> controller.submitDocument(tenant(), DOCUMENT, request))
+        .isInstanceOf(SubjectNotFoundException.class);
+
+    verify(documentProvider, never()).verify(any(), any(), any());
+  }
+
+  /** Caso "não existe em lugar nenhum" — distinto do anterior, mas também tem de dar 404. */
+  @Test
+  void subjectInexistenteDevolveNotFound() {
     when(subjectRepository.findByDocument("CPF", DOCUMENT)).thenReturn(Optional.empty());
     SubmitDocumentRequest request = documentRequestWithConsent();
 
@@ -131,11 +179,16 @@ class AssuranceControllerTest {
     when(documentProvider.verify(any(), any(), any()))
         .thenReturn(new DocumentVerificationResult(check, extracted));
 
-    ResponseEntity<?> response =
+    ResponseEntity<AssuranceCheckResponse> response =
         controller.submitDocument(tenant(), DOCUMENT, documentRequestWithConsent());
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isNotNull();
+    AssuranceCheckResponse body = response.getBody();
+    assertThat(body).isNotNull();
+    assertThat(body.outcome()).isEqualTo("PASS");
+    assertThat(body.provider()).isEqualTo("stub-document-provider");
+    assertThat(body.providerReference()).isEqualTo("prov-ref-123");
+    assertThat(body.algorithmVersion()).isEqualTo("v1.0.0");
   }
 
   @Test
@@ -161,12 +214,14 @@ class AssuranceControllerTest {
     when(documentProvider.verify(any(), any(), any()))
         .thenReturn(new DocumentVerificationResult(check, extracted));
 
-    ResponseEntity<?> response =
+    ResponseEntity<AssuranceCheckResponse> response =
         controller.submitDocument(tenant(), DOCUMENT, documentRequestWithConsent());
 
-    String body = String.valueOf(response.getBody());
-    assertThat(body).doesNotContain("Fulano de Tal");
-    assertThat(body).doesNotContain("12345678900");
+    // Serialização real do Jackson, não o toString() do record: um campo esquecido no DTO só
+    // vazaria pelo caminho que o parceiro de fato recebe.
+    String json = mapper.writeValueAsString(response.getBody());
+    assertThat(json).doesNotContain("Fulano de Tal");
+    assertThat(json).doesNotContain("12345678900");
   }
 
   @Test
