@@ -42,6 +42,11 @@ public class RiskScoringService {
 
   private static final Logger log = LoggerFactory.getLogger(RiskScoringService.class);
 
+  // 1.7.0: o AssessmentProcessor passou a montar o AssuranceSummary (antes o RiskContext nascia
+  // sem ele) e a IdentityAssuranceRiskRule, que já existia e nunca disparava, passou a rodar de
+  // verdade em produção. Nenhuma regra nem peso mudou, mas uma regra que existia e não pontuava
+  // agora pontua para o mesmo insumo — não subir mentiria na auditoria.
+  //
   // 1.5.0: o screening passou a consultar sócios do QSA e representante legal, não só o titular —
   // uma PJ limpa com sócio em lista deixa de sair aprovada automaticamente. Apontamento de parte
   // relacionada escala para revisão, mas nunca reprova a PJ sozinho (a entidade sancionada é o
@@ -60,7 +65,7 @@ public class RiskScoringService {
   //
   // 1.2.0: IDENTITY_UNAVAILABLE passou a forçar REVIEW (era fail-open para APPROVE) e SANCTION
   // separou match por documento (REJECT) de match por nome (REVIEW).
-  static final String ENGINE_VERSION = "barrier-risk-rules/1.6.0";
+  static final String ENGINE_VERSION = "barrier-risk-rules/1.7.0";
   private static final int MAX_SCORE = 1000;
 
   private final List<RiskRule> rules;

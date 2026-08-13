@@ -7,6 +7,7 @@ import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -61,6 +62,7 @@ public class StubDocumentVerificationProvider implements DocumentVerificationPro
             "stub/1.0.0",
             submission.submittedHash(),
             "documentoscopia simulada (" + submission.documentType() + ")",
+            Set.of(),
             now,
             null);
     // Só um desfecho positivo sustenta os dados extraídos: documento reprovado ou inconclusivo

@@ -1,6 +1,6 @@
 # ADR-0016: Virada para plataforma completa (Modelo B), em três frentes sequenciadas
 
-- **Status:** Proposto
+- **Status:** Aceito
 - **Data:** 2026-08-12
 - **Substitui parcialmente:** [ADR-0005](0005-product-model-risk-engine.md) — o "começar pelo
   Modelo A" continua descrevendo o que existe hoje; a decisão de *quando* ir para B é esta.
@@ -105,3 +105,63 @@ antes da etapa 2 estar pronta:
   resultado. O risco secundário é regulatório: enquanto as bases legais e o registro de
   consentimento não existirem, a etapa 3 fica bloqueada mesmo com o código pronto — e isso é
   intencional.
+
+## Revisão (2026-08-12) — implementação da frente de assurance
+
+O texto de "Decisão" acima **não foi apagado**: é o raciocínio que valia quando este ADR foi
+escrito, e a ordenação que ele descreve (etapa 2 como pré-requisito bloqueante da etapa 3) era
+correta para o cenário que ele considerava — guardar a imagem. O autor original revê a própria
+decisão à luz de uma escolha que já estava registrada no próprio texto (item 3: "a imagem não é
+armazenada"), mas cujo efeito sobre o *sequenciamento* não tinha sido puxado até o fim. Corrige-se
+aqui, e não se reescreve acima, porque um ADR serve exatamente para preservar o "por quê" de antes
+e mostrar o que mudou.
+
+**1. A etapa 2 (cifragem em repouso) deixa de ser pré-requisito bloqueante da etapa 3.**
+
+O sequenciamento original existia porque uma base biométrica em texto puro é catastrófica — base
+vazada não se revoga, ninguém troca de rosto. Isso continua verdade para *imagem* e *template*.
+Mas a decisão já tomada nesta mesma seção é não guardar nem uma coisa nem outra: o que fica no
+banco é o desfecho (bateu/não bateu/inconclusivo), o score, o provedor e a referência da consulta
+no provedor — mesmo padrão de `BureauTrace`, ponteiro para a cópia íntegra que o provedor mantém.
+Isso é **dado pessoal comum**, do mesmo nível do `raw_response` do bureau (V031) e do segredo de
+HMAC do webhook (V005) — ambos já persistidos sem cifragem, como pendência conhecida da Fase 6, e
+sem que isso tenha bloqueado a construção do resto do sistema. Não há motivo para tratar o
+resultado de assurance de forma mais restritiva do que dado que já está em produção sem cifragem.
+
+Cifragem em repouso continua necessária e continua no plano (Fase 6) — a mudança é só que deixa de
+ser bloqueio para a etapa 3 poder ser construída e ligada. O risco que a sequência original evitava
+(capturar biometria antes de cifrar) segue evitado por outro mecanismo: **a imagem nunca é
+armazenada**, então não existe acervo biométrico para cifrar em primeiro lugar.
+
+**2. A etapa 1 (veracidade do dado declarado) consta como substancialmente implementada — não
+concluída.**
+
+`subject_field_verifications` (migration V034), `FieldVerification`, `VerificationMethod` e
+`FieldVerificationService` implementam a distinção entre campo declarado e campo verificado; OTP
+cobre telefone/e-mail, nascimento é verificável tanto contra o bureau (`recordBirthDateFromBureau`)
+quanto contra a documentoscopia (`recordBirthDateFromDocument`, etapa 3), e o gate de completude
+passou a exigir verificação nos campos que essas fontes sustentam.
+
+> **Correção (revisão final):** esta seção afirmava a etapa 1 concluída; é otimista. Falta
+> **validação de endereço** — `VerifiableField.ADDRESS` e `VerificationMethod.ADDRESS_LOOKUP` estão
+> definidos e nunca usados, e `FieldVerificationService.challenge` recusa `ADDRESS` explicitamente.
+> Cadastro plausível e inventado ainda satisfaz o gate **para o campo endereço** especificamente —
+> o furo original está fechado para telefone, e-mail e nascimento, não para todo campo verificável.
+> Por isso `docs/implementation/plano-remediacao-auditoria.md` mantém o item "Verificar dados, não
+> só presença" **aberto**: o plano de remediação está certo, este ADR estava otimista.
+
+**3. O bloqueio por consentimento passa a estar atendido.**
+
+A etapa 3 previa "consentimento explícito registrado" como parte do desenho. Isso está implementado
+na submissão: `AssuranceConsent` é obrigatório na assinatura do serviço (`AssuranceService.
+verifyDocument`/`verifyBiometrics`), gravado junto do `AssuranceCheck` (colunas em V036), e a
+ausência de consentimento recusa com 400 antes de qualquer chamada ao provedor — nunca silenciosa,
+nunca depois do fato.
+
+**Consequência prática:** a etapa 3 (documentoscopia + biometria) deixou de estar bloqueada pela
+etapa 2 e foi implementada — `AssuranceService`, `IdentityAssuranceRiskRule`,
+`AssuranceRecordedListener`/`AssuranceReassessmentTrigger` e a reavaliação automática. O que segue
+em aberto é exatamente o que a seção "Fora de escopo" da spec de implementação já registrava:
+cifragem em repouso (Fase 6, agora sem bloquear esta frente), o subsistema completo de
+consentimento (revogação, expiração, gestão por finalidade) e UBO além do 1º grau (etapa 4 deste
+ADR).

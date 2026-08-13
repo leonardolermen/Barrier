@@ -21,7 +21,7 @@ class ScreeningCoverageRiskRuleTest {
 
   private RiskResult evaluate() {
     return new ScreeningCoverageRiskRule(status)
-        .evaluate(new RiskContext("aid", "default", null, null, null, null));
+        .evaluate(new RiskContext("aid", "default", null, null, null, null, null));
   }
 
   @Test

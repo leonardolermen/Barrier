@@ -53,8 +53,10 @@ POST /v1/subjects/{document}/assurance/document
 POST /v1/subjects/{document}/assurance/biometric
 ```
 
-Escopo por tenant via `X-Client-Id` — é o parceiro submetendo pelo cliente final dele, não
-operação admin, então segue a pré-auth do `POST /v1/assessments` e não o `X-Admin-Key`.
+> **Correção (revisão final):** o texto abaixo descrevia o escopo por `X-Client-Id`, anterior à
+> troca para autenticação por credencial. Escopo por tenant vem de `Authorization: Bearer` via
+> `TenantAuthenticationFilter` — é o parceiro submetendo pelo cliente final dele, não operação
+> admin, então segue a pré-auth do `POST /v1/assessments` e não o `X-Admin-Key`.
 
 Resolvem o subject pelo documento **exigindo vínculo do tenant**; 404 sem vínculo, mesma regra do
 `GET /v1/subjects/{documento}` — sem isso, um parceiro submeteria verificação sobre cliente de
@@ -63,9 +65,18 @@ outro e descobriria da existência dele pela resposta.
 Corpo: os `DocumentSubmission`/`BiometricSubmission` já existentes (`captureReference`,
 `submittedHash` — nunca imagem) mais o bloco de consentimento. Ausente ou incompleto → 400.
 
-Resposta: o `AssuranceCheck` gravado (desfecho, score, provedor, referência, versão do algoritmo)
-mais o id da reavaliação disparada. Nunca os campos extraídos do documento em si — devolvê-los
-transformaria o endpoint num serviço de OCR sobre documento alheio.
+Resposta: o `AssuranceCheck` gravado (desfecho, score, provedor, referência, versão do algoritmo).
+Nunca os campos extraídos do documento em si — devolvê-los transformaria o endpoint num serviço
+de OCR sobre documento alheio.
+
+> **Correção (revisão final):** o texto acima previa devolver também o id da reavaliação. Não
+> devolve, e não é omissão: `AssuranceService.scheduleNotification` agenda a notificação para
+> `TransactionSynchronization.afterCommit()`, e o listener que cria a reavaliação
+> (`AssuranceReassessmentTrigger`) roda depois do commit da requisição HTTP — o id da nova
+> avaliação simplesmente não existe ainda no instante em que a resposta é montada. A decisão de
+> disparar a reavaliação já está registrada (e é deliberada, ver "A reavaliação dispara em
+> qualquer desfecho" acima); o parceiro fica sabendo do resultado dela pelo canal de sempre
+> (webhook), não pela resposta síncrona deste endpoint.
 
 **A reavaliação dispara em qualquer desfecho**, não só em `PASS`. Um `FAIL` de prova de vida é
 justamente o insumo que mais muda a decisão, e disparar só no sucesso deixaria a avaliação parada
@@ -86,8 +97,15 @@ persistidos como tal.
 - Nascimento que confere com o declarado → `FieldVerification(BIRTH_DATE, method = DOCUMENT,
   evidence = providerReference)` via `FieldVerificationService`, espelhando o
   `recordBirthDateFromBureau` que já existe. Novo valor em `VerificationMethod`.
-- Nome ou documento divergentes → fator de risco explicável. `VerifiableField` não os cobre porque
-  são do `Subject`, não do cadastro: divergência aqui é sinal de fraude, não campo faltando.
+- Nome ou nascimento divergentes → fator de risco explicável. `VerifiableField` não os cobre
+  porque nome é do `Subject`, não do cadastro: divergência aqui é sinal de fraude, não campo
+  faltando.
+
+> **Correção (revisão final):** o texto acima dizia "nome ou documento". O número do documento
+> apresentado (RG/CNH) nunca entrou nessa comparação — foi removido de propósito, porque não é
+> comparável com o CPF/CNPJ que identifica o `Subject` (ADR-0011): são grandezas diferentes, e
+> compará-las geraria divergência sistemática (todo RG "diverge" do CPF do cadastro). A
+> comparação real é nome e **nascimento** — ver `DivergentField`, que não tem valor `DOCUMENT`.
 
 ### Pipeline
 
@@ -134,7 +152,17 @@ TDD em tudo — teste vermelho antes de cada mudança de produção.
 ## Suposições
 
 - Nenhum provedor real de documentoscopia/biometria contratado; os stubs seguem sendo as únicas
-  implementações. `AssuranceProviderReadinessGuard` já existe para barrar prod.
+  implementações em desenvolvimento.
+
+> **Correção (revisão final):** este item dizia que `AssuranceProviderReadinessGuard` "já existe
+> para barrar prod". Não barra mais nada, e essa mudança é deliberada, não regressão: os stubs
+> são `@Profile("!prod")`, então em produção eles não existem como bean — quem preenche o lugar é
+> `UnavailableDocumentVerificationProvider`/`UnavailableBiometricVerificationProvider`
+> (`@Profile("prod")`), que sempre devolvem `UNAVAILABLE`. Não há mais provedor simulado para
+> barrar em `prod`; o guard passou a só **avisar** em log quando é o provedor de emergência que
+> está ativo (nenhum contrato real firmado), no padrão de `CnpjBureauReadinessGuard`. Quem lê
+> esta seção sem essa correção suporia produção protegida por um gate de startup que não existe
+> mais nesse formato.
 - A submissão é do parceiro, não do cliente final direto.
 
 ## Fora de escopo

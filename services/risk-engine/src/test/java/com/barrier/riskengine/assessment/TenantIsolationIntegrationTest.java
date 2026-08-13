@@ -6,11 +6,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.barrier.riskengine.assessment.controller.dto.AssessmentResponse;
 import com.barrier.riskengine.assessment.controller.dto.SubmitAssessmentRequest;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
+import com.barrier.riskengine.assurance.controller.dto.AssuranceCheckResponse;
+import com.barrier.riskengine.assurance.controller.dto.ConsentRequest;
+import com.barrier.riskengine.assurance.controller.dto.SubmitBiometricRequest;
+import com.barrier.riskengine.assurance.controller.dto.SubmitDocumentRequest;
 import com.barrier.riskengine.subject.profile.controller.dto.ProfileResponse;
 import com.barrier.riskengine.subject.profile.controller.dto.UpdateProfileRequest;
 import com.barrier.riskengine.tenant.repository.interfaces.TenantRepository;
 import com.barrier.riskengine.tenant.service.ApiKeyService;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -271,5 +276,210 @@ class TenantIsolationIntegrationTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null));
     assertThat(deA.missingFields())
         .doesNotContain("data de nascimento", "nacionalidade", "ocupação", "endereço");
+  }
+
+  // --- Isolamento de assurance (Task 5) ------------------------------------------------------
+
+  /**
+   * O caso que a revisão da Task 5 pediu explicitamente: dois tenants reais, credenciais reais,
+   * atravessando o {@code ProblemExceptionHandler} de verdade — não a exceção mockada de um teste
+   * unitário. A pergunta que este teste responde não é "o service lança
+   * SubjectNotFoundException", é "o parceiro que não tem vínculo recebe 404 HTTP, e nenhum
+   * AssuranceCheck nasce com o par (subject de A, tenant de B)".
+   */
+  @Test
+  void submissaoDeAssuranceDeUmTenantNaoVazaParaOutro() {
+    String tenantA = credencialDe("parceiro-assurance-a");
+    String tenantB = credencialDe("parceiro-assurance-b");
+
+    // Só A cria o vínculo com o subject (POST /v1/assessments acha-ou-cria e vincula).
+    submete(com(tenantA), CPF_ALVO, "Fulano de Tal");
+
+    // B nunca viu esse CPF: sem vínculo, a submissão de assurance tem de responder 404 — e não
+    // 403, que confirmaria que o cliente existe em outro parceiro.
+    assertThatThrownBy(() -> submeteAssuranceDocumento(com(tenantB)))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.NOT_FOUND));
+
+    // E nenhum AssuranceCheck foi gravado para o tenant B — a tentativa recusada não deixou
+    // rastro no par cruzado que o ADR-0011 existe para impedir.
+    Integer checksDeB =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM identity_assurance_checks WHERE tenant_id = ?",
+            Integer.class,
+            "parceiro-assurance-b");
+    assertThat(checksDeB).isZero();
+
+    // Controle: A, que tem vínculo, consegue submeter normalmente (prova que o 404 acima é
+    // isolamento, não um endpoint quebrado).
+    AssuranceCheckResponse respostaDeA = submeteAssuranceDocumento(com(tenantA));
+    assertThat(respostaDeA.id()).isNotBlank();
+  }
+
+  private AssuranceCheckResponse submeteAssuranceDocumento(RestClient client) {
+    return client
+        .post()
+        .uri("/v1/subjects/{doc}/assurance/document", CPF_ALVO.replaceAll("\\D", ""))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            new SubmitDocumentRequest(
+                "capture-ref",
+                "RG",
+                "hash-abc",
+                new ConsentRequest(
+                    "consent-ref", "verificação de identidade", Instant.now().minusSeconds(60))))
+        .retrieve()
+        .toEntity(AssuranceCheckResponse.class)
+        .getBody();
+  }
+
+  // --- Bean Validation por HTTP (achados MINOR/IMPORTANT da revisão final) ------------------
+
+  /**
+   * Fecha o "apague a checagem e o teste tem de ficar vermelho" para {@code @Size}: sem ele, um
+   * hash maior que {@code submitted_hash VARCHAR(64)} (V035) estourava
+   * {@code DataIntegrityViolationException} sem handler — 500 em vez de 400. Confirmado: remover
+   * o {@code @Size(max = 64)} de {@code SubmitDocumentRequest.submittedHash} faz este teste
+   * falhar (a requisição para de dar 400 e passa a dar 500 ao tentar persistir).
+   */
+  @Test
+  void hashMaiorQueAColunaDevolve400EmVezDe500() {
+    String tenant = credencialDe("parceiro-size-1");
+    submete(com(tenant), CPF_ALVO, "Fulano de Tal");
+    String hashMuitoGrande = "a".repeat(200);
+
+    assertThatThrownBy(
+            () ->
+                com(tenant)
+                    .post()
+                    .uri("/v1/subjects/{doc}/assurance/document", CPF_ALVO.replaceAll("\\D", ""))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(
+                        new SubmitDocumentRequest(
+                            "capture-ref",
+                            "RG",
+                            hashMuitoGrande,
+                            new ConsentRequest(
+                                "consent-ref",
+                                "verificação de identidade",
+                                Instant.now().minusSeconds(60))))
+                    .retrieve()
+                    .toEntity(AssuranceCheckResponse.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.BAD_REQUEST));
+  }
+
+  /**
+   * Fecha a faixa que sobrevivia na re-revisão: {@code StubDocumentVerificationProvider} grava
+   * {@code "stub:" + captureReference} em {@code provider_reference VARCHAR(120)} — uma
+   * referência de 116 a 120 caracteres passava pelo {@code @Size(max = 120)} original e só
+   * estourava {@code DataIntegrityViolationException} na persistência (500). Com
+   * {@code @Size(max = 115)}, essa faixa também é recusada em 400. Confirmado: relaxar o limite
+   * de volta para 120 faz este teste (com referência de 118 caracteres) devolver 500 em vez de
+   * 400.
+   */
+  @Test
+  void captureReferenceNaFaixaQueEstourariaAColunaComOPrefixoStubDevolve400() {
+    String tenant = credencialDe("parceiro-size-3");
+    submete(com(tenant), CPF_ALVO, "Fulano de Tal");
+    String referenciaNaFaixaDePerigo = "a".repeat(118); // 116-120: cabe no @Size(120), não na coluna
+
+    assertThatThrownBy(
+            () ->
+                com(tenant)
+                    .post()
+                    .uri("/v1/subjects/{doc}/assurance/document", CPF_ALVO.replaceAll("\\D", ""))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(
+                        new SubmitDocumentRequest(
+                            referenciaNaFaixaDePerigo,
+                            "RG",
+                            "hash-abc",
+                            new ConsentRequest(
+                                "consent-ref",
+                                "verificação de identidade",
+                                Instant.now().minusSeconds(60))))
+                    .retrieve()
+                    .toEntity(AssuranceCheckResponse.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.BAD_REQUEST));
+  }
+
+  /** Mesma faixa de perigo, agora em {@code selfieReference} (biometria). */
+  @Test
+  void selfieReferenceNaFaixaQueEstourariaAColunaComOPrefixoStubDevolve400() {
+    String tenant = credencialDe("parceiro-size-4");
+    submete(com(tenant), CPF_ALVO, "Fulano de Tal");
+    String referenciaNaFaixaDePerigo = "a".repeat(118);
+
+    assertThatThrownBy(
+            () ->
+                com(tenant)
+                    .post()
+                    .uri("/v1/subjects/{doc}/assurance/biometric", CPF_ALVO.replaceAll("\\D", ""))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(
+                        new SubmitBiometricRequest(
+                            referenciaNaFaixaDePerigo,
+                            "doc-face-ref",
+                            "hash-abc",
+                            new ConsentRequest(
+                                "consent-ref",
+                                "verificação de identidade",
+                                Instant.now().minusSeconds(60))))
+                    .retrieve()
+                    .toEntity(AssuranceCheckResponse.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.BAD_REQUEST));
+  }
+
+  /**
+   * Fecha o segundo buraco da mesma convenção: {@code /assurance/biometric} não passava pela
+   * camada HTTP em nenhum teste, então o cascade de {@code @Valid} do consentimento dele nunca
+   * foi exercitado de verdade (só via chamada direta ao controller, em teste unitário). Este é o
+   * primeiro teste HTTP do endpoint — sucesso e recusa de consentimento incompleto no mesmo lugar.
+   */
+  @Test
+  void submissaoBiometricaPorHttpValidaConsentimentoEmCascata() {
+    String tenant = credencialDe("parceiro-size-2");
+    submete(com(tenant), CPF_ALVO, "Fulano de Tal");
+
+    AssuranceCheckResponse resposta =
+        com(tenant)
+            .post()
+            .uri("/v1/subjects/{doc}/assurance/biometric", CPF_ALVO.replaceAll("\\D", ""))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                new SubmitBiometricRequest(
+                    "selfie-ref",
+                    "doc-face-ref",
+                    "hash-abc",
+                    new ConsentRequest(
+                        "consent-ref", "verificação de identidade", Instant.now().minusSeconds(60))))
+            .retrieve()
+            .toEntity(AssuranceCheckResponse.class)
+            .getBody();
+
+    assertThat(resposta).isNotNull();
+    assertThat(resposta.id()).isNotBlank();
+
+    // Consentimento presente mas com referência em branco: @Valid em cascata (ConsentRequest
+    // dentro de SubmitBiometricRequest) tem de recusar com 400 antes de chegar ao service.
+    assertThatThrownBy(
+            () ->
+                com(tenant)
+                    .post()
+                    .uri("/v1/subjects/{doc}/assurance/biometric", CPF_ALVO.replaceAll("\\D", ""))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(
+                        new SubmitBiometricRequest(
+                            "selfie-ref",
+                            "doc-face-ref",
+                            "hash-abc",
+                            new ConsentRequest("  ", "KYC", Instant.now())))
+                    .retrieve()
+                    .toEntity(AssuranceCheckResponse.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.BAD_REQUEST));
   }
 }

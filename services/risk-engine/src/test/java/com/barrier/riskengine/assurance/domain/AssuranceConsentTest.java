@@ -9,6 +9,16 @@ import org.junit.jupiter.api.Test;
 class AssuranceConsentTest {
 
   @Test
+  void recusa_consentimento_sem_referencia() {
+    assertThatThrownBy(() -> new AssuranceConsent(" ", "KYC", Instant.now()).validate())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("referência");
+    assertThatThrownBy(() -> new AssuranceConsent(null, "KYC", Instant.now()).validate())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("referência");
+  }
+
+  @Test
   void recusa_consentimento_sem_finalidade() {
     assertThatThrownBy(
             () -> new AssuranceConsent("ref-1", "  ", Instant.now()).validate())

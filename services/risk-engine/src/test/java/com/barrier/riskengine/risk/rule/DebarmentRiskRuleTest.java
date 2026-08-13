@@ -31,6 +31,7 @@ class DebarmentRiskRuleTest {
         IdentityCheck.create("aid", IdentityStatus.VERIFIED, "bureau", "ok"),
         ScreeningResult.of("aid", List.of(hits)),
         null,
+        null,
         null);
   }
 

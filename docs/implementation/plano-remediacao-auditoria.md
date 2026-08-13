@@ -775,8 +775,18 @@ cujas condições atuais para empresa privada precisam ser confirmadas.
 
 ## Convenções
 
-- Mudança de regra ou peso **sobe `ENGINE_VERSION`** (atual: `barrier-risk-rules/1.4.0`).
+- Mudança de regra ou peso **sobe `ENGINE_VERSION`** (atual: `barrier-risk-rules/1.7.0`).
+  Vale também para regra que **existia e não disparava** passando a disparar: muda a decisão para o
+  mesmo insumo, ainda que nenhuma linha de regra tenha sido editada.
 - Bug corrigido vem com teste de regressão que **falha antes** da correção.
 - Controle novo que possa faltar em produção ganha um `ReadinessGuard` no padrão dos existentes:
   falha a subida em `prod`, avisa nos demais profiles.
+- **Endpoint novo escopado por tenant ganha caso de cruzamento no `TenantIsolationIntegrationTest`**
+  — com dois tenants reais e credenciais reais, atravessando o `ProblemExceptionHandler`. Não basta
+  testar "o recurso não existe": o teste tem de ser *existe e pertence a outro parceiro*, senão ele
+  passa com o controle removido. Três dos quatro vazamentos cross-tenant já fechados neste plano
+  (cadastro compartilhado, destino de webhook global, segredo HMAC único) nasceram de um caminho que
+  ninguém desenhou procurando; o quarto foi o `SubjectService.findById` sem escopo, encontrado em
+  revisão de código e não por teste. O critério é: **apague a checagem de vínculo do serviço e o
+  teste tem de ficar vermelho.**
 - Ao fechar um item, atualize a tabela **Onde estamos** e mova para ✅ com o commit.

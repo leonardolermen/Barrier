@@ -4,6 +4,8 @@ import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
 import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
+import com.barrier.riskengine.assurance.domain.AssuranceKind;
+import com.barrier.riskengine.assurance.service.AssuranceService;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.domain.PersonProfile;
 import com.barrier.riskengine.identity.service.IdentityResult;
@@ -11,6 +13,7 @@ import com.barrier.riskengine.identity.service.IdentityService;
 import com.barrier.riskengine.identity.service.VerifyIdentityCommand;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
+import com.barrier.riskengine.risk.rule.context.AssuranceSummary;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.commons.name.NameNormalizer;
@@ -76,6 +79,7 @@ public class AssessmentProcessor {
   private final RiskScoringService riskScoringService;
   private final SubjectProfileService subjectProfileService;
   private final FieldVerificationService fieldVerificationService;
+  private final AssuranceService assuranceService;
   private final AssessmentEventPublisher eventPublisher;
   private final AssessmentMetrics metrics;
   private final TransactionTemplate transactionTemplate;
@@ -91,6 +95,7 @@ public class AssessmentProcessor {
       RiskScoringService riskScoringService,
       SubjectProfileService subjectProfileService,
       FieldVerificationService fieldVerificationService,
+      AssuranceService assuranceService,
       AssessmentEventPublisher eventPublisher,
       AssessmentMetrics metrics,
       TransactionTemplate transactionTemplate,
@@ -104,6 +109,7 @@ public class AssessmentProcessor {
     this.riskScoringService = riskScoringService;
     this.subjectProfileService = subjectProfileService;
     this.fieldVerificationService = fieldVerificationService;
+    this.assuranceService = assuranceService;
     this.eventPublisher = eventPublisher;
     this.metrics = metrics;
     this.transactionTemplate = transactionTemplate;
@@ -215,6 +221,19 @@ public class AssessmentProcessor {
                 assessment.name(),
                 relatedParties(identity.company(), profile)));
 
+    // Três chamadas, não seis: documento e biometria vêm de latest() (a última verificação
+    // decide), e o total de tentativas de biometria vem de uma contagem à parte — é o sinal de
+    // quem testa artefato até vencer o detector, e a última tentativa sozinha apaga esse rastro.
+    AssuranceSummary assurance =
+        new AssuranceSummary(
+            assuranceService
+                .latest(subjectId, assessment.tenantId(), AssuranceKind.DOCUMENT)
+                .orElse(null),
+            assuranceService
+                .latest(subjectId, assessment.tenantId(), AssuranceKind.BIOMETRIC)
+                .orElse(null),
+            assuranceService.attempts(subjectId, assessment.tenantId(), AssuranceKind.BIOMETRIC));
+
     RiskDecision decision =
         riskScoringService.score(
             new RiskContext(
@@ -223,7 +242,8 @@ public class AssessmentProcessor {
                 identity.check(),
                 screening,
                 identity.company(),
-                profile));
+                profile,
+                assurance));
 
     AssessmentStatus finalStatus = toStatus(decision.recommendation());
     List<String> factors = new ArrayList<>(decision.explanations());

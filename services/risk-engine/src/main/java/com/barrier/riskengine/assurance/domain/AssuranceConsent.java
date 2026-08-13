@@ -16,8 +16,18 @@ import java.time.Instant;
  */
 public record AssuranceConsent(String reference, String purpose, Instant grantedAt) {
 
-  /** Consentimento sem finalidade ou datado no futuro não prova nada — recusa cedo. */
+  /**
+   * Consentimento sem referência, sem finalidade ou datado no futuro não prova nada — recusa
+   * cedo.
+   *
+   * <p>{@code reference} entrou aqui no fix round 1: sem ela, um consentimento com só {@code
+   * purpose}/{@code grantedAt} passava e era persistido — "consentimento" sem identificador do
+   * registro de aceite não sustenta prova nenhuma perante a LGPD.
+   */
   public void validate() {
+    if (reference == null || reference.isBlank()) {
+      throw new IllegalArgumentException("consentimento sem referência do registro de aceite");
+    }
     if (purpose == null || purpose.isBlank()) {
       throw new IllegalArgumentException("consentimento sem finalidade");
     }

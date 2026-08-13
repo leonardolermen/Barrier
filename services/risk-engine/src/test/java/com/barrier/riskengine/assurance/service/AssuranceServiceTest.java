@@ -18,10 +18,14 @@ import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
+import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
+import com.barrier.riskengine.subject.profile.service.SubjectProfileService;
+import com.barrier.riskengine.subject.service.SubjectService;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -37,8 +41,22 @@ class AssuranceServiceTest {
       Mockito.mock(BiometricVerificationProvider.class);
   private final AssuranceCheckRepository repository = Mockito.mock(AssuranceCheckRepository.class);
   private final AssuranceRecordedListener listener = Mockito.mock(AssuranceRecordedListener.class);
+  private final SubjectProfileService subjectProfileService =
+      Mockito.mock(SubjectProfileService.class);
+  private final SubjectService subjectService = Mockito.mock(SubjectService.class);
+  private final FieldVerificationService fieldVerificationService =
+      Mockito.mock(FieldVerificationService.class);
   private final AssuranceService service =
-      new AssuranceService(documentProvider, biometricProvider, repository, List.of(listener));
+      new AssuranceService(
+          documentProvider,
+          biometricProvider,
+          repository,
+          List.of(listener),
+          subjectProfileService,
+          subjectService,
+          fieldVerificationService,
+          true,
+          0.85);
 
   private DocumentSubmission submissao() {
     return new DocumentSubmission("ref", "RG", "hash");
@@ -57,6 +75,7 @@ class AssuranceServiceTest {
         "v1",
         "hash",
         "ok",
+        Set.of(),
         Instant.now(),
         null);
   }
@@ -92,6 +111,59 @@ class AssuranceServiceTest {
    * pode ser acionado nesse caminho: chamá-lo antes de saber que o consentimento é inválido
    * gastaria uma consulta (possivelmente paga) à toa.
    */
+  /**
+   * Kill switch: desligado, o serviço recusa antes de acionar qualquer provedor — nenhum
+   * {@code AssuranceCheck} nasce, então nenhuma reavaliação é disparada.
+   */
+  @Test
+  void recusaVerificacaoDeDocumentoQuandoDesabilitado() {
+    AssuranceService desabilitado =
+        new AssuranceService(
+            documentProvider,
+            biometricProvider,
+            repository,
+            List.of(listener),
+            subjectProfileService,
+            subjectService,
+            fieldVerificationService,
+            false,
+            0.85);
+
+    assertThatThrownBy(
+            () -> desabilitado.verifyDocument(SUBJECT, "tenant-1", submissao(), consentimento()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("desabilitada");
+
+    verifyNoInteractions(documentProvider, repository, listener);
+  }
+
+  @Test
+  void recusaVerificacaoBiometricaQuandoDesabilitado() {
+    AssuranceService desabilitado =
+        new AssuranceService(
+            documentProvider,
+            biometricProvider,
+            repository,
+            List.of(listener),
+            subjectProfileService,
+            subjectService,
+            fieldVerificationService,
+            false,
+            0.85);
+
+    assertThatThrownBy(
+            () ->
+                desabilitado.verifyBiometrics(
+                    SUBJECT,
+                    "tenant-1",
+                    new BiometricSubmission("selfie", "face", "hash"),
+                    consentimento()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("desabilitada");
+
+    verifyNoInteractions(biometricProvider, repository, listener);
+  }
+
   @Test
   void recusaDocumentoSemConsentimento() {
     assertThatThrownBy(
