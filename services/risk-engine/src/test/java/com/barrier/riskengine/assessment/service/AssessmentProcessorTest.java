@@ -79,6 +79,7 @@ class AssessmentProcessorTest {
   @Mock RiskScoringService riskScoringService;
   @Mock SubjectProfileService subjectProfileService;
   @Mock com.barrier.riskengine.subject.profile.service.FieldVerificationService fieldVerificationService;
+  @Mock com.barrier.riskengine.subject.profile.service.RegistryValidationService registryValidationService;
   @Mock AssuranceService assuranceService;
   @Mock AssessmentEventPublisher eventPublisher;
 
@@ -92,6 +93,7 @@ class AssessmentProcessorTest {
         riskScoringService,
         subjectProfileService,
         fieldVerificationService,
+        registryValidationService,
         assuranceService,
         eventPublisher,
         new AssessmentMetrics(registry),
@@ -148,6 +150,20 @@ class AssessmentProcessorTest {
                 com.barrier.riskengine.subject.profile.domain.VerifiableField.BIRTH_DATE,
                 com.barrier.riskengine.subject.profile.domain.VerifiableField.PHONE));
     // Sem verificação registrada: comportamento padrão de quem não usa documentoscopia/biometria.
+    // Padrão: nenhum teste aqui exercita o Datavalid em si (tem suíte própria) — devolve o
+    // conjunto de campos verificados recebido, sem inventar uma verificação nova.
+    lenient()
+        .when(
+            registryValidationService.verifyIfWorthwhile(
+                any(UUID.class),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                any(SubjectProfile.class),
+                any(),
+                anyString()))
+        .thenAnswer(invocation -> invocation.getArgument(6));
     lenient()
         .when(assuranceService.latest(any(UUID.class), anyString(), any(AssuranceKind.class)))
         .thenReturn(Optional.empty());
@@ -450,6 +466,7 @@ class AssessmentProcessorTest {
         realRiskScoringService,
         subjectProfileService,
         fieldVerificationService,
+        registryValidationService,
         assuranceService,
         eventPublisher,
         new AssessmentMetrics(registry),
