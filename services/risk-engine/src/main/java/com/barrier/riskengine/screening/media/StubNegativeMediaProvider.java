@@ -52,4 +52,10 @@ public class StubNegativeMediaProvider implements NegativeMediaProvider {
   public String name() {
     return "stub-negative-media";
   }
+
+  /** Nunca é a fonte que sustenta um controle regulatório — ver {@link NegativeMediaProvider}. */
+  @Override
+  public boolean authoritative() {
+    return false;
+  }
 }

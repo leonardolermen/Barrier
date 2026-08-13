@@ -39,8 +39,12 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
 3. **Cobertura de listas verificável** — `WatchlistImportStatus` registra o resultado da
    última importação por fonte; `WatchlistHealthIndicator` derruba o health quando falta
    cobertura de sanções ou PEP; `ScreeningCoverageRiskRule` impede aprovação automática de
-   avaliação decidida sem lista (SANCTION, PEP e, desde esta branch, ADVERSE_MEDIA). Antes,
-   importação falha = tabela vazia = todos aprovados, com health verde.
+   avaliação decidida sem lista (SANCTION e PEP, incondicional). Desde esta branch, também exige
+   ADVERSE_MEDIA — mas só quando existe `NegativeMediaProvider` autoritativo (contratado)
+   configurado: sem provedor real (hoje o único é o stub de dev), mídia negativa não entra na
+   exigência, porque a ausência vale para 100% da base e pontuar por avaliação só encheria a fila
+   de revisão sem informar nada. Antes, importação falha = tabela vazia = todos aprovados, com
+   health verde.
 4. **PEP** — `PepWatchlistSource` ingere o cadastro da CGU (`MatchType.PEP`), que é o
    insumo da `PepRiskRule`. ⚠️ O formato do CSV **não foi verificado contra o portal real**
    (403 no ambiente de desenvolvimento) — validar antes de confiar em produção.

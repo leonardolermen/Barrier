@@ -59,6 +59,25 @@ Mesmo padrão da `PepRiskRule` antes da CGU, que o plano de remediação descrev
 rodava, registrava que rodou, e não achava ninguém"* — desta vez sobre uma funcionalidade que o
 repositório apresenta como entregue.
 
+**Resolvido nesta branch, na segunda tentativa.** A primeira versão fez
+`ScreeningCoverageRiskRule.REQUIRED` incluir `ADVERSE_MEDIA` incondicionalmente, igual a
+`SANCTION`/`PEP`, e quebrou a suíte completa de um jeito pior do que o problema que existia para
+fechar: `ADVERSE_MEDIA` não é populada em `WatchlistImportStatus.coverage()` — mídia negativa é
+`NegativeMediaProvider`, consultado ao vivo por avaliação, não importado como `WatchlistSource` —
+então a cobertura estava sempre ausente e a regra pontuava **100% das avaliações**, mandando toda
+a base para `EM_REVISAO`. É exatamente o cenário que o plano de remediação registra como causa do
+`SOLICITAR_DOCUMENTO` (7501 de 7529 avaliações em revisão por ruído, cegando operações) —
+substituir um fail-open por indisponibilidade operacional total não é fechar o gap, é trocar de
+gap.
+
+A correção aplica o mesmo conceito que separa bureau real de stub
+(`BureauProvider.authoritative()`): `NegativeMediaProvider` ganhou `authoritative()` (default
+`true`, `StubNegativeMediaProvider` sobrescreve para `false`), e `ScreeningCoverageRiskRule` só
+exige `ADVERSE_MEDIA` quando existe pelo menos um provider autoritativo configurado. Hoje, sem
+contrato, a regra não pontua por mídia negativa — a ausência é conhecida e vale para toda a base;
+o aviso de startup do `WatchlistReadinessGuard` já cobre isso. Contratado um provedor real, a
+exigência entra como sanção e PEP.
+
 ## 3. "KYB de 1º grau" superestima o que existe
 
 O QSA é o quadro de sócios e administradores. **Não é beneficiário final:** não traz percentual

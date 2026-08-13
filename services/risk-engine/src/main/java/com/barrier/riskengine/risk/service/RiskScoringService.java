@@ -45,10 +45,15 @@ public class RiskScoringService {
   // 1.8.0: CorporateStructureCoverageRiskRule (regulatória) força REVIEW quando o bureau confirma
   // a PJ mas o CompanyProfile chega sem QSA (basic_data da BigBoost não traz sócios) — antes,
   // sócio sancionado numa PJ atendida por esse bureau não gerava apontamento nenhum e a avaliação
-  // concluía APROVADO em silêncio. Também: ScreeningCoverageRiskRule passou a exigir cobertura de
-  // ADVERSE_MEDIA além de SANCTION/PEP — sem provedor de mídia negativa contratado (o único é o
-  // StubNegativeMediaProvider, CSV vazio por padrão), a cobertura passa a faltar em prod e força
-  // REVIEW em vez de aprovar com NegativeMediaRiskRule permanentemente inerte.
+  // concluía APROVADO em silêncio.
+  // Também: ScreeningCoverageRiskRule passou a exigir cobertura de ADVERSE_MEDIA, mas só quando
+  // existe NegativeMediaProvider autoritativo (contratado) — não incondicionalmente como
+  // SANCTION/PEP. ADVERSE_MEDIA nunca é populada em WatchlistImportStatus (mídia negativa é
+  // consultada ao vivo por avaliação, não importada como WatchlistSource), então exigi-la sempre
+  // faz a regra pontuar 100% das avaliações sem provedor contratado — pior que o fail-open que
+  // existia para fechar, e recria o ruído que motivou o SOLICITAR_DOCUMENTO (ver
+  // plano-remediacao-auditoria.md). Sem provedor autoritativo, a regra não pontua por isso; com
+  // um contratado, entra na exigência como as outras duas.
   //
   // 1.7.0: o AssessmentProcessor passou a montar o AssuranceSummary (antes o RiskContext nascia
   // sem ele) e a IdentityAssuranceRiskRule, que já existia e nunca disparava, passou a rodar de

@@ -231,16 +231,29 @@ listas. Não dá para distinguir "bureau sem QSA" de "empresa legitimamente sem 
 jurídica/porte, e nenhum provider de CNPJ expõe isso; a regra é fail-closed de propósito,
 registrado no Javadoc.
 
-`ADVERSE_MEDIA` na exigência de cobertura (mesma branch): `ScreeningCoverageRiskRule.REQUIRED`
-passou a incluir `MatchType.ADVERSE_MEDIA` — o único provedor de mídia negativa é o
-`StubNegativeMediaProvider`, que casa contra CSV vazio por padrão, então em produção sem provedor
-contratado `NegativeMediaRiskRule` nunca disparava e nada acusava. `WatchlistReadinessGuard`
-**não** ganhou a mesma exigência: adicionar `ADVERSE_MEDIA` à lista que barra a subida em `prod`
-derrubaria a aplicação inteira por falta de um provedor que hoje ninguém contratou — mais forte
-que o problema justifica. Em vez disso, o guard só **avisa** quando falta cobertura de mídia
-negativa, no mesmo padrão do `CnpjBureauReadinessGuard` para a BrasilAPI como único bureau de PJ.
-`DEBARMENT` segue de fora da exigência de cobertura, de propósito — é apetite de risco (ver
-acima), não obrigação regulatória. `ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
+`ADVERSE_MEDIA` na exigência de cobertura, **condicional** (mesma branch, corrigida após rodar a
+suíte completa): a primeira versão desta mudança fez `ScreeningCoverageRiskRule.REQUIRED` incluir
+`MatchType.ADVERSE_MEDIA` incondicionalmente, igual a `SANCTION`/`PEP` — e quebrou pior do que o
+fail-open que existia para fechar. `ADVERSE_MEDIA` nunca é populada em `WatchlistImportStatus`:
+mídia negativa é `NegativeMediaProvider`, consultado **ao vivo** por avaliação, não importado como
+`WatchlistSource`. Sem cobertura possível de existir, a regra pontuava **100% das avaliações**,
+recriando o problema que motivou o `SOLICITAR_DOCUMENTO` (7501 de 7529 avaliações em
+`EM_REVISAO` por ruído de cadastro, cegando operações — ver `plano-remediacao-auditoria.md`).
+Corrigido no mesmo padrão de `BureauProvider.authoritative()`: `NegativeMediaProvider` ganhou
+`authoritative()` (default `true`), `StubNegativeMediaProvider` sobrescreve para `false`.
+`ScreeningCoverageRiskRule` passou a receber `List<NegativeMediaProvider>` (construtor de 1
+argumento preservado como conveniência = "nenhum provedor", para não quebrar quem constrói a
+regra manualmente sem mídia negativa) e só exige `ADVERSE_MEDIA` quando existe pelo menos um
+provider autoritativo na lista — hoje, sem contrato, isso nunca acontece e a regra não pontua por
+mídia negativa; contratado um provider real, a exigência entra como sanção e PEP (controle que
+deveria estar rodando e não está confirmado). `WatchlistReadinessGuard` **não** ganhou a mesma
+exigência incondicional: adicionar `ADVERSE_MEDIA` à lista que barra a subida em `prod` derrubaria
+a aplicação inteira por falta de um provedor que hoje ninguém contratou — mais forte que o
+problema justifica. O guard só **avisa** quando falta cobertura de mídia negativa, no mesmo padrão
+do `CnpjBureauReadinessGuard` para a BrasilAPI como único bureau de PJ (o aviso não é
+condicionado a `authoritative()` — é aviso de startup, sempre útil). `DEBARMENT` segue de fora da
+exigência de cobertura, de propósito — é apetite de risco (ver acima), não obrigação regulatória.
+`ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
 
 Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
 (`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode
