@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Documentoscopia e biometria: prova de que quem está do outro lado é o titular do documento.
@@ -102,12 +104,44 @@ public class AssuranceService {
         check.score(),
         check.provider(),
         check.providerReference());
-    notifyListeners(check);
+    scheduleNotification(check);
     return check;
   }
 
   /**
-   * Roda depois de a gravação já ter acontecido: o desfecho já está persistido e é isso que
+   * Adia a notificação para depois do commit — não para depois de {@code repository.save}.
+   *
+   * <p>{@code verifyDocument}/{@code verifyBiometrics} são {@code @Transactional}, e
+   * {@code AssuranceReassessmentTrigger.onRecorded} chama {@code AssessmentService.submit}, que
+   * também é {@code @Transactional} sem propagation própria — sem isto, os dois juntariam na
+   * mesma transação. Uma falha de banco dentro do {@code submit} (ex.: a corrida tratada em
+   * {@code SubjectService.create}) marcaria a transação como rollback-only <b>antes</b> de o
+   * catch por listener rodar; o catch engoliria a exceção, o método devolveria normalmente, e o
+   * commit final estouraria {@code UnexpectedRollbackException} — perdendo a verificação de
+   * assurance que acabou de ser gravada, com um log dizendo que ela "segue válida". Notificar só
+   * depois do commit garante que o {@code AssuranceCheck} já está persistido antes de qualquer
+   * listener rodar, e que a falha de um listener corre na transação própria dele (nova, por
+   * causa do {@code @Transactional} do consumidor), sem poder desfazer nada daqui.
+   *
+   * <p>Fora de uma transação de verdade (testes unitários com Mockito, sem contexto Spring) não
+   * há sincronização ativa para registrar — notifica na hora, como antes.
+   */
+  private void scheduleNotification(AssuranceCheck check) {
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+      TransactionSynchronizationManager.registerSynchronization(
+          new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+              notifyListeners(check);
+            }
+          });
+    } else {
+      notifyListeners(check);
+    }
+  }
+
+  /**
+   * Roda depois de a gravação já estar comitada: o desfecho já está persistido e é isso que
    * sustenta a reavaliação, então uma falha em quem reage não pode desfazer a verificação. O
    * isolamento é <b>por listener</b>, mesmo padrão do {@code WatchlistImporter}: um consumidor que
    * quebra não pode levar os outros junto nem invalidar a gravação.

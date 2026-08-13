@@ -3,6 +3,7 @@ package com.barrier.riskengine.subject.service;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.subject.repository.interfaces.SubjectRepository;
+import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,21 +41,27 @@ public class SubjectService {
   }
 
   /**
-   * Busca o subject pelo id, sem escopo de tenant. Uso interno (ex.: o disparo de reavaliação por
-   * assurance, que já sabe o {@code subjectId} de um {@code AssuranceCheck} e precisa só de
-   * documento/nome para montar a reavaliação) — não é o caminho de consulta do parceiro, que
-   * segue {@link #getForTenant} e a checagem de vínculo.
+   * Busca o subject pelo id, <b>escopado por tenant</b> — mesma defesa de {@link #getForTenant}:
+   * "nem {@code SubjectRepository} nem {@code SubjectService} têm assinatura que aceite só o
+   * {@code subjectId}" (ver CLAUDE.md, seção Cadastro/ADR-0012) é invariante do projeto, não só do
+   * cadastro CMN 4.753. Sem vínculo, trata como não encontrado.
+   *
+   * <p>Uso interno (o disparo de reavaliação por assurance, que já sabe {@code subjectId} e
+   * {@code tenantId} de um {@code AssuranceCheck} e precisa só de documento/nome para montar a
+   * reavaliação) — não é o caminho de consulta do parceiro, que segue {@link #getForTenant} por
+   * documento.
    */
   @Transactional(readOnly = true)
-  public Subject findById(java.util.UUID subjectId) {
+  public Subject findById(UUID subjectId, String tenantId) {
     return repository
         .findById(subjectId)
+        .filter(s -> repository.isLinked(tenantId, s.id()))
         .orElseThrow(() -> new SubjectNotFoundException("Subject não encontrado: " + subjectId));
   }
 
   /** Garante a visibilidade do subject para o tenant. */
   @Transactional
-  public void link(String tenantId, java.util.UUID subjectId) {
+  public void link(String tenantId, UUID subjectId) {
     repository.link(tenantId, subjectId);
   }
 

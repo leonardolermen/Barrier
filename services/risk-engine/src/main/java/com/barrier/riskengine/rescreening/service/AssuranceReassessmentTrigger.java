@@ -27,7 +27,12 @@ import org.springframework.stereotype.Service;
  * documento. Este trigger chama {@code AssessmentService.submit} direto.
  *
  * <p>O {@code AssuranceCheck} só carrega {@code subjectId}; documento, tipo e nome para montar o
- * comando vêm do {@code Subject} resolvido por {@code SubjectService.findById}.
+ * comando vêm do {@code Subject} resolvido por {@code SubjectService.findById(subjectId,
+ * tenantId)}. O {@code tenantId} vem do próprio {@code check} (o tenant que pediu a verificação),
+ * não é opcional: sem ele, um {@code subjectId} de outro parceiro resolveria documento e nome
+ * alheios, e o {@code AssessmentService.submit} chamado a seguir criaria o vínculo tenant↔subject
+ * e um {@code Assessment} vazando dado de cliente de outro tenant — exatamente o vazamento que
+ * {@code SubjectService.findById} com escopo de tenant existe para impedir.
  */
 @Service
 public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
@@ -54,12 +59,12 @@ public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
   @Override
   public void onRecorded(AssuranceCheck check) {
     try {
-      Subject subject = subjects.findById(check.subjectId());
+      Subject subject = subjects.findById(check.subjectId(), check.tenantId());
       String originDetail = check.kind() + "@" + check.providerReference();
       assessments.submit(
           SubmitAssessmentCommand.assurance(
               check.tenantId(),
-              DocumentType.valueOf(subject.documentType()),
+              documentType(subject),
               subject.document(),
               subject.name(),
               originDetail));
@@ -69,6 +74,25 @@ public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
               + " válida",
           check.subjectId(),
           check.id(),
+          e);
+    }
+  }
+
+  /**
+   * {@code Subject.documentType()} é {@code String} (o subject é global e não depende de
+   * {@code assessment}); um valor fora do enum é erro de dado, não indisponibilidade do
+   * reavaliador — a mensagem própria evita que ele se perca atrás do "reavaliação falhou" genérico
+   * do catch acima quando alguém lê o log.
+   */
+  private DocumentType documentType(Subject subject) {
+    try {
+      return DocumentType.valueOf(subject.documentType());
+    } catch (IllegalArgumentException e) {
+      throw new IllegalStateException(
+          "subject "
+              + subject.id()
+              + " com documentType inválido para reavaliação: "
+              + subject.documentType(),
           e);
     }
   }
