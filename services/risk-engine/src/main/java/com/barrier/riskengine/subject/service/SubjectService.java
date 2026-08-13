@@ -41,10 +41,15 @@ public class SubjectService {
   }
 
   /**
-   * Busca o subject pelo id, <b>escopado por tenant</b> — mesma defesa de {@link #getForTenant}:
-   * "nem {@code SubjectRepository} nem {@code SubjectService} têm assinatura que aceite só o
-   * {@code subjectId}" (ver CLAUDE.md, seção Cadastro/ADR-0012) é invariante do projeto, não só do
-   * cadastro CMN 4.753. Sem vínculo, trata como não encontrado.
+   * Busca o subject pelo id, <b>escopado por tenant</b> — mesma defesa de {@link #getForTenant}.
+   * {@code SubjectRepository.findById(UUID)} (sem tenant) existe e é chamado por este método de
+   * propósito: o repositório é sem escopo por natureza, camada abaixo de qualquer regra de
+   * visibilidade; é aqui, no serviço, que o escopo é aplicado — filtrando por
+   * {@code repository.isLinked(tenantId, ...)} antes de devolver. Sem vínculo, trata como não
+   * encontrado, igual ao cadastro (CLAUDE.md, seção Cadastro/ADR-0012: lá é
+   * {@code SubjectProfileRepository}/{@code SubjectProfileService} que não expõem assinatura só
+   * com {@code subjectId} — aqui a defesa é a mesma ideia, um nível abaixo, aplicada no serviço em
+   * vez de omitida do repositório).
    *
    * <p>Uso interno (o disparo de reavaliação por assurance, que já sabe {@code subjectId} e
    * {@code tenantId} de um {@code AssuranceCheck} e precisa só de documento/nome para montar a

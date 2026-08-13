@@ -152,4 +152,21 @@ class AssuranceReassessmentTriggerTest {
     assertThatCode(() -> trigger.onRecorded(check(AssuranceOutcome.PASS)))
         .doesNotThrowAnyException();
   }
+
+  /**
+   * {@code Subject.documentType()} é {@code String}; um valor fora do enum {@code DocumentType}
+   * é erro de dado, não indisponibilidade do reavaliador — mas mesmo assim não pode escapar de
+   * {@code onRecorded} (mesma garantia de "nunca lança" dos testes acima).
+   */
+  @Test
+  void naoLancaQuandoDocumentTypeDoSubjectEInvalido() {
+    Subject subjectInvalido =
+        new Subject(SUBJECT_ID, "XPTO", "11144477735", "Fulano de Tal", Instant.now());
+    when(subjects.findById(SUBJECT_ID, TENANT)).thenReturn(subjectInvalido);
+
+    assertThatCode(() -> trigger.onRecorded(check(AssuranceOutcome.PASS)))
+        .doesNotThrowAnyException();
+
+    verifyNoInteractions(assessments);
+  }
 }

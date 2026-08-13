@@ -10,6 +10,8 @@ import com.barrier.riskengine.subject.service.SubjectService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Reavalia o cliente quando uma verificação de documentoscopia/biometria é gravada.
@@ -55,7 +57,21 @@ public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
    * <p>Nunca lança: o {@code AssuranceService} já isola cada listener, mas o motivo de não deixar
    * escapar aqui também é próprio — uma falha ao reavaliar não pode contaminar a verificação de
    * assurance que já foi gravada com sucesso.
+   *
+   * <p><b>{@code REQUIRES_NEW}, não {@code REQUIRED}.</b> Quem chama {@code onRecorded} é o
+   * {@code TransactionSynchronization.afterCommit()} registrado por
+   * {@code AssuranceService.scheduleNotification} — e no {@code JpaTransactionManager} o
+   * {@code EntityManagerHolder} da transação que acabou de commitar continua ligado à thread
+   * durante o {@code afterCommit} (a limpeza só roda depois, em
+   * {@code cleanupAfterCompletion}). Sem propagation própria, {@code AssessmentService.submit}
+   * (que é {@code @Transactional} puro, ou seja {@code REQUIRED}) <b>entraria</b> nessa
+   * transação já commitada em vez de abrir uma nova — o {@code Assessment}, o vínculo
+   * tenant↔subject e a linha do outbox não teriam mais transação viva para commitar, e sumiriam
+   * sem lançar (ou estourariam "transaction not active" no flush, dependendo do provider). Mesmo
+   * motivo do {@code REQUIRES_NEW} em {@code IdempotencyService}: a operação precisa da própria
+   * transação, não de carona na que já foi.
    */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   @Override
   public void onRecorded(AssuranceCheck check) {
     try {

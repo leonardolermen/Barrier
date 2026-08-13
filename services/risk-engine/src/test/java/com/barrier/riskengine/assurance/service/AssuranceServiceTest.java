@@ -18,11 +18,14 @@ import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.transaction.annotation.Transactional;
 
 class AssuranceServiceTest {
 
@@ -111,5 +114,30 @@ class AssuranceServiceTest {
         .hasMessageContaining("consentimento");
 
     verifyNoInteractions(biometricProvider, repository);
+  }
+
+  /**
+   * {@code scheduleNotification} só notifica na hora (fora de {@code afterCommit}) quando não há
+   * transação Spring ativa — e isso só é seguro porque os dois métodos públicos que chamam
+   * {@code persist} são {@code @Transactional}. Se um método público novo chamar {@code persist}
+   * sem a anotação, o fallback deixaria de ser "só em teste unitário" e passaria a valer também
+   * em produção, sem a proteção pós-commit que o CRITICAL-1 corrigiu — silenciosamente, porque
+   * nada quebra na hora. Este teste transforma esse invariante em regressão de build: todo
+   * método público de {@code AssuranceService} tem de ser {@code @Transactional}.
+   */
+  @Test
+  void todoMetodoPublicoETransactional() {
+    for (Method method : AssuranceService.class.getDeclaredMethods()) {
+      if (!Modifier.isPublic(method.getModifiers())) {
+        continue;
+      }
+      org.assertj.core.api.Assertions.assertThat(method.isAnnotationPresent(Transactional.class))
+          .as(
+              "AssuranceService.%s é público e não é @Transactional — o fallback de"
+                  + " scheduleNotification depende de todo método público ser transacional para o"
+                  + " pitfall do afterCommit não valer em produção",
+              method.getName())
+          .isTrue();
+    }
   }
 }

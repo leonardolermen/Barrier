@@ -120,8 +120,17 @@ public class AssuranceService {
    * commit final estouraria {@code UnexpectedRollbackException} — perdendo a verificação de
    * assurance que acabou de ser gravada, com um log dizendo que ela "segue válida". Notificar só
    * depois do commit garante que o {@code AssuranceCheck} já está persistido antes de qualquer
-   * listener rodar, e que a falha de um listener corre na transação própria dele (nova, por
-   * causa do {@code @Transactional} do consumidor), sem poder desfazer nada daqui.
+   * listener rodar.
+   *
+   * <p><b>Isso sozinho não basta</b> — não abre transação nova para o listener, só adia a
+   * chamada. No {@code JpaTransactionManager}, durante o {@code afterCommit} o
+   * {@code EntityManagerHolder} da transação que acabou de commitar ainda está ligado à thread
+   * (a limpeza só roda depois, em {@code cleanupAfterCompletion}), então um consumidor
+   * {@code @Transactional} comum (`REQUIRED`) chamado por um listener <b>entraria</b> nessa
+   * mesma transação já commitada em vez de abrir uma própria. Por isso
+   * {@code AssuranceReassessmentTrigger.onRecorded} é {@code REQUIRES_NEW} — a responsabilidade
+   * de abrir transação própria é de quem escreve depois do commit, este método só garante o
+   * "depois".
    *
    * <p>Fora de uma transação de verdade (testes unitários com Mockito, sem contexto Spring) não
    * há sincronização ativa para registrar — notifica na hora, como antes.
