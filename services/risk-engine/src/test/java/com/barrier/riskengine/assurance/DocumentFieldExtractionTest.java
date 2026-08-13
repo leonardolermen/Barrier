@@ -277,6 +277,30 @@ class DocumentFieldExtractionTest {
   }
 
   /**
+   * MINOR da re-revisão: nome extraído em branco (OCR ilegível, mas o provedor ainda assim
+   * devolveu PASS) não pode virar sinal de fraude. Sob a igualdade exata anterior isso não
+   * acontecia por acidente ({@code "".equals("")}); a troca para similaridade por token
+   * (`NameTokens.of("")` vazio, `coveredBy` sempre falso) precisa do guard próprio de
+   * {@code isBlank} para não regredir.
+   */
+  @Test
+  void nomeExtraidoEmBrancoNaoDiverge() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+    when(documentProvider.verify(any(), any(), any()))
+        .thenReturn(
+            new DocumentVerificationResult(
+                checkAprovado(), new ExtractedDocumentFields("   ", "12345678900", nascimento)));
+    when(subjectProfileService.find(SUBJECT, TENANT)).thenReturn(perfil(nascimento));
+    when(subjectService.findById(SUBJECT, TENANT))
+        .thenReturn(subject("MARIA SILVA", "12345678900"));
+
+    DocumentVerificationResult resultado =
+        service.verifyDocument(SUBJECT, TENANT, submissao(), consentimento());
+
+    assertThat(resultado.check().divergences()).isEmpty();
+  }
+
+  /**
    * Número do documento (RG/CNH) divergindo do CPF do cadastro é esperado — são grandezas
    * diferentes (ver Javadoc de {@code ExtractedDocumentFields}) — e não pode virar fator de
    * risco. Reproduz o cenário real do stub (dev): CPF do subject × "00000000000" extraído.

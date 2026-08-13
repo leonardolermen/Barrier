@@ -370,6 +370,70 @@ class TenantIsolationIntegrationTest {
   }
 
   /**
+   * Fecha a faixa que sobrevivia na re-revisão: {@code StubDocumentVerificationProvider} grava
+   * {@code "stub:" + captureReference} em {@code provider_reference VARCHAR(120)} — uma
+   * referência de 116 a 120 caracteres passava pelo {@code @Size(max = 120)} original e só
+   * estourava {@code DataIntegrityViolationException} na persistência (500). Com
+   * {@code @Size(max = 115)}, essa faixa também é recusada em 400. Confirmado: relaxar o limite
+   * de volta para 120 faz este teste (com referência de 118 caracteres) devolver 500 em vez de
+   * 400.
+   */
+  @Test
+  void captureReferenceNaFaixaQueEstourariaAColunaComOPrefixoStubDevolve400() {
+    String tenant = credencialDe("parceiro-size-3");
+    submete(com(tenant), CPF_ALVO, "Fulano de Tal");
+    String referenciaNaFaixaDePerigo = "a".repeat(118); // 116-120: cabe no @Size(120), não na coluna
+
+    assertThatThrownBy(
+            () ->
+                com(tenant)
+                    .post()
+                    .uri("/v1/subjects/{doc}/assurance/document", CPF_ALVO.replaceAll("\\D", ""))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(
+                        new SubmitDocumentRequest(
+                            referenciaNaFaixaDePerigo,
+                            "RG",
+                            "hash-abc",
+                            new ConsentRequest(
+                                "consent-ref",
+                                "verificação de identidade",
+                                Instant.now().minusSeconds(60))))
+                    .retrieve()
+                    .toEntity(AssuranceCheckResponse.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.BAD_REQUEST));
+  }
+
+  /** Mesma faixa de perigo, agora em {@code selfieReference} (biometria). */
+  @Test
+  void selfieReferenceNaFaixaQueEstourariaAColunaComOPrefixoStubDevolve400() {
+    String tenant = credencialDe("parceiro-size-4");
+    submete(com(tenant), CPF_ALVO, "Fulano de Tal");
+    String referenciaNaFaixaDePerigo = "a".repeat(118);
+
+    assertThatThrownBy(
+            () ->
+                com(tenant)
+                    .post()
+                    .uri("/v1/subjects/{doc}/assurance/biometric", CPF_ALVO.replaceAll("\\D", ""))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(
+                        new SubmitBiometricRequest(
+                            referenciaNaFaixaDePerigo,
+                            "doc-face-ref",
+                            "hash-abc",
+                            new ConsentRequest(
+                                "consent-ref",
+                                "verificação de identidade",
+                                Instant.now().minusSeconds(60))))
+                    .retrieve()
+                    .toEntity(AssuranceCheckResponse.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(e -> assertThat(statusDoErro(e)).isEqualTo(HttpStatus.BAD_REQUEST));
+  }
+
+  /**
    * Fecha o segundo buraco da mesma convenção: {@code /assurance/biometric} não passava pela
    * camada HTTP em nenhum teste, então o cascade de {@code @Valid} do consentimento dele nunca
    * foi exercitado de verdade (só via chamada direta ao controller, em teste unitário). Este é o

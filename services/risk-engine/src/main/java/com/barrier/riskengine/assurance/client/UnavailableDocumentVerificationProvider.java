@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -27,9 +28,17 @@ import org.springframework.stereotype.Component;
  * desfecho — pontua pouco e não opina, em vez de travar quem tentou se verificar. Quem avisa que
  * não há provedor real contratado é {@code AssuranceProviderReadinessGuard}, não uma exceção de
  * startup.
+ *
+ * <p>{@code @ConditionalOnMissingBean}: no dia em que um provedor real for contratado, ele chega
+ * como outro {@code @Component} de {@code prod} implementando a mesma interface. Sem esta
+ * condição, dois beans do mesmo tipo em {@code prod} derrubariam o contexto com
+ * {@code NoUniqueBeanDefinitionException} — a mesma classe de falha (contexto inteiro caindo por
+ * causa de assurance) que este provedor foi criado para fechar, só que com a causa invertida.
+ * Com ela, o provedor real "vence" por só existir um bean visível para injetar.
  */
 @Component
 @Profile("prod")
+@ConditionalOnMissingBean(DocumentVerificationProvider.class)
 public class UnavailableDocumentVerificationProvider implements DocumentVerificationProvider {
 
   private final Clock clock;

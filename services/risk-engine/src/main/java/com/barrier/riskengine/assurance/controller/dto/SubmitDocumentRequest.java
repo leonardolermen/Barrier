@@ -14,6 +14,12 @@ import jakarta.validation.constraints.Size;
  * DataIntegrityViolationException} sem handler — parceiro mandando hash de 200 caracteres recebia
  * 500 em vez de 400.
  *
+ * <p>{@code captureReference} tem limite de 115, não 120: {@code StubDocumentVerificationProvider}
+ * grava {@code "stub:" + captureReference} em {@code provider_reference VARCHAR(120)} — os 5
+ * caracteres do prefixo têm de caber dentro do limite da coluna, senão uma referência de 116 a
+ * 120 caracteres passa pela Bean Validation e só estoura na persistência (o mesmo 500 que este
+ * {@code @Size} existe para evitar).
+ *
  * @param captureReference identificador do upload no provedor
  * @param documentType tipo declarado (RG, CNH, PASSAPORTE)
  * @param submittedHash SHA-256 calculado no cliente sobre a imagem enviada
@@ -22,7 +28,7 @@ import jakarta.validation.constraints.Size;
  *     @Valid} em cascata) antes disso
  */
 public record SubmitDocumentRequest(
-    @NotBlank @Size(max = 120) String captureReference,
+    @NotBlank @Size(max = 115) String captureReference,
     @NotBlank @Size(max = 30) String documentType,
     @NotBlank @Size(max = 64) String submittedHash,
     @Valid ConsentRequest consent) {}

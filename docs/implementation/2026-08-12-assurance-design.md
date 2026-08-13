@@ -152,7 +152,17 @@ TDD em tudo — teste vermelho antes de cada mudança de produção.
 ## Suposições
 
 - Nenhum provedor real de documentoscopia/biometria contratado; os stubs seguem sendo as únicas
-  implementações. `AssuranceProviderReadinessGuard` já existe para barrar prod.
+  implementações em desenvolvimento.
+
+> **Correção (revisão final):** este item dizia que `AssuranceProviderReadinessGuard` "já existe
+> para barrar prod". Não barra mais nada, e essa mudança é deliberada, não regressão: os stubs
+> são `@Profile("!prod")`, então em produção eles não existem como bean — quem preenche o lugar é
+> `UnavailableDocumentVerificationProvider`/`UnavailableBiometricVerificationProvider`
+> (`@Profile("prod")`), que sempre devolvem `UNAVAILABLE`. Não há mais provedor simulado para
+> barrar em `prod`; o guard passou a só **avisar** em log quando é o provedor de emergência que
+> está ativo (nenhum contrato real firmado), no padrão de `CnpjBureauReadinessGuard`. Quem lê
+> esta seção sem essa correção suporia produção protegida por um gate de startup que não existe
+> mais nesse formato.
 - A submissão é do parceiro, não do cliente final direto.
 
 ## Fora de escopo

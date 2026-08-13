@@ -161,9 +161,15 @@ public class AssuranceService {
    * cadastro quanto o lido do documento podem ser o mais completo dos dois — OCR corta sobrenome
    * (documento fica menor) ou abrevia nome do meio (documento fica igual, cadastro que veio maior
    * de outra fonte), então exigir uma direção fixa deixaria passar metade dos casos reais.
+   *
+   * <p>{@code isBlank}, não só {@code null}: um provedor que devolva nome em branco (OCR
+   * ilegível, mas ainda assim {@code outcome = PASS}) não pode virar sinal de fraude.
+   * {@code NameTokens.of("")} produz conjunto vazio, e {@code coveredBy} de conjunto vazio é
+   * sempre {@code false} nos dois sentidos — sob a igualdade exata anterior isso não acontecia
+   * ({@code "".equals("")} é verdadeiro), então este guard é novo, não redundante.
    */
   private boolean diverges(String declared, String extracted) {
-    if (declared == null || extracted == null) {
+    if (declared == null || extracted == null || declared.isBlank() || extracted.isBlank()) {
       return false;
     }
     return !NameSimilarity.matchesEitherWay(declared, extracted, nameMatchThreshold);

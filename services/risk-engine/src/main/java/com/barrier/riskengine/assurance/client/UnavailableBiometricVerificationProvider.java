@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -16,10 +17,14 @@ import org.springframework.stereotype.Component;
  * {@link UnavailableDocumentVerificationProvider} — mesmo motivo de existir (o construtor
  * obrigatório de {@code AssuranceService} precisa de um bean de {@code
  * BiometricVerificationProvider} em qualquer profile, inclusive quando o parceiro ainda não usa
- * biometria) e mesmo desfecho ({@code UNAVAILABLE}, nunca {@code PASS}/{@code FAIL}).
+ * biometria), mesmo desfecho ({@code UNAVAILABLE}, nunca {@code PASS}/{@code FAIL}) e mesmo
+ * motivo para {@code @ConditionalOnMissingBean} (ver Javadoc lá): sem ela, contratar um
+ * provedor real de biometria derrubaria o contexto em {@code prod} com
+ * {@code NoUniqueBeanDefinitionException} no dia em que o bean real fosse registrado.
  */
 @Component
 @Profile("prod")
+@ConditionalOnMissingBean(BiometricVerificationProvider.class)
 public class UnavailableBiometricVerificationProvider implements BiometricVerificationProvider {
 
   private final Clock clock;

@@ -9,7 +9,10 @@ import jakarta.validation.constraints.Size;
  * dos uploads feitos direto para o provedor (ADR-0016).
  *
  * <p>{@code @Size} pelo mesmo motivo de {@code SubmitDocumentRequest}: sem limite, entrada maior
- * que a coluna (V035) vira 500 em vez de 400.
+ * que a coluna (V035) vira 500 em vez de 400. {@code selfieReference} tem limite de 115, não
+ * 120, pelo mesmo motivo de {@code captureReference} lá: {@code StubBiometricVerificationProvider}
+ * grava {@code "stub:" + selfieReference} em {@code provider_reference VARCHAR(120)}, e os 5
+ * caracteres do prefixo têm de caber dentro do limite da coluna.
  *
  * @param selfieReference identificador do upload da selfie/vídeo
  * @param documentFaceReference referência da face extraída do documento na documentoscopia
@@ -19,7 +22,7 @@ import jakarta.validation.constraints.Size;
  *     @Valid} em cascata) antes disso
  */
 public record SubmitBiometricRequest(
-    @NotBlank @Size(max = 120) String selfieReference,
+    @NotBlank @Size(max = 115) String selfieReference,
     @NotBlank @Size(max = 120) String documentFaceReference,
     @NotBlank @Size(max = 64) String submittedHash,
     @Valid ConsentRequest consent) {}
