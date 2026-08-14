@@ -10,6 +10,9 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
   trabalho novo: o que está lá é o que reduz risco de verdade.
 - **Padrões de código:** [docs/implementation/coding-standards.md](docs/implementation/coding-standards.md)
 - **Plano da Risk Engine:** [docs/implementation/risk-engine-plan.md](docs/implementation/risk-engine-plan.md)
+- **Lições do BMP Origem:** [docs/implementation/licoes-do-origem.md](docs/implementation/licoes-do-origem.md)
+  — estudo comparativo com a esteira de KYC que roda em produção na BMP (Origem/Mishmar/
+  bureaus-manager/tzofe): o que importar, em que ordem, e **o que não copiar**.
 - **Decisões de arquitetura:** [docs/adr/](docs/adr/) (ADR-0009 define o corte atual)
 
 Existe a skill `barrier-implementation` com o checklist operacional — use-a antes de

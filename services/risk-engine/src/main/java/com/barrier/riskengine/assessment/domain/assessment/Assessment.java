@@ -7,6 +7,10 @@ import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.domain.documents.Documents;
 import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -15,6 +19,9 @@ import java.util.Objects;
  * Agregado de uma avaliação de risco. Objeto de domínio puro (sem JPA): a persistência é
  * feita por um adapter no pacote {@code repository}.
  */
+@Getter
+@Setter
+@AllArgsConstructor
 public class Assessment {
 
   private final AssessmentId id;

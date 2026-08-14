@@ -1,0 +1,30 @@
+# Túnel do ngrok para receber os webhooks do Barrier em dev.
+#
+# Este arquivo NÃO tem authtoken — ele fica no config global do agente
+# (~/Library/Application Support/ngrok/ngrok.yml no macOS). Os dois são combinados na
+# execução, por isso o comando passa `--config` duas vezes:
+#
+#   ngrok start barrier-webhook \
+#     --config "$HOME/Library/Application Support/ngrok/ngrok.yml" \
+#     --config tools/ngrok.yml
+#
+# Manter o token fora do repositório é o ponto: credencial commitada não se "descommita",
+# e um túnel ngrok de terceiro é uma porta para dentro da máquina de quem clonou.
+#
+# O que fica exposto à internet enquanto o túnel está de pé é APENAS a porta 9000 —
+# `tools/webhook-receiver.py`, que só imprime o que recebe. A API (8080) e o webhook-api
+# (8082) continuam fora do alcance.
+
+version: "3"
+
+tunnels:
+  barrier-webhook:
+    proto: http
+    addr: 9000
+    # Só HTTPS: o webhook-api exige TLS para destino que não seja host local
+    # (WebhookEndpoint.validate), então um túnel http não serviria de destino registrável.
+    schemes:
+      - https
+    # Inspetor em http://localhost:4040 — mostra corpo e headers de cada entrega, inclusive
+    # X-Barrier-Signature, e permite reenviar (Replay) sem criar avaliação nova.
+    inspect: true

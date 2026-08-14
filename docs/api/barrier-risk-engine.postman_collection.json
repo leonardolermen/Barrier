@@ -1,120 +1,120 @@
 {
   "info": {
     "name": "Barrier — Risk Engine",
-    "_postman_id": "b0a11e00-0000-4000-8000-000000000001",
-    "description": "API da Risk Engine (KYC/PLD-FT). Toda operação é autenticada por API key do tenant: `Authorization: Bearer brr_<keyId>_<secret>`. Em dev a chave é emitida no startup e sai no log da aplicação (procure por 'API key de DESENVOLVIMENTO'); copie para a variável `apiKey`.\n\nFluxos cobertos:\n- **Automático:** POST assessment → processamento assíncrono → GET reflete APROVADO/REPROVADO/EM_REVISAO.\n- **Revisão manual (EDD):** documento com apontamento (ex.: PEP) cai em EM_REVISAO → POST /decision aprova/reprova.\n- **CNPJ real:** bureau via BrasilAPI popula o CompanyProfile (abertura/CNAE/QSA) que alimenta as regras de risco de PJ.\n\nVariáveis: `baseUrl`, `clientId`, `assessmentId` (capturada automaticamente no POST), `document`.",
+    "_postman_id": "b0a11e00-0000-4000-8000-0000000000c1",
+    "description": "Roteiro numerado do cadastro ponta a ponta, de preparo a registry de regras.\n\n**Rode as pastas em ordem.** A 01 (webhook) vem antes da 03 (primeira avaliacao) de proposito: a entrega e disparada pela conclusao, e sem endpoint registrado o resultado nao chega a lugar nenhum.\n\nVariaveis obrigatorias antes de comecar: `apiKey` (sai no log da risk-engine no startup, procure por \"API key de DESENVOLVIMENTO\"), `adminKey` e `ngrokUrl`.\n\nDetalhes em `docs/api/README.md`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
-    { "key": "apiKey", "value": "", "type": "string" },
-    { "key": "assessmentId", "value": "", "type": "string" },
-    { "key": "document", "value": "11144477735", "type": "string" }
-  ],
   "item": [
     {
-      "name": "Health",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": { "raw": "{{baseUrl}}/actuator/health", "host": ["{{baseUrl}}"], "path": ["actuator", "health"] },
-        "description": "Liveness/readiness da aplicação."
-      }
-    },
-    {
-      "name": "Assessments",
+      "name": "00 · Preparo",
       "item": [
         {
-          "name": "Submit — CPF (fluxo automático → APROVADO)",
+          "name": "00.1 — Health da Risk Engine",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
-                  "const body = pm.response.json();",
-                  "pm.collectionVariables.set('assessmentId', body.id);",
-                  "pm.test('status EM_ANALISE', () => pm.expect(body.status).to.eql('EM_ANALISE'));",
-                  "console.log('assessmentId =', body.id);"
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('UP', () => pm.expect(pm.response.json().status).to.eql('UP'));",
+                  "// A watchlist derruba o health quando a importacao falhou (WatchlistHealthIndicator).",
+                  "// DOWN aqui significa screening sem cobertura — nao siga o roteiro antes de resolver."
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"documentType\": \"CPF\",\n  \"document\": \"111.444.777-35\",\n  \"name\": \"Fulano de Tal\"\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/v1/assessments", "host": ["{{baseUrl}}"], "path": ["v1", "assessments"] },
-            "description": "Submete uma avaliação (202). O processador conclui de forma assíncrona; use o GET para acompanhar."
-          }
+          ]
         },
         {
-          "name": "Submit — CPF PEP (cai em EM_REVISAO)",
+          "name": "00.2 — Health da Webhook API",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{webhookBaseUrl}}/actuator/health",
+              "host": [
+                "{{webhookBaseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
-                  "pm.collectionVariables.set('assessmentId', pm.response.json().id);",
-                  "console.log('assessmentId (PEP) =', pm.response.json().id);"
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "// Se este falhar, as avaliacoes ainda rodam — so nao ha entrega.",
+                  "// O evento fica no topico e o DeliveryReconciliationJob recupera depois."
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"documentType\": \"CPF\",\n  \"document\": \"529.982.247-25\",\n  \"name\": \"Fulano Pep Exemplo\"\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/v1/assessments", "host": ["{{baseUrl}}"], "path": ["v1", "assessments"] },
-            "description": "Documento com apontamento PEP (seed) → a regra de PEP força EDD → EM_REVISAO. Decida em `Decision — APPROVE/REJECT`."
-          }
-        },
+          ]
+        }
+      ],
+      "description": "Confere que os dois deployables estao no ar antes de comecar.\n\nRisk Engine em 8080, Webhook API em 8082 (portas do docker-compose)."
+    },
+    {
+      "name": "01 · Webhook (registrar ANTES da primeira avaliacao)",
+      "item": [
         {
-          "name": "Submit — CNPJ (BrasilAPI → regras de PJ)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
-                  "pm.collectionVariables.set('assessmentId', pm.response.json().id);",
-                  "console.log('assessmentId (CNPJ) =', pm.response.json().id);"
-                ]
+          "name": "01.1 — Registrar endpoint do tenant (captura o segredo)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
               }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
             ],
+            "url": {
+              "raw": "{{webhookBaseUrl}}/v1/webhook-endpoints/{{tenantId}}",
+              "host": [
+                "{{webhookBaseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "webhook-endpoints",
+                "{{tenantId}}"
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"documentType\": \"CNPJ\",\n  \"document\": \"18.236.120/0001-58\",\n  \"name\": \"Nubank\"\n}"
+              "raw": "{\n  \"targetUrl\": \"{{ngrokUrl}}/barrier\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/v1/assessments", "host": ["{{baseUrl}}"], "path": ["v1", "assessments"] },
-            "description": "CNPJ real: o bureau (BrasilAPI) devolve situação cadastral + CompanyProfile (abertura/CNAE/QSA), que alimenta NewCompany/SensitiveCnae/CorporateStructure. Os `factors` no GET explicam a decisão."
-          }
-        },
-        {
-          "name": "Get assessment",
+            "description": "Registra para onde o Barrier entrega o resultado deste tenant.\n\nPreencha `ngrokUrl` no environment com a URL HTTPS que o `ngrok start` imprimiu (ex.: `https://a1b2-c3.ngrok-free.app`), sem barra no final.\n\nSem este registro nao ha entrega: o webhook-api resolve o destino pelo tenantId do evento e, sem linha na tabela, apenas loga. `barrier.webhook.target-url` e fallback de dev e nem sobe em prod (GlobalTargetUrlReadinessGuard)."
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
@@ -123,24 +123,484 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const b = pm.response.json();",
-                  "console.log('status =', b.status, '| risco =', b.riskLevel, '| factors =', JSON.stringify(b.factors));"
+                  "",
+                  "// O segredo aparece UMA vez: aqui e na rotacao. O GET nunca o devolve.",
+                  "// Guardar na variavel de ambiente e o que permite o receptor local conferir a assinatura.",
+                  "if (b.secret) {",
+                  "  pm.environment.set('webhookSecret', b.secret);",
+                  "  console.log('');",
+                  "  console.log('Rode o receptor com o segredo:');",
+                  "  console.log('  export BARRIER_WEBHOOK_SECRET=\"' + b.secret + '\"');",
+                  "  console.log('  python3 tools/webhook-receiver.py');",
+                  "  console.log('');",
+                  "}",
+                  "pm.test('destino e o tunel do ngrok', () => pm.expect(b.targetUrl).to.include('https://'));"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [ { "key": "Authorization", "value": "Bearer {{apiKey}}" } ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "assessments", "{{assessmentId}}"]
-            },
-            "description": "Status/resultado da avaliação (escopo do tenant). Traz `factors` (explicabilidade) e a trilha de review quando houver."
-          }
+          ]
         },
         {
-          "name": "Decision — APPROVE (EM_REVISAO → APROVADO)",
+          "name": "01.2 — Conferir o endpoint registrado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{webhookBaseUrl}}/v1/webhook-endpoints/{{tenantId}}",
+              "host": [
+                "{{webhookBaseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "webhook-endpoints",
+                "{{tenantId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('tem segredo proprio', () => pm.expect(b.secretConfigured).to.be.true);",
+                  "pm.test('ativo', () => pm.expect(b.active).to.be.true);",
+                  "// secretConfigured=false significa que a entrega ainda usa o segredo global (dev)."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.3 — Listar endpoints de todos os tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{webhookBaseUrl}}/v1/webhook-endpoints",
+              "host": [
+                "{{webhookBaseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "webhook-endpoints"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "01.4 — Rotacionar o segredo (opcional)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{webhookBaseUrl}}/v1/webhook-endpoints/{{tenantId}}/rotate-secret",
+              "host": [
+                "{{webhookBaseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "webhook-endpoints",
+                "{{tenantId}}",
+                "rotate-secret"
+              ]
+            },
+            "description": "Rotacao com sobreposicao: o segredo anterior continua valido por `barrier.webhook.secret-rotation-overlap` (24h). Rode o receptor com o segredo NOVO e observe que as entregas seguem validas."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.environment.set('webhookSecret', b.secret);",
+                  "console.log('novo segredo; anterior aceito ate ' + b.previousSecretUntil);",
+                  "// Durante a janela (24h) a entrega leva DUAS assinaturas:",
+                  "// X-Barrier-Signature (novo) e X-Barrier-Signature-Previous (anterior).",
+                  "// O receptor local aceita as duas — e assim que a troca acontece sem derrubar entrega."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.5 — Remover o endpoint (limpeza)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{webhookBaseUrl}}/v1/webhook-endpoints/{{tenantId}}",
+              "host": [
+                "{{webhookBaseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "webhook-endpoints",
+                "{{tenantId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "**Rode antes do resto.** A entrega e disparada pela conclusao da avaliacao; sem endpoint registrado, o resultado do passo 03 nao chega em lugar nenhum.\n\nPreparacao (dois terminais):\n\n```sh\n# terminal 1 — o receptor que o ngrok expoe\npython3 tools/webhook-receiver.py\n\n# terminal 2 — o tunel\nngrok start barrier-webhook \\\n  --config \"$HOME/Library/Application Support/ngrok/ngrok.yml\" \\\n  --config tools/ngrok.yml\n```\n\nCopie a URL `https://...ngrok-free.app` para a variavel `ngrokUrl` e rode o 01.1. Inspetor das entregas em http://localhost:4040."
+    },
+    {
+      "name": "02 · Cadastro do subject (CMN 4.753)",
+      "item": [
+        {
+          "name": "02.1 — Preencher o cadastro (PUT parcial)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/subjects/{{document}}/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "subjects",
+                "{{document}}",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"birthDate\": \"1990-01-01\",\n  \"nationality\": \"Brasileira\",\n  \"occupation\": \"Engenheira\",\n  \"address\": {\n    \"street\": \"Rua A\",\n    \"number\": \"10\",\n    \"complement\": null,\n    \"district\": \"Centro\",\n    \"city\": \"São Paulo\",\n    \"state\": \"SP\",\n    \"zipCode\": \"01000-000\"\n  },\n  \"phone\": \"11912345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "O cadastro e **por (subject, tenant)**: cada parceiro tem o seu, e ninguem le o do outro (ADR-0012). O DDD do telefone (11) casa com o estado do endereco (SP) — trocar para um DDD de outro estado faz a `ConsistencyRiskRule` somar ao score."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "// Cadastro e progressivo: campo ausente preserva o que ja estava (SubjectProfilePatch).",
+                  "// Sem estes campos a avaliacao do passo 03 sai EM_REVISAO por cadastro incompleto —",
+                  "// que nao e reprovacao, e o gate de completude da CMN 4.753."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.2 — Ler o subject",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/subjects/{{document}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "subjects",
+                "{{document}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "// 404 aqui significa que este tenant nao tem vinculo com o subject —",
+                  "// o vinculo nasce do primeiro POST de avaliacao, nao do PUT de cadastro."
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Cadastro antes da avaliacao: e o que faz o caminho feliz terminar em APROVADO."
+    },
+    {
+      "name": "03 · Avaliacao PF — caminho automatico",
+      "item": [
+        {
+          "name": "03.1 — Submeter CPF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"CPF\",\n  \"document\": \"111.444.777-35\",\n  \"name\": \"Fulano de Tal\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Responde 202 e processa em background. O `Idempotency-Key` e opcional: com ele, reenviar a mesma requisicao dentro de 24h devolve a avaliacao original com `Idempotency-Replayed: true` em vez de criar outra."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('assessmentId', b.id);",
+                  "pm.test('nasce EM_ANALISE', () => pm.expect(b.status).to.eql('EM_ANALISE'));",
+                  "console.log('assessmentId =', b.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.2 — Consultar o resultado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments",
+                "{{assessmentId}}"
+              ]
+            },
+            "description": "Se voltar `EM_ANALISE`, repita — o processamento e assincrono.\n\nEsperado com o cadastro do passo 02 preenchido: **APROVADO**. Sem ele: **EM_REVISAO** com um fator listando os campos que faltam."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log('status =', b.status, '| risco =', b.riskLevel);",
+                  "console.log('factors =', JSON.stringify(b.factors, null, 2));",
+                  "if (b.status === 'EM_ANALISE') {",
+                  "  console.log('ainda processando — repita em alguns segundos');",
+                  "}",
+                  "// Neste ponto o webhook ja deve ter chegado no receptor local."
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Fluxo completo sem intervencao humana. **Olhe o terminal do receptor** depois do 03.2."
+    },
+    {
+      "name": "04 · Avaliacao PF — revisao humana (EDD)",
+      "item": [
+        {
+          "name": "04.1 — Submeter CPF de PEP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"CPF\",\n  \"document\": \"529.982.247-25\",\n  \"name\": \"Fulano Pep Exemplo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PEP nao e impedimento de relacionamento — e gatilho de diligencia reforcada (Circular BCB 3.978). Por isso a `PepRiskRule` forca REVIEW e nunca REJECT."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('assessmentId', b.id);",
+                  "pm.test('nasce EM_ANALISE', () => pm.expect(b.status).to.eql('EM_ANALISE'));",
+                  "console.log('assessmentId =', b.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.2 — Confirmar que caiu em revisao",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments",
+                "{{assessmentId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log('status =', b.status, '| risco =', b.riskLevel);",
+                  "console.log('factors =', JSON.stringify(b.factors, null, 2));",
+                  "pm.test('EM_REVISAO', () => pm.expect(b.status).to.eql('EM_REVISAO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.3 — Decidir: APPROVE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments",
+                "{{assessmentId}}",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\",\n  \"reviewedBy\": \"analista@empresa\",\n  \"reason\": \"EDD concluida, cliente conhecido\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "So vale a partir de EM_REVISAO — em qualquer outro estado responde 409. Grava `reviewedBy`/`reason`/`reviewedAt` e **reemite o evento**, entao o parceiro recebe o desfecho final pelo mesmo canal de sempre."
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
@@ -150,187 +610,485 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const b = pm.response.json();",
                   "pm.test('status APROVADO', () => pm.expect(b.status).to.eql('APROVADO'));",
-                  "pm.test('trilha preenchida', () => pm.expect(b.reviewedBy).to.be.a('string'));"
+                  "pm.test('trilha preenchida', () => pm.expect(b.reviewedBy).to.be.a('string'));",
+                  "// A decisao reemite barrier.assessment.completed:",
+                  "// o receptor recebe uma SEGUNDA entrega, agora com o desfecho final."
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "04.4 — Decidir: REJECT (alternativa ao 04.3)",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"decision\": \"APPROVE\",\n  \"reviewedBy\": \"analista@empresa\",\n  \"reason\": \"EDD concluida, cliente conhecido\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}/decision",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "assessments", "{{assessmentId}}", "decision"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments",
+                "{{assessmentId}}",
+                "decision"
+              ]
             },
-            "description": "Decisão humana (EDD). Só vale a partir de EM_REVISAO — decidir fora disso responde 409. `reviewedBy` é obrigatório.\n\nObs.: evite acentos no `reason` ao testar via terminais que reescrevem o encoding; o corpo deve ser UTF-8 válido."
-          }
-        },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"REJECT\",\n  \"reviewedBy\": \"analista@empresa\",\n  \"reason\": \"risco acima do apetite\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Rode em vez do 04.3, nao depois: a segunda decisao sobre a mesma",
+                  "// avaliacao responde 409 (Assessment.decide exige EM_REVISAO)."
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "A fila de EDD. Rode **04.3 ou 04.4**, nunca os dois na mesma avaliacao."
+    },
+    {
+      "name": "05 · Avaliacao PJ (KYB de 1o grau)",
+      "item": [
         {
-          "name": "Decision — REJECT (EM_REVISAO → REPROVADO)",
+          "name": "05.1 — Submeter CNPJ",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments"
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"decision\": \"REJECT\",\n  \"reviewedBy\": \"analista@empresa\",\n  \"reason\": \"risco acima do apetite\"\n}"
+              "raw": "{\n  \"documentType\": \"CNPJ\",\n  \"document\": \"18.236.120/0001-58\",\n  \"name\": \"Nubank\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
+            "description": "Exige rede: o `BrasilApiBureauProvider` consulta a BrasilAPI para trazer abertura, CNAE e QSA."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('assessmentId', b.id);",
+                  "pm.test('nasce EM_ANALISE', () => pm.expect(b.status).to.eql('EM_ANALISE'));",
+                  "console.log('assessmentId =', b.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05.2 — Ver os fatores de PJ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
             "url": {
-              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}/decision",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "assessments", "{{assessmentId}}", "decision"]
-            },
-            "description": "Reprova manualmente uma avaliação em revisão."
-          }
+              "raw": "{{baseUrl}}/v1/assessments/{{assessmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments",
+                "{{assessmentId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log('factors =', JSON.stringify(b.factors, null, 2));",
+                  "// Regras de PJ: NEW_COMPANY (empresa recem-aberta), SENSITIVE_CNAE,",
+                  "// CORPORATE_STRUCTURE (socio estrangeiro ou PJ no QSA de 1o grau)."
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "Subjects",
+      "name": "06 · Historico interno do subject",
       "item": [
         {
-          "name": "Get subject por documento",
-          "request": {
-            "method": "GET",
-            "header": [ { "key": "Authorization", "value": "Bearer {{apiKey}}" } ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/subjects/{{document}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "subjects", "{{document}}"]
-            },
-            "description": "Retorna o subject (documento mascarado) só se o tenant tem vínculo; senão 404 (não vaza cliente de outro tenant)."
-          }
-        },
-        {
-          "name": "Update profile (cadastro CMN 4.753)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"birthDate\": \"1990-01-01\",\n  \"nationality\": \"Brasileira\",\n  \"occupation\": \"Engenheira\",\n  \"address\": {\n    \"street\": \"Rua A\",\n    \"number\": \"10\",\n    \"complement\": null,\n    \"district\": \"Centro\",\n    \"city\": \"São Paulo\",\n    \"state\": \"SP\",\n    \"zipCode\": \"01000-000\"\n  },\n  \"phone\": \"11912345678\",\n  \"email\": \"fulano@example.com\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/v1/subjects/{{document}}/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "subjects", "{{document}}", "profile"]
-            },
-            "description": "Cadastro progressivo (PUT parcial — campo omitido preserva o valor existente). Sem os campos mínimos do tipo de documento, a avaliação cai em EM_REVISAO mesmo com score baixo (RegistrationCompleteness)."
-          }
-        },
-        {
-          "name": "Record history event (chargeback/PIX devolvido/fraude)",
+          "name": "06.1 — Registrar um evento negativo",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/subjects/{{document}}/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "subjects",
+                "{{document}}",
+                "history"
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"eventType\": \"CHARGEBACK\",\n  \"detail\": \"Chargeback em compra de 2026-07-01\",\n  \"occurredAt\": null\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/v1/subjects/{{document}}/history",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "subjects", "{{document}}", "history"]
-            },
-            "description": "Endpoint interno/admin: registra um evento de histórico (CHARGEBACK/PIX_RETURNED/FRAUD_REPORT/ACCOUNT_CLOSED_FRAUD) que alimenta HistoryRiskRule nas próximas avaliações deste subject."
-          }
+              "raw": "{\n  \"eventType\": \"CHARGEBACK\",\n  \"detail\": \"Chargeback em compra de 2026-07-01\",\n  \"occurredAt\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('2xx', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "List history events",
+          "name": "06.2 — Listar o historico",
           "request": {
             "method": "GET",
-            "header": [ { "key": "Authorization", "value": "Bearer {{apiKey}}" } ],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/v1/subjects/{{document}}/history",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "subjects", "{{document}}", "history"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "subjects",
+                "{{document}}",
+                "history"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "06.3 — Reavaliar o mesmo CPF e ver o historico pesar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assessments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assessments"
+              ]
             },
-            "description": "Lista os eventos de histórico interno já registrados para o subject."
-          }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"CPF\",\n  \"document\": \"111.444.777-35\",\n  \"name\": \"Fulano de Tal\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Depois deste, rode o **03.2** de novo: os `factors` agora trazem a contribuicao do historico."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('assessmentId', b.id);",
+                  "pm.test('nasce EM_ANALISE', () => pm.expect(b.status).to.eql('EM_ANALISE'));",
+                  "console.log('assessmentId =', b.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Mostra o score mudando por fato interno, sem consulta externa nova."
+    },
+    {
+      "name": "07 · Regras configuraveis por tenant",
+      "item": [
+        {
+          "name": "07.1 — Definir override de parametro",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/tenants/{{tenantId}}/risk-config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "tenants",
+                "{{tenantId}}",
+                "risk-config"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruleCode\": \"NEW_COMPANY\",\n  \"paramKey\": \"months\",\n  \"paramValue\": \"12\",\n  \"updatedBy\": \"admin@barrier\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Operacao **interna/admin**, nao self-service do parceiro: deixar o tenant relaxar os proprios controles e exatamente o risco que a validacao existe para evitar."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('2xx', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]));",
+                  "// Só regras de APETITE de risco sao configuraveis. NEW_COMPANY e SENSITIVE_CNAE sim;",
+                  "// IDENTITY, PEP e SANCTION nao — e o ArchUnit barra a dependencia dessas classes",
+                  "// no TenantRiskConfigService, entao a restricao nao depende de disciplina."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07.2 — Ler a config efetiva",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/tenants/{{tenantId}}/risk-config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "tenants",
+                "{{tenantId}}",
+                "risk-config"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mostra o override do tenant ou o default global, ja resolvido."
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "Tenant Risk Config",
+      "name": "08 · Registry de regras (kill switch global)",
       "item": [
         {
-          "name": "Upsert override de regra por tenant",
-          "request": {
-            "method": "PUT",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"ruleCode\": \"NEW_COMPANY\",\n  \"paramKey\": \"months\",\n  \"paramValue\": \"12\",\n  \"updatedBy\": \"admin@barrier\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/v1/tenants/{{clientId}}/risk-config",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "tenants", "{{clientId}}", "risk-config"]
-            },
-            "description": "Operação interna/admin — só regras de apetite de risco na allowlist (`NEW_COMPANY`, `SENSITIVE_CNAE`) aceitam override; regras regulatórias fixas (sanção/PEP/identidade/bandas) respondem 400."
-          }
-        },
-        {
-          "name": "Get config efetiva do tenant",
+          "name": "08.1 — Listar as regras e o estado de cada uma",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
             "url": {
-              "raw": "{{baseUrl}}/v1/tenants/{{clientId}}/risk-config",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "tenants", "{{clientId}}", "risk-config"]
-            },
-            "description": "Merge default global + overrides do tenant, um item por (rule_code, param_key) configurável."
-          }
-        }
-      ]
-    },
-    {
-      "name": "Rule Registry",
-      "item": [
-        {
-          "name": "List regras (enabled/vigência/criticidade)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/v1/risk-rules", "host": ["{{baseUrl}}"], "path": ["v1", "risk-rules"] },
-            "description": "Estado operacional de cada família de regra — kill switch global (todos os tenants), diferente do override por parceiro em Tenant Risk Config."
-          }
+              "raw": "{{baseUrl}}/v1/risk-rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "risk-rules"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "// enabled, vigencia (validFrom/validUntil) e criticidade por FAMILIA de regra."
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Desabilitar/reconfigurar uma regra",
+          "name": "08.2 — Desabilitar/reconfigurar uma regra",
           "request": {
             "method": "PUT",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"description\": \"CNAE sensível a PLD-FT\",\n  \"criticality\": \"ALERT\",\n  \"enabled\": false,\n  \"validFrom\": null,\n  \"validUntil\": null\n}"
-            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/v1/risk-rules/SENSITIVE_CNAE",
-              "host": ["{{baseUrl}}"],
-              "path": ["v1", "risk-rules", "SENSITIVE_CNAE"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "risk-rules",
+                "SENSITIVE_CNAE"
+              ]
             },
-            "description": "Liga/desliga uma família de regra ou limita sua vigência, sem deploy — ajuste operacional de emergência."
-          }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false,\n  \"criticality\": \"ALERT\",\n  \"validFrom\": null,\n  \"validUntil\": null,\n  \"updatedBy\": \"admin@barrier\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Diferente do passo 07: aqui a regra inteira sai do motor, para **todos** os tenants. La, um parametro de uma regra que continua ativa muda para **um** parceiro."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('2xx', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]));",
+                  "// Regra REGULATORIA ignora o registry: se constar inativa, o motor loga WARN",
+                  "// e executa mesmo assim — desligar controle regulatorio e incidente, nao config."
+                ]
+              }
+            }
+          ]
         }
       ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "assessmentId",
+      "value": ""
     }
   ]
 }
