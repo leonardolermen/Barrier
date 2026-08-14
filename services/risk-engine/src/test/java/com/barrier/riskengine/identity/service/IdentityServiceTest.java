@@ -37,7 +37,11 @@ class IdentityServiceTest {
 
   private IdentityService service() {
     when(provider.supports("CPF")).thenReturn(true);
-    return new IdentityService(List.of(provider), repository, breakers());
+    return newService(List.of(provider));
+  }
+
+  private IdentityService newService(List<BureauProvider> providers) {
+    return new IdentityService(providers, repository, breakers(), false, Duration.ofHours(24));
   }
 
   /** Registro novo a cada serviço: o estado do disjuntor não deve vazar entre os testes. */
@@ -46,7 +50,7 @@ class IdentityServiceTest {
   }
 
   private VerifyIdentityCommand cpfCommand() {
-    return new VerifyIdentityCommand("aid", "CPF", "11144477735", "Fulano");
+    return new VerifyIdentityCommand("aid", "tenant-a", "CPF", "11144477735", "Fulano");
   }
 
   @Test
@@ -86,10 +90,10 @@ class IdentityServiceTest {
   @Test
   void semProviderParaTipoViraUnavailable() {
     // provider não suporta o tipo -> nenhum selecionado
-    var svc = new IdentityService(List.of(provider), repository, breakers());
+    var svc = newService(List.of(provider));
 
     IdentityCheck check =
-        svc.verify(new VerifyIdentityCommand("aid", "PASSAPORTE", "X", "Fulano")).check();
+        svc.verify(new VerifyIdentityCommand("aid", "tenant-a", "PASSAPORTE", "X", "Fulano")).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
     assertThat(check.provider()).isEqualTo("nenhum");
@@ -106,7 +110,7 @@ class IdentityServiceTest {
     when(fallback.name()).thenReturn("secundario");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider, fallback), repository, breakers()).verify(cpfCommand()).check();
+        newService(List.of(provider, fallback)).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.VERIFIED);
     assertThat(check.provider()).isEqualTo("secundario");
@@ -124,7 +128,7 @@ class IdentityServiceTest {
     when(fallback.name()).thenReturn("p2");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider, fallback), repository, breakers()).verify(cpfCommand()).check();
+        newService(List.of(provider, fallback)).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
     assertThat(check.provider()).isEqualTo("todos");
@@ -143,7 +147,7 @@ class IdentityServiceTest {
     when(provider.name()).thenReturn("bureau-real");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider, fallback), repository, breakers()).verify(cpfCommand()).check();
+        newService(List.of(provider, fallback)).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.UNAVAILABLE);
     verify(fallback, never()).check(any());
@@ -158,7 +162,7 @@ class IdentityServiceTest {
     when(provider.name()).thenReturn("stub");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider), repository, breakers()).verify(cpfCommand()).check();
+        newService(List.of(provider)).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.VERIFIED);
   }
@@ -173,7 +177,7 @@ class IdentityServiceTest {
     when(provider.supports("CPF")).thenReturn(true);
     when(provider.check(any(BureauQuery.class))).thenThrow(new BureauUnavailableException("timeout"));
     when(provider.name()).thenReturn("bureau-real");
-    IdentityService svc = new IdentityService(List.of(provider), repository, breakers());
+    IdentityService svc = newService(List.of(provider));
 
     for (int i = 0; i < 3; i++) {
       assertThat(svc.verify(cpfCommand()).check().status()).isEqualTo(IdentityStatus.UNAVAILABLE);
@@ -196,7 +200,7 @@ class IdentityServiceTest {
     when(provider.name()).thenReturn("primario");
     when(fallback.name()).thenReturn("secundario");
     when(fallback.check(any(BureauQuery.class))).thenReturn(BureauResult.match("ok"));
-    IdentityService svc = new IdentityService(List.of(provider, fallback), repository, breakers());
+    IdentityService svc = newService(List.of(provider, fallback));
 
     for (int i = 0; i < 3; i++) {
       svc.verify(cpfCommand());
@@ -217,7 +221,7 @@ class IdentityServiceTest {
     when(provider.name()).thenReturn("primario");
 
     IdentityCheck check =
-        new IdentityService(List.of(provider, fallback), repository, breakers()).verify(cpfCommand()).check();
+        newService(List.of(provider, fallback)).verify(cpfCommand()).check();
 
     assertThat(check.status()).isEqualTo(IdentityStatus.NOT_FOUND);
     verify(fallback, never()).check(any());

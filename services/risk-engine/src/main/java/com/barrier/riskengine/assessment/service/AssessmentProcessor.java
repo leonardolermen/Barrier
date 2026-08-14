@@ -187,6 +187,7 @@ public class AssessmentProcessor {
         identityService.verify(
             new VerifyIdentityCommand(
                 assessment.id().asString(),
+                assessment.tenantId(),
                 assessment.documentType().name(),
                 assessment.documentDigits(),
                 assessment.name()));
