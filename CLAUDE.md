@@ -65,7 +65,7 @@ persistido; `IdentityService.verify` devolve `IdentityResult(check, company)` e 
 até o motor de risco pelo `RiskContext`. Regras de PJ que consomem isso: `NewCompanyRiskRule`
 (empresa recém-aberta), `SensitiveCnaeRiskRule` (CNAE sensível a PLD-FT) e
 `CorporateStructureRiskRule` (KYB — sócio estrangeiro/PJ no QSA de 1º grau; árvore até 3º grau
-ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.7.0`.
+ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
 
 Watchlists (screening): **ingeridas** (ADR-0010) — `WatchlistImporter` (ApplicationRunner +
 @Scheduled) carrega `WatchlistSource`s numa tabela `watchlist_entries`; `LocalWatchlistProvider`
@@ -204,7 +204,7 @@ inidoneidade em licitação não impede relacionamento bancário e gerava `REJEC
 100 sem recomendação por nome, nunca REJECT, sócio não escala). **Não** é `RegulatoryRiskRule` — é
 apetite de risco, desligável pelo registry (V030). Consequência: a CGU não conta mais como cobertura
 de `SANCTION`; a única fonte é a OFAC, então habilitar só a CGU em prod falha o
-`WatchlistReadinessGuard`. `ENGINE_VERSION` = `barrier-risk-rules/1.7.0`.
+`WatchlistReadinessGuard`. `ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
 
 Bureau real de CNPJ (Onda 2): `BigBoostCnpjBureauProvider` (`@Order(20)`, dataset `basic_data` da
 API de Empresas, mesma flag `barrier.identity.bigboost.enabled`) tira a cadeia de PJ do fail-open —
@@ -480,8 +480,8 @@ Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (451 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 531 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (530 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 610 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).
