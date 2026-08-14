@@ -10,6 +10,8 @@ import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.service.AssessmentService;
 import com.barrier.riskengine.assessment.service.SubmissionResult;
 import com.barrier.riskengine.assessment.service.SubmitAssessmentCommand;
+import com.barrier.riskengine.identity.domain.IdentityProvenance;
+import com.barrier.riskengine.identity.service.IdentityProvenanceService;
 import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -32,9 +34,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AssessmentController {
 
   private final AssessmentService service;
+  private final IdentityProvenanceService identityProvenance;
 
-  public AssessmentController(AssessmentService service) {
+  public AssessmentController(AssessmentService service, IdentityProvenanceService identityProvenance) {
     this.service = service;
+    this.identityProvenance = identityProvenance;
   }
 
   /**
@@ -66,7 +70,9 @@ public class AssessmentController {
   @GetMapping("/{id}")
   public ResponseEntity<AssessmentResponse> get(AuthenticatedTenant tenant, @PathVariable String id) {
     Assessment assessment = service.get(AssessmentId.of(id), tenant.id());
-    return ResponseEntity.ok(AssessmentDtoMapper.toResponse(assessment));
+    IdentityProvenance provenance =
+        identityProvenance.forAssessment(assessment.id().asString()).orElse(null);
+    return ResponseEntity.ok(AssessmentDtoMapper.toResponse(assessment, provenance));
   }
 
   /**

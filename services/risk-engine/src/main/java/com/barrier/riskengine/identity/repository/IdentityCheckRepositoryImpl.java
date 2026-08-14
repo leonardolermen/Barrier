@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import com.barrier.riskengine.identity.repository.interfaces.IdentityCheckJpaRepository;
 import com.barrier.riskengine.identity.repository.interfaces.IdentityCheckRepository;
@@ -42,6 +43,11 @@ class IdentityCheckRepositoryImpl implements IdentityCheckRepository {
     return jpa.findByAssessmentId(assessmentId).stream()
         .map(IdentityCheckEntityMapper::toDomain)
         .toList();
+  }
+
+  @Override
+  public Optional<IdentityCheck> findById(UUID id) {
+    return jpa.findById(id).map(IdentityCheckEntityMapper::toDomain);
   }
 
   @Override

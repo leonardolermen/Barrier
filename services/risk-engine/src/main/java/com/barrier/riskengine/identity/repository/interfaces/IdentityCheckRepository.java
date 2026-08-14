@@ -4,6 +4,7 @@ import com.barrier.riskengine.identity.domain.IdentityCheck;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Repositório de domínio das verificações de identidade. */
 public interface IdentityCheckRepository {
@@ -11,6 +12,9 @@ public interface IdentityCheckRepository {
   IdentityCheck save(IdentityCheck check);
 
   List<IdentityCheck> findByAssessmentId(String assessmentId);
+
+  /** Usado para seguir {@code reusedFromId} até a consulta original (procedência da verificação). */
+  Optional<IdentityCheck> findById(UUID id);
 
   /**
    * Verificação anterior que pode ser reaproveitada por uma avaliação nova, se existir.

@@ -15,6 +15,7 @@ import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.repository.interfaces.IdentityCheckRepository;
 import com.barrier.riskengine.resilience.CircuitBreakerRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +42,8 @@ class IdentityServiceTest {
   }
 
   private IdentityService newService(List<BureauProvider> providers) {
-    return new IdentityService(providers, repository, breakers(), false, Duration.ofHours(24));
+    return new IdentityService(
+        providers, repository, breakers(), false, Duration.ofHours(24), new SimpleMeterRegistry());
   }
 
   /** Registro novo a cada serviço: o estado do disjuntor não deve vazar entre os testes. */

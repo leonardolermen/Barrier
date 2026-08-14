@@ -11,6 +11,7 @@ import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.identity.repository.interfaces.IdentityCheckRepository;
 import com.barrier.riskengine.resilience.CircuitBreaker;
 import com.barrier.riskengine.resilience.CircuitBreakerRegistry;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -40,18 +41,21 @@ public class IdentityService {
   private final CircuitBreakerRegistry breakers;
   private final boolean reuseEnabled;
   private final Duration reuseTtl;
+  private final MeterRegistry registry;
 
   public IdentityService(
       List<BureauProvider> providers,
       IdentityCheckRepository repository,
       CircuitBreakerRegistry breakers,
       @Value("${barrier.identity.reuse.enabled:false}") boolean reuseEnabled,
-      @Value("${barrier.identity.reuse.ttl:PT24H}") Duration reuseTtl) {
+      @Value("${barrier.identity.reuse.ttl:PT24H}") Duration reuseTtl,
+      MeterRegistry registry) {
     this.providers = providers;
     this.repository = repository;
     this.breakers = breakers;
     this.reuseEnabled = reuseEnabled;
     this.reuseTtl = reuseTtl;
+    this.registry = registry;
   }
 
   public IdentityResult verify(VerifyIdentityCommand command) {
@@ -70,6 +74,7 @@ public class IdentityService {
       // original (mesmo tenant) e o patch preserva campo ausente. Para PJ não seria: a
       // CorporateStructureRiskRule perderia o QSA e deixaria de disparar em silêncio — é por isso
       // que só CPF entra em findReusable.
+      countCheck("reused");
       return new IdentityResult(check, null, null);
     }
 
@@ -115,6 +120,7 @@ public class IdentityService {
             maskedDoc,
             result.company() != null ? " [perfil PJ obtido]" : "");
         log.debug("Detalhe do bureau '{}': {}", provider.name(), result.detail());
+        countCheck("fresh");
         return new IdentityResult(check, result.company(), result.person());
       } catch (BureauUnavailableException e) {
         // Só indisponibilidade conta para o disjuntor. Um erro de programação (NPE, parsing) não é
@@ -176,6 +182,16 @@ public class IdentityService {
         command.documentDigits(),
         command.name(),
         Instant.now().minus(reuseTtl));
+  }
+
+  /**
+   * Conta de onde veio a verificação. Sem separar reuso de consulta fresca, uma queda de custo é
+   * indistinguível de uma queda de tráfego — e uma flag de reuso ligada por engano numa base
+   * grande não apareceria em lugar nenhum. {@code UNAVAILABLE} no fim da cadeia não conta em
+   * nenhum dos dois: não houve verificação.
+   */
+  private void countCheck(String outcome) {
+    registry.counter("barrier.identity.check", "outcome", outcome).increment();
   }
 
   private IdentityResult unavailable(VerifyIdentityCommand command, String provider, String detail) {
