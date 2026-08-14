@@ -2,6 +2,7 @@ package com.barrier.riskengine.assessment.repository;
 
 import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -124,5 +125,20 @@ class AssessmentRepositoryImpl implements AssessmentRepository {
         "UPDATE assessments SET claimed_at = now() WHERE id IN (" + placeholders + ")",
         ids.toArray());
     return ids.stream().map(AssessmentId::new).toList();
+  }
+
+  @Override
+  public boolean existsRecentByOriginAndSubject(
+      UUID subjectId, String tenantId, AssessmentOrigin origin, Duration window) {
+    Boolean exists =
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM assessments WHERE subject_id = ? AND tenant_id = ?"
+                + " AND origin = ? AND created_at >= now() - (? * interval '1 second'))",
+            Boolean.class,
+            subjectId,
+            tenantId,
+            origin.name(),
+            window.toSeconds());
+    return Boolean.TRUE.equals(exists);
   }
 }

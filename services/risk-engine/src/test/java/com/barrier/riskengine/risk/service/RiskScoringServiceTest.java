@@ -64,6 +64,7 @@ class RiskScoringServiceTest {
         IdentityCheck.create("aid", identity, "stub", "d"),
         ScreeningResult.of("aid", List.of(hits)),
         null,
+        null,
         null);
   }
 
@@ -81,6 +82,7 @@ class RiskScoringServiceTest {
         IdentityCheck.create("aid", IdentityStatus.VERIFIED, "brasilapi", "d"),
         ScreeningResult.of("aid", List.of()),
         company,
+        null,
         null);
   }
 

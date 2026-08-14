@@ -147,6 +147,94 @@ public class FieldVerificationService {
   }
 
   /**
+   * Registra a concordância entre o nascimento declarado e o que a documentoscopia leu do
+   * documento apresentado.
+   *
+   * <p>Mesmo precedente de {@link #recordBirthDateFromBureau}, com {@code method = DOCUMENT}: a
+   * fonte independente aqui é a documentoscopia, não o bureau, e a trilha precisa distinguir as
+   * duas — são forças de prova diferentes numa contestação. Divergência também não vira exceção
+   * aqui; quem decide o que fazer com ela é a regra de risco de documentoscopia, não este
+   * serviço.
+   */
+  @Transactional
+  public void recordBirthDateFromDocument(
+      UUID subjectId,
+      String tenantId,
+      LocalDate declared,
+      LocalDate fromDocument,
+      String evidence) {
+    if (declared == null || fromDocument == null || !declared.equals(fromDocument)) {
+      return;
+    }
+    repository.save(
+        new FieldVerification(
+            UUID.randomUUID(),
+            subjectId,
+            tenantId,
+            VerifiableField.BIRTH_DATE,
+            VerificationMethod.DOCUMENT,
+            declared.toString(),
+            evidence,
+            clock.instant()));
+  }
+
+  /**
+   * Registra a concordância entre o nascimento declarado e o que a validação cadastral do
+   * Datavalid/Serpro devolveu para a Receita Federal ({@code rfb.data_nascimento = true}).
+   *
+   * <p>Mesmo precedente de {@link #recordBirthDateFromBureau}, com {@code method = REGISTRY}: a
+   * fonte é a RFB via Datavalid, não o bureau comercial — força de prova diferente numa
+   * contestação, por isso o método próprio em vez de reaproveitar {@code BUREAU}.
+   */
+  @Transactional
+  public void recordBirthDateFromRegistry(
+      UUID subjectId, String tenantId, LocalDate declared, boolean confirmedByRegistry, String evidence) {
+    if (declared == null || !confirmedByRegistry) {
+      return;
+    }
+    repository.save(
+        new FieldVerification(
+            UUID.randomUUID(),
+            subjectId,
+            tenantId,
+            VerifiableField.BIRTH_DATE,
+            VerificationMethod.REGISTRY,
+            declared.toString(),
+            evidence,
+            clock.instant()));
+  }
+
+  /**
+   * Registra a concordância entre o endereço declarado e o endereço da CNH conferido pela
+   * validação cadastral do Datavalid/Serpro ({@code cnh.endereco.cep = true} e {@code uf = true}).
+   *
+   * <p>Usa {@code method = ADDRESS_LOOKUP} — não {@code REGISTRY} — porque o valor já existia no
+   * enum, definido exatamente para "valor conferido contra base de endereçamento", e nunca tinha
+   * sido usado. <b>Cobertura parcial e deliberada:</b> o Datavalid só confere endereço contra a
+   * base da CNH (SENATRAN), não contra uma base geral de endereços — quem não tem CNH com
+   * endereço registrado continua sem verificação deste campo. Isto fecha "verificar dados, não só
+   * presença" só para o subconjunto de titulares com CNH; ver
+   * {@code docs/implementation/plano-remediacao-auditoria.md}.
+   */
+  @Transactional
+  public void recordAddressFromRegistry(
+      UUID subjectId, String tenantId, String declaredZip, boolean confirmedByRegistry, String evidence) {
+    if (declaredZip == null || declaredZip.isBlank() || !confirmedByRegistry) {
+      return;
+    }
+    repository.save(
+        new FieldVerification(
+            UUID.randomUUID(),
+            subjectId,
+            tenantId,
+            VerifiableField.ADDRESS,
+            VerificationMethod.ADDRESS_LOOKUP,
+            declaredZip,
+            evidence,
+            clock.instant()));
+  }
+
+  /**
    * Campos verificados <b>e ainda válidos</b> para o cadastro atual.
    *
    * <p>O cruzamento com o valor corrente é o que impede o truque de verificar um telefone e trocar

@@ -37,6 +37,21 @@ public class IdentityCheckEntity {
   @Column(name = "assessment_id", nullable = false, length = 64)
   private String assessmentId;
 
+  @Column(name = "tenant_id", length = 64)
+  private String tenantId;
+
+  @Column(name = "document_type", length = 10)
+  private String documentType;
+
+  @Column(name = "document_digits", length = 14)
+  private String documentDigits;
+
+  @Column(name = "name", length = 200)
+  private String name;
+
+  @Column(name = "reused_from_id")
+  private UUID reusedFromId;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 20)
   private IdentityStatus status;

@@ -562,6 +562,17 @@ de outro tenant.
   `RegistrationCompleteness` checa se o campo está preenchido, não se é verdadeiro: preencher
   com dados plausíveis satisfaz o gate e libera aprovação automática.
   *Pronto quando:* OTP de telefone/e-mail, validação de endereço, nascimento contra bureau.
+  **Progresso (2026-08-13, validação cadastral Datavalid/Serpro):** nascimento passou a poder
+  ser confirmado contra a RFB (`pessoa-fisica/validacao`, `VerificationMethod.REGISTRY`), além do
+  bureau e da documentoscopia que já existiam. Endereço passou a ter uma via de verificação —
+  `VerificationMethod.ADDRESS_LOOKUP`, que já estava definido no enum e nunca tinha sido usado —
+  mas **essa cobertura é parcial, não geral**: o Datavalid só confere o endereço declarado contra
+  o endereço registrado na **CNH** (via SENATRAN), não contra uma base de endereçamento
+  independente. Quem tem CNH com endereço cadastrado ganha verificação real; quem não tem CNH, ou
+  tem CNH sem endereço registrado, **continua sem nenhuma verificação de endereço** — o campo
+  segue igual a antes desta etapa para esse subconjunto de subjects. Por isso o item continua
+  aberto: fechá-lo exigiria uma segunda fonte de verificação de endereço para quem não tem CNH,
+  que não existe ainda.
 
 - [x] **Proveniência por tenant no `SubjectProfile`** 🔴 — `fix/audit-top10`
   O cadastro era **global e gravável por qualquer tenant vinculado**, e o vínculo nasce de um
@@ -726,6 +737,12 @@ de outro tenant.
   *Pronto quando:* lote grande exige cota configurada por tenant (fail-closed sem ela), faixa
   `BULK` só consome capacidade ociosa, e um teste de concorrência prova que backfill de um tenant
   não atrasa o tempo real de outro.
+  ⚠️ **O reuso de verificação de identidade (`barrier.identity.reuse.*`, ver CLAUDE.md) não
+  fecha este item.** Reuso ataca repetição — o mesmo CPF, mesmo nome, mesmo tenant, dentro de
+  24h — e cota ataca volume. Reprocessar 500 mil documentos **distintos** continua custando os
+  mesmos R$20 mil do cálculo acima, porque nenhum deles tem consulta anterior para reaproveitar.
+  São controles diferentes para riscos diferentes; tratar o reuso como se reduzisse a exposição
+  de ingestão em massa daria a sensação falsa de item fechado.
 
 - [ ] **Paralelizar o processamento** — depois da cota e do cap de bureau, nesta ordem
   `AssessmentProcessor.process()` reivindica `BATCH = 50` e processa **sequencialmente numa única
@@ -775,8 +792,18 @@ cujas condições atuais para empresa privada precisam ser confirmadas.
 
 ## Convenções
 
-- Mudança de regra ou peso **sobe `ENGINE_VERSION`** (atual: `barrier-risk-rules/1.4.0`).
+- Mudança de regra ou peso **sobe `ENGINE_VERSION`** (atual: `barrier-risk-rules/1.7.0`).
+  Vale também para regra que **existia e não disparava** passando a disparar: muda a decisão para o
+  mesmo insumo, ainda que nenhuma linha de regra tenha sido editada.
 - Bug corrigido vem com teste de regressão que **falha antes** da correção.
 - Controle novo que possa faltar em produção ganha um `ReadinessGuard` no padrão dos existentes:
   falha a subida em `prod`, avisa nos demais profiles.
+- **Endpoint novo escopado por tenant ganha caso de cruzamento no `TenantIsolationIntegrationTest`**
+  — com dois tenants reais e credenciais reais, atravessando o `ProblemExceptionHandler`. Não basta
+  testar "o recurso não existe": o teste tem de ser *existe e pertence a outro parceiro*, senão ele
+  passa com o controle removido. Três dos quatro vazamentos cross-tenant já fechados neste plano
+  (cadastro compartilhado, destino de webhook global, segredo HMAC único) nasceram de um caminho que
+  ninguém desenhou procurando; o quarto foi o `SubjectService.findById` sem escopo, encontrado em
+  revisão de código e não por teste. O critério é: **apague a checagem de vínculo do serviço e o
+  teste tem de ficar vermelho.**
 - Ao fechar um item, atualize a tabela **Onde estamos** e mova para ✅ com o commit.

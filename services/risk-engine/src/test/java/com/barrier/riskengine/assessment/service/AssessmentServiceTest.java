@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
 import com.barrier.riskengine.assessment.domain.exceptions.AssessmentNotFoundException;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
@@ -66,6 +67,26 @@ class AssessmentServiceTest {
     assertThat(result.assessment().subjectId()).isNotNull();
     // sem Idempotency-Key o serviço nem consulta a tabela de chaves
     verifyNoInteractions(idempotency);
+  }
+
+  @Test
+  void submitComOrigemAssuranceGravaOriginEOriginDetail() {
+    when(subjectService.findOrCreate(any(), any(), any()))
+        .thenReturn(Subject.create("CPF", "11144477735", "Fulano"));
+    when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    SubmissionResult result =
+        service()
+            .submit(
+                SubmitAssessmentCommand.assurance(
+                    "default",
+                    DocumentType.CPF,
+                    "111.444.777-35",
+                    "Fulano",
+                    "DOCUMENT@abc-123"));
+
+    assertThat(result.assessment().origin()).isEqualTo(AssessmentOrigin.ASSURANCE);
+    assertThat(result.assessment().originDetail()).isEqualTo("DOCUMENT@abc-123");
   }
 
   @Test

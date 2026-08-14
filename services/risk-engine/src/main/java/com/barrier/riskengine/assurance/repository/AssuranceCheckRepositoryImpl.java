@@ -1,15 +1,21 @@
 package com.barrier.riskengine.assurance.repository;
 
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
+import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.domain.AssuranceOutcome;
+import com.barrier.riskengine.assurance.domain.DivergentField;
 import com.barrier.riskengine.assurance.repository.interfaces.AssuranceCheckRepository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Duration;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,8 +26,9 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
   private static final String INSERT =
       "INSERT INTO identity_assurance_checks"
           + " (id, subject_id, tenant_id, kind, outcome, score, provider, provider_reference,"
-          + " algorithm_version, submitted_hash, detail, checked_at)"
-          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+          + " algorithm_version, submitted_hash, detail, divergent_fields, checked_at,"
+          + " consent_reference, consent_purpose, consent_granted_at, pin, pin_expires_at)"
+          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   private final JdbcTemplate jdbc;
 
@@ -45,7 +52,15 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         c.algorithmVersion(),
         c.submittedHash(),
         c.detail(),
-        Timestamp.from(c.checkedAt()));
+        c.divergences().isEmpty()
+            ? null
+            : c.divergences().stream().map(Enum::name).collect(Collectors.joining(",")),
+        Timestamp.from(c.checkedAt()),
+        c.consent() == null ? null : c.consent().reference(),
+        c.consent() == null ? null : c.consent().purpose(),
+        c.consent() == null ? null : Timestamp.from(c.consent().grantedAt()),
+        c.pin(),
+        c.pinExpiresAt() == null ? null : Timestamp.from(c.pinExpiresAt()));
   }
 
   @Override
@@ -74,20 +89,90 @@ class AssuranceCheckRepositoryImpl implements AssuranceCheckRepository {
         tenantId);
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public long countRecent(UUID subjectId, String tenantId, AssuranceKind kind, Duration window) {
+    Long count =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM identity_assurance_checks WHERE subject_id = ?"
+                + " AND tenant_id = ? AND kind = ? AND checked_at >= now() - (? * interval '1"
+                + " second')",
+            Long.class,
+            subjectId,
+            tenantId,
+            kind.name(),
+            window.toSeconds());
+    return count == null ? 0 : count;
+  }
+
+  /**
+   * {@code UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING *} numa única
+   * ida ao banco: reivindica e devolve as linhas já marcadas, na mesma transação curta que o
+   * {@code AssuranceResultPoller} abre antes de sair para a rede — a chamada ao provedor acontece
+   * depois, fora desta transação.
+   */
+  @Override
+  @Transactional
+  public List<AssuranceCheck> claimPendingBiometric(int limit, Duration lease) {
+    return jdbc.query(
+        "UPDATE identity_assurance_checks SET claimed_at = now() WHERE id IN ("
+            + " SELECT id FROM identity_assurance_checks"
+            + " WHERE kind = 'BIOMETRIC' AND outcome = 'PENDING'"
+            + " AND (claimed_at IS NULL OR claimed_at < now() - (? * interval '1 second'))"
+            + " ORDER BY checked_at LIMIT ? FOR UPDATE SKIP LOCKED"
+            + " ) RETURNING *",
+        (rs, i) -> map(rs),
+        lease.toSeconds(),
+        limit);
+  }
+
   private static AssuranceCheck map(ResultSet rs) throws SQLException {
-    int score = rs.getInt("score");
+    // rs.wasNull() reflete a ÚLTIMA coluna lida no ResultSet, não a coluna que se quer checar.
+    // Passá-lo como argumento posicional do construtor é uma armadilha: os argumentos de Java são
+    // avaliados da esquerda para a direita, então qualquer rs.getString(...) de coluna NOT NULL
+    // entre o rs.getInt("score") e o rs.wasNull() (id, subject_id, tenant_id, kind, outcome, todos
+    // acima na lista de argumentos) reseta a flag para false — e um score nulo silenciosamente
+    // virava 0. Isolar a leitura em variável local, com o wasNull() checado imediatamente depois,
+    // fecha essa lacuna.
+    int rawScore = rs.getInt("score");
+    Integer score = rs.wasNull() ? null : rawScore;
+    String consentReference = rs.getString("consent_reference");
+    Timestamp consentGrantedAt = rs.getTimestamp("consent_granted_at");
+    AssuranceConsent consent =
+        consentReference == null
+            ? null
+            : new AssuranceConsent(
+                consentReference,
+                rs.getString("consent_purpose"),
+                consentGrantedAt == null ? null : consentGrantedAt.toInstant());
+    Timestamp pinExpiresAt = rs.getTimestamp("pin_expires_at");
     return new AssuranceCheck(
         UUID.fromString(rs.getString("id")),
         UUID.fromString(rs.getString("subject_id")),
         rs.getString("tenant_id"),
         AssuranceKind.valueOf(rs.getString("kind")),
         AssuranceOutcome.valueOf(rs.getString("outcome")),
-        rs.wasNull() ? null : score,
+        score,
         rs.getString("provider"),
         rs.getString("provider_reference"),
         rs.getString("algorithm_version"),
         rs.getString("submitted_hash"),
         rs.getString("detail"),
-        rs.getTimestamp("checked_at").toInstant());
+        parseDivergences(rs.getString("divergent_fields")),
+        rs.getTimestamp("checked_at").toInstant(),
+        consent,
+        rs.getString("pin"),
+        pinExpiresAt == null ? null : pinExpiresAt.toInstant());
+  }
+
+  private static Set<DivergentField> parseDivergences(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return Set.of();
+    }
+    Set<DivergentField> fields = EnumSet.noneOf(DivergentField.class);
+    for (String name : raw.split(",")) {
+      fields.add(DivergentField.valueOf(name));
+    }
+    return fields;
   }
 }

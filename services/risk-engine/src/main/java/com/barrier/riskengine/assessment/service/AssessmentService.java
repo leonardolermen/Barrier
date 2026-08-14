@@ -2,6 +2,7 @@ package com.barrier.riskengine.assessment.service;
 
 import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
 import com.barrier.riskengine.assessment.domain.exceptions.AssessmentNotFoundException;
 import com.barrier.riskengine.assessment.domain.documents.Documents;
 import com.barrier.riskengine.assessment.domain.exceptions.IdempotencyConflictException;
@@ -9,7 +10,9 @@ import com.barrier.riskengine.assessment.domain.IdempotencyReservation;
 import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
+import java.time.Duration;
 import java.util.Optional;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -115,6 +118,14 @@ public class AssessmentService {
                   command.document(),
                   command.name(),
                   command.originDetail());
+          case ASSURANCE ->
+              Assessment.assurance(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name(),
+                  command.originDetail());
         };
     return repository.save(assessment);
   }
@@ -145,5 +156,21 @@ public class AssessmentService {
     Assessment saved = repository.save(assessment);
     eventPublisher.publishCompleted(saved);
     return saved;
+  }
+
+  /**
+   * Já existe avaliação de {@code origin}, para aquele {@code (subject, tenant)}, criada dentro
+   * de {@code window} (contado a partir de agora)?
+   *
+   * <p>Base do dedup de reavaliações disparadas por evento automático (hoje só
+   * {@code AssuranceReassessmentTrigger}, ver Javadoc dele) — vive aqui, e não é o repositório
+   * exposto direto a quem chama, porque {@code AssessmentService} é o portão do módulo: é onde
+   * moram transação, escopo por tenant e invariantes. Um service de outro módulo falando com este
+   * repositório direto pularia tudo isso, e o próximo gatilho copiaria o atalho.
+   */
+  @Transactional(readOnly = true)
+  public boolean existsRecentByOriginAndSubject(
+      UUID subjectId, String tenantId, AssessmentOrigin origin, Duration window) {
+    return repository.existsRecentByOriginAndSubject(subjectId, tenantId, origin, window);
   }
 }

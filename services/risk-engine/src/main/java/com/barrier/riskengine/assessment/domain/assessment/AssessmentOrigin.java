@@ -14,5 +14,8 @@ public enum AssessmentOrigin {
   ONBOARDING,
 
   /** Criada pelo monitoramento contínuo, por uma entrada nova em lista restritiva. */
-  RESCREENING
+  RESCREENING,
+
+  /** Criada por uma verificação de documentoscopia/biometria que pediu reavaliação. */
+  ASSURANCE
 }

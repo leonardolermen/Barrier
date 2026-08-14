@@ -31,7 +31,10 @@ flowchart TD
     A --> B["202 Accepted<br/>status: EM_ANALISE"]
     B --> C["AssessmentProcessor<br/>(assíncrono, lote com SKIP LOCKED)"]
 
-    C --> D["1 · Identidade<br/>cadeia de bureaus"]
+    C --> D0{"Reuso elegível?<br/>CPF, mesmo tenant/nome,<br/>dentro do TTL (24h)"}
+    D0 -->|sim| D1["copia o desfecho<br/>sem chamar o bureau"]
+    D0 -->|não| D["1 · Identidade<br/>cadeia de bureaus"]
+    D1 --> E
     D --> E["2 · Cadastro<br/>perfil do bureau + declarado"]
     E --> V["3 · Veracidade<br/>nascimento × bureau ✅"]
     V --> F["4 · Screening<br/>titular + sócios + rep. legal"]
@@ -249,6 +252,18 @@ antes da comparação de nome — CPF suspenso/cancelado nunca vira `MATCH`.
 Rastro gravado em `identity_checks`: `provider_reference` (QueryId do provedor) e `raw_response`
 JSONB **com redação** do nome da mãe.
 
+**Reuso de verificação (desligado por padrão, `barrier.identity.reuse.enabled`).** Antes de sair
+para a rede, `IdentityService` consulta se já existe um check elegível — mesmo tenant, mesmo CPF,
+mesmo nome normalizado, desfecho definitivo (nunca `UNAVAILABLE`), dentro do TTL (`PT24H`). Se
+houver, grava um check novo apontando para o original em `reused_from_id` e pula a chamada ao
+bureau — a avaliação continua tendo o próprio `identity_check`, só a evidência é copiada. Só CPF:
+CNPJ nunca reaproveita, porque o `CompanyProfile` (QSA/CNAE) do bureau é transiente e não fica no
+check — reusar um check de PJ devolveria QSA vazio e faria a `CorporateStructureRiskRule` parar de
+disparar em silêncio. A procedência (`identityReused`/`identityCheckedAt`, este último seguindo
+`reused_from_id` até a consulta que de fato foi à rede) aparece no `GET` e no evento — ver §8 e
+§10 — e os contadores `barrier.identity.check{outcome="fresh"|"reused"}` separam economia de
+custo de queda de tráfego.
+
 ### 7.2 Screening
 
 Consulta `watchlist_entries` (listas ingeridas, ADR-0010) por documento exato e por nome (fuzzy,
@@ -305,9 +320,15 @@ recusa que o regulador lê como indicador de PLD-FT.
   "reviewedBy": null,
   "reviewedByKey": null,
   "reviewReason": null,
-  "reviewedAt": null
+  "reviewedAt": null,
+  "identityReused": false,
+  "identityCheckedAt": "2026-08-12T13:07:27.100Z"
 }
 ```
+
+`identityReused`/`identityCheckedAt` vêm nulos quando ainda não existe check para a avaliação
+(processamento em andamento). Quando `identityReused: true`, `identityCheckedAt` **não** é o
+instante desta avaliação — é o da consulta original, seguindo `reused_from_id` (ver §7.1).
 
 ---
 
@@ -350,10 +371,18 @@ Kafka. Envelope:
     "status": "APROVADO",
     "riskLevel": "LOW",
     "decision": "Aprovado automaticamente",
-    "completedAt": "2026-08-12T13:07:27.617Z"
+    "completedAt": "2026-08-12T13:07:27.617Z",
+    "identityReused": false,
+    "identityCheckedAt": "2026-08-12T13:07:27.100Z"
   }
 }
 ```
+
+`identityReused`/`identityCheckedAt` existem no evento pelo mesmo motivo que no `GET` (§8): o
+parceiro recebe o desfecho pelo webhook, não busca o `GET` — se a decisão se apoia numa
+verificação de ontem, ele precisa saber disso na própria trilha. Campo novo em JSON é
+retrocompatível; a Webhook API não desserializa o payload em tipo estrito (repassa como string
+opaca), então o acréscimo não exigiu mudança nela.
 
 A Webhook API consome, resolve o endpoint **do tenant do evento** e entrega assinado:
 

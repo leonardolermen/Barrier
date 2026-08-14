@@ -8,6 +8,7 @@ import com.barrier.riskengine.subject.profile.domain.FieldVerification;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.domain.VerifiableField;
 import com.barrier.riskengine.subject.profile.domain.VerificationChallenge;
+import com.barrier.riskengine.subject.profile.domain.VerificationMethod;
 import com.barrier.riskengine.subject.profile.repository.interfaces.FieldVerificationRepository;
 import com.barrier.riskengine.subject.profile.service.FieldVerificationService;
 import java.time.Clock;
@@ -201,6 +202,82 @@ class FieldVerificationServiceTest {
     service(AGORA)
         .recordBirthDateFromBureau(
             SUBJECT, TENANT, LocalDate.of(1990, 5, 20), LocalDate.of(1991, 5, 20), "x");
+
+    assertThat(repo.verifications).isEmpty();
+  }
+
+  /**
+   * Mesmo precedente do bureau ({@link #nascimentoQueBateComOBureauViraVerificacao}), mas com
+   * {@code method = DOCUMENT}: a fonte independente aqui é a documentoscopia, não o bureau, e a
+   * trilha precisa distinguir as duas — são forças de prova diferentes numa contestação.
+   */
+  @Test
+  void nascimentoQueBateComODocumentoViraVerificacao() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+
+    service(AGORA)
+        .recordBirthDateFromDocument(SUBJECT, TENANT, nascimento, nascimento, "doc-check:1");
+
+    assertThat(repo.verifications).hasSize(1);
+    FieldVerification verificacao = repo.verifications.getFirst();
+    assertThat(verificacao.method()).isEqualTo(VerificationMethod.DOCUMENT);
+    assertThat(verificacao.evidence()).isEqualTo("doc-check:1");
+    assertThat(service(AGORA).verifiedFields(SUBJECT, TENANT, perfil(null, nascimento)))
+        .containsExactly(VerifiableField.BIRTH_DATE);
+  }
+
+  /** Mesmo motivo do caso do bureau: divergência não vira verificação, nem exceção. */
+  @Test
+  void nascimentoDivergenteDoDocumentoNaoViraVerificacao() {
+    service(AGORA)
+        .recordBirthDateFromDocument(
+            SUBJECT, TENANT, LocalDate.of(1990, 5, 20), LocalDate.of(1991, 5, 20), "doc-check:1");
+
+    assertThat(repo.verifications).isEmpty();
+  }
+
+  /**
+   * Mesmo precedente do bureau/documento, com {@code method = REGISTRY}: a fonte é a validação
+   * cadastral do Datavalid/Serpro (RFB), distinta das outras duas.
+   */
+  @Test
+  void nascimentoConfirmadoPelaValidacaoCadastralViraVerificacao() {
+    LocalDate nascimento = LocalDate.of(1990, 5, 20);
+
+    service(AGORA)
+        .recordBirthDateFromRegistry(SUBJECT, TENANT, nascimento, true, "datavalid:1");
+
+    assertThat(repo.verifications).hasSize(1);
+    FieldVerification verificacao = repo.verifications.getFirst();
+    assertThat(verificacao.method()).isEqualTo(VerificationMethod.REGISTRY);
+    assertThat(service(AGORA).verifiedFields(SUBJECT, TENANT, perfil(null, nascimento)))
+        .containsExactly(VerifiableField.BIRTH_DATE);
+  }
+
+  @Test
+  void nascimentoNaoConfirmadoPelaValidacaoCadastralNaoViraVerificacao() {
+    service(AGORA)
+        .recordBirthDateFromRegistry(SUBJECT, TENANT, LocalDate.of(1990, 5, 20), false, "datavalid:1");
+
+    assertThat(repo.verifications).isEmpty();
+  }
+
+  /**
+   * Endereço confirmado contra a CNH (SENATRAN) usa {@code ADDRESS_LOOKUP} — valor do enum que
+   * já existia, definido para "base de endereçamento", e nunca tinha sido usado até esta etapa.
+   */
+  @Test
+  void enderecoConfirmadoPelaCnhViraVerificacaoDeAddressLookup() {
+    service(AGORA).recordAddressFromRegistry(SUBJECT, TENANT, "01310-100", true, "datavalid:1");
+
+    assertThat(repo.verifications).hasSize(1);
+    assertThat(repo.verifications.getFirst().method()).isEqualTo(VerificationMethod.ADDRESS_LOOKUP);
+    assertThat(repo.verifications.getFirst().field()).isEqualTo(VerifiableField.ADDRESS);
+  }
+
+  @Test
+  void enderecoNaoConfirmadoPelaCnhNaoViraVerificacao() {
+    service(AGORA).recordAddressFromRegistry(SUBJECT, TENANT, "01310-100", false, "datavalid:1");
 
     assertThat(repo.verifications).isEmpty();
   }

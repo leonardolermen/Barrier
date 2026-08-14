@@ -65,7 +65,7 @@ persistido; `IdentityService.verify` devolve `IdentityResult(check, company)` e 
 até o motor de risco pelo `RiskContext`. Regras de PJ que consomem isso: `NewCompanyRiskRule`
 (empresa recém-aberta), `SensitiveCnaeRiskRule` (CNAE sensível a PLD-FT) e
 `CorporateStructureRiskRule` (KYB — sócio estrangeiro/PJ no QSA de 1º grau; árvore até 3º grau
-ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.6.0`.
+ainda depende de provedor KYB). `ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
 
 Watchlists (screening): **ingeridas** (ADR-0010) — `WatchlistImporter` (ApplicationRunner +
 @Scheduled) carrega `WatchlistSource`s numa tabela `watchlist_entries`; `LocalWatchlistProvider`
@@ -204,7 +204,7 @@ inidoneidade em licitação não impede relacionamento bancário e gerava `REJEC
 100 sem recomendação por nome, nunca REJECT, sócio não escala). **Não** é `RegulatoryRiskRule` — é
 apetite de risco, desligável pelo registry (V030). Consequência: a CGU não conta mais como cobertura
 de `SANCTION`; a única fonte é a OFAC, então habilitar só a CGU em prod falha o
-`WatchlistReadinessGuard`. `ENGINE_VERSION` = `barrier-risk-rules/1.6.0`.
+`WatchlistReadinessGuard`. `ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
 
 Bureau real de CNPJ (Onda 2): `BigBoostCnpjBureauProvider` (`@Order(20)`, dataset `basic_data` da
 API de Empresas, mesma flag `barrier.identity.bigboost.enabled`) tira a cadeia de PJ do fail-open —
@@ -214,7 +214,49 @@ quando a BrasilAPI é a única fonte de PJ (API pública sem SLA sustentando con
 `barrier.identity.brasilapi.enabled` permite desligá-la; `application-prod.yml` liga a BigBoost.
 ⚠️ `basic_data` de empresas **não traz QSA** — perfil vem com abertura/CNAE e sócios vazios, então
 `CorporateStructureRiskRule` fica sem entrada quando este provider atende; e o schema ainda não foi
-verificado contra a API real.
+verificado contra a API real. Ver `CorporateStructureCoverageRiskRule`, abaixo, para o guard que
+fecha o silêncio disso.
+
+Guard de cobertura de QSA (branch `feat/kyb-coverage-gaps`): mesmo modo de falha que o projeto já
+fechou para watchlist — importação/bureau falha → dado vazio → CLEAR → todos aprovados, com trilha
+"limpa" — reaparecendo na estrutura societária. Quando a BigBoost atende sem QSA,
+`CorporateStructureRiskRule` fica sem entrada (nenhum sócio para achar estrangeiro/PJ) e o
+screening de partes relacionadas roda sobre lista vazia (nenhum sócio conferido contra
+OFAC/CSNU/PEP) — nada registrava isso, e a avaliação concluía APROVADO.
+`CorporateStructureCoverageRiskRule` força REVIEW quando o bureau confirma a PJ
+(`CompanyProfile != null`) mas `partners()` vem vazio; a evidência cita o bureau que atendeu
+(`IdentityCheck.provider()`), para o analista distinguir limite de fonte de empresa sem sócio.
+**Regulatória** (entra em `RegulatoryRiskRules`, migration V039) — diferente do
+`CorporateStructureRiskRule`, que pontua sinais *dentro* de um QSA existente e é apetite: esta
+regra detecta a *ausência* do QSA, o mesmo tipo de gap que `ScreeningCoverageRiskRule` fecha para
+listas. Não dá para distinguir "bureau sem QSA" de "empresa legitimamente sem sócio"
+(MEI/empresário individual) com o dado disponível hoje — `CompanyProfile` não carrega natureza
+jurídica/porte, e nenhum provider de CNPJ expõe isso; a regra é fail-closed de propósito,
+registrado no Javadoc.
+
+`ADVERSE_MEDIA` na exigência de cobertura, **condicional** (mesma branch, corrigida após rodar a
+suíte completa): a primeira versão desta mudança fez `ScreeningCoverageRiskRule.REQUIRED` incluir
+`MatchType.ADVERSE_MEDIA` incondicionalmente, igual a `SANCTION`/`PEP` — e quebrou pior do que o
+fail-open que existia para fechar. `ADVERSE_MEDIA` nunca é populada em `WatchlistImportStatus`:
+mídia negativa é `NegativeMediaProvider`, consultado **ao vivo** por avaliação, não importado como
+`WatchlistSource`. Sem cobertura possível de existir, a regra pontuava **100% das avaliações**,
+recriando o problema que motivou o `SOLICITAR_DOCUMENTO` (7501 de 7529 avaliações em
+`EM_REVISAO` por ruído de cadastro, cegando operações — ver `plano-remediacao-auditoria.md`).
+Corrigido no mesmo padrão de `BureauProvider.authoritative()`: `NegativeMediaProvider` ganhou
+`authoritative()` (default `true`), `StubNegativeMediaProvider` sobrescreve para `false`.
+`ScreeningCoverageRiskRule` passou a receber `List<NegativeMediaProvider>` (construtor de 1
+argumento preservado como conveniência = "nenhum provedor", para não quebrar quem constrói a
+regra manualmente sem mídia negativa) e só exige `ADVERSE_MEDIA` quando existe pelo menos um
+provider autoritativo na lista — hoje, sem contrato, isso nunca acontece e a regra não pontua por
+mídia negativa; contratado um provider real, a exigência entra como sanção e PEP (controle que
+deveria estar rodando e não está confirmado). `WatchlistReadinessGuard` **não** ganhou a mesma
+exigência incondicional: adicionar `ADVERSE_MEDIA` à lista que barra a subida em `prod` derrubaria
+a aplicação inteira por falta de um provedor que hoje ninguém contratou — mais forte que o
+problema justifica. O guard só **avisa** quando falta cobertura de mídia negativa, no mesmo padrão
+do `CnpjBureauReadinessGuard` para a BrasilAPI como único bureau de PJ (o aviso não é
+condicionado a `authoritative()` — é aviso de startup, sempre útil). `DEBARMENT` segue de fora da
+exigência de cobertura, de propósito — é apetite de risco (ver acima), não obrigação regulatória.
+`ENGINE_VERSION` = `barrier-risk-rules/1.8.0`.
 
 Registry de regras de risco: `RiskRule.code()` é o código estável da família da regra
 (`NEW_COMPANY`, `SANCTION` etc.) — independente do `ruleCode` granular que `RiskResult` pode
@@ -305,12 +347,141 @@ teto `barrier.rescreening.max-subjects-per-import` aborta e grita (delta gigante
 de layout); uma avaliação por (subject, tenant) por importação. Desligável em
 `barrier.rescreening.enabled`.
 
+Documentoscopia e biometria (ADR-0016, etapa 3): `AssuranceService` (pacote `assurance`) prova
+que quem está do outro lado é o titular — o motor até aqui confirmava CPF regular e nome batendo,
+não a pessoa. Guarda o **resultado**, nunca a imagem: `AssuranceCheck` (V035) fica com desfecho,
+score, provedor e referência da consulta, mesmo padrão de `BureauTrace`. Consentimento é exigido
+por verificação, na assinatura do serviço (`AssuranceConsent`, colunas em V036) — ausência recusa
+com 400 antes de acionar o provedor, nunca depois. Os campos que a documentoscopia extrai são
+comparados contra o cadastro (CMN 4.753) e o `Subject`: nascimento que confere vira
+`FieldVerification` com `method=DOCUMENT` (mesmo padrão de `recordBirthDateFromBureau`); nascimento
+que diverge vira `AssuranceCheck.divergences()` (V037) — sinal de possível fraude, não campo
+faltando. Nome é diferente: pertence ao `Subject`, não ao cadastro, então não tem campo verificável
+equivalente **para ele** — divergir também vira `divergences()`, mas nunca `FieldVerification`.
+`IdentityAssuranceRiskRule` soma a divergência ao score e cita **quais campos** divergiram na
+evidência (NAME/BIRTH_DATE, nunca o valor — fator explicável). Qualquer desfecho, inclusive FAIL/INCONCLUSIVE/UNAVAILABLE, dispara reavaliação automática:
+`AssuranceService` agenda a notificação em `TransactionSynchronization.afterCommit()` (a gravação
+do check precisa estar commitada antes de reagir) e o listener roda em `REQUIRES_NEW` — sem
+propagation própria ele entraria na transação já commitada em vez de abrir uma nova, e a
+reavaliação sumiria sem lançar. A reação mora em `rescreening`
+(`AssuranceReassessmentTrigger`), não em `assurance`: `assurance` declara a interface
+(`AssuranceRecordedListener`) sem saber quem a implementa, porque reavaliar chamando
+`AssessmentService` direto de dentro de `assurance` fecharia o ciclo
+`assurance → assessment → risk → assurance` (risk já depende de assurance via
+`IdentityAssuranceRiskRule`) — o mesmo padrão de inversão de dependência do
+`WatchlistImportListener`. `ArchUnit` (`sem_ciclos_entre_modulos`) é o que prova que a inversão
+segura. Kill switch `barrier.assurance.enabled` (default `true`, mesmo padrão de
+`barrier.rescreening.enabled`): desligado, o endpoint recusa com 409 antes de acionar qualquer
+provedor. Em `prod`, sem provedor real contratado, `UnavailableDocumentVerificationProvider`/
+`UnavailableBiometricVerificationProvider` (`@Profile("prod")`) devolvem sempre `UNAVAILABLE` —
+os stubs são `@Profile("!prod")` e, sem esses providers de emergência, o construtor obrigatório
+de `AssuranceService` faria o contexto inteiro falhar na subida em produção;
+`AssuranceProviderReadinessGuard` só **avisa** quando são eles que estão ativos, no padrão de
+`CnpjBureauReadinessGuard`.
+
+**Decisão de produto (2026-08-13): documentoscopia aprovada é pré-requisito da biometria.**
+`documentFaceReference` tinha `@NotBlank` — exigia uma string, não verificava nada; `"x"` passava.
+Era campo obrigatório, não pré-requisito, o mesmo padrão de falha (controle que roda e não
+verifica) do `RegistrationCompleteness`/`PepRiskRule` citados em `plano-remediacao-auditoria.md`.
+Agora `AssuranceService.verifyBiometrics` exige um `AssuranceCheck` de `kind = DOCUMENT` com
+`outcome = PASS` para o `(subjectId, tenantId)` antes de acionar o provedor de biometria (chamada
+paga); sem ele, `DocumentGateNotSatisfiedException` recusa com 409 — exceção própria, não
+`IllegalStateException`, para o parceiro distinguir "assurance desligado" de "falta
+documentoscopia". Só `PASS` libera: comparar rosto contra documento que não passou na
+autenticidade prova pouco, então `FAIL`/`INCONCLUSIVE`/`UNAVAILABLE` recusam do mesmo jeito que
+ausência total. Consequência operacional: provedor de documentoscopia indisponível trava a frente
+inteira, não só metade (o cliente não fica preso — `IdentityAssuranceRiskRule` converte
+`UNAVAILABLE` em revisão humana — mas não avança sozinho). Muda o contrato de integração (ordem
+passa a ser obrigatória); viável agora porque o endpoint ainda não está em produção. Fora de
+escopo, decisões de produto separadas: validade temporal do `PASS` (hoje sem janela) e
+correspondência do `documentFaceReference` com a referência do check que autorizou.
+
+Throttle da frente de assurance (branch `feat/assurance-throttle`): duas travas fecham o que faltava
+depois de ligar o gatilho de reavaliação. **Dedup por janela** —
+`barrier.assurance.reassessment-window` (default `PT5M`) — no máximo uma reavaliação por
+`(subject, tenant)` a cada janela; `AssuranceReassessmentTrigger` consulta
+`AssessmentService.existsRecentByOriginAndSubject` (avaliações com `origin = ASSURANCE` para
+aquele par, dentro da janela — a checagem mora no `AssessmentService`, não no repositório
+exposto direto a outro módulo: o service é o portão do módulo) antes de submeter, mesmo
+vocabulário do "uma avaliação por (subject, tenant) por importação" do `RescreeningService`. Vinte tentativas de biometria em
+sequência viravam vinte avaliações completas — vinte consultas pagas à BigBoost e vinte rodadas
+de screening pelo mesmo evento; agora só a primeira dentro da janela dispara. **A submissão dentro
+da janela continua gravando o `AssuranceCheck` normalmente** — só a reavaliação é suprimida (com
+log): a trilha de tentativas é o próprio sinal de fraude que a regra abaixo conta, e perdê-la
+seria pior que o problema que a janela resolve. **Janela na contagem de tentativas** —
+`barrier.assurance.attempts-window` (default `PT24H`) — `AssuranceService.attempts` deixou de
+contar o histórico inteiro (`repository.findAll(...).stream().count()`, materializando tudo no
+caminho quente de toda avaliação) e passou a um `COUNT(*)` no banco
+(`AssuranceCheckRepository.countRecent`) com a janela no `WHERE`; sem isso, três tentativas ao
+longo de anos (re-KYC periódico, troca de aparelho) travavam o cliente em `+200/REVIEW` para
+sempre, sem caminho de saída — o sinal que a regra quer capturar é fenômeno de sessão, não de
+vida inteira.
+
+**Validação cadastral (Datavalid/Serpro `pessoa-fisica/validacao`, 2026-08-13).** Diferente de
+documentoscopia (lê um documento) e biometria (prova presença): confere dado **declarado** contra
+RFB e, só para endereço, contra a base da CNH (SENATRAN) — não é documentoscopia, é veracidade
+cadastral. Vive em `subject.profile`, não em `assurance` — o consumidor natural é o
+`FieldVerificationService` que já existia (OTP/BUREAU/DOCUMENT). `subject.profile` não pode
+depender de `assurance` (regra de módulo), mas as duas frentes usam a mesma credencial/token
+Serpro; o plumbing de autenticação (`SerproTokenClient`, o `RestClient` do `datavalid/v5`) mudou
+de `assurance.client.serpro` para um pacote neutro, `com.barrier.riskengine.serpro`
+(`SerproGatewayConfig`) — não em `commons`, para não arrastar dependência de `RestClient` nele
+(mesmo raciocínio já registrado aqui para o `AdminApiKeyFilter`). Nascimento confirmado pela RFB
+vira `FieldVerification` com `method = REGISTRY` (novo valor do enum — fonte diferente do bureau
+comercial e da documentoscopia, força de prova distinta numa contestação). Endereço confirmado
+usa `method = ADDRESS_LOOKUP`, que já existia no enum definido para "base de endereçamento" e
+nunca tinha sido usado. **Cobertura de endereço é parcial**: só fecha para quem tem CNH com
+endereço registrado — sem CNH, o campo continua sem verificação (por isso o item correspondente
+em `plano-remediacao-auditoria.md` segue aberto, não marcado como concluído). Gating no mesmo
+padrão da biometria: `barrier.serpro.enabled` liga a conectividade compartilhada,
+`barrier.registry-validation.enabled` liga esta frente especificamente; `privacidade`
+(`id_template` da RFB, `token`/`cnpj_anuente` da SENATRAN) é config de contrato, não segredo
+técnico — a família de erro `DV200–DV213` (template mal configurado) vira log apontando para
+configuração, nunca para o CPF do cliente. `DV001` (menor de idade) é desfecho cobrado, não erro
+de transporte. Não verificado ao vivo: o ambiente de execução desta etapa não teve egress de rede
+para o gateway Serpro (diferente da etapa de biometria, que rodou contra a demonstração real);
+todo o mapeamento de contrato segue a documentação oficial verbatim e a taxonomia de erro segue
+por analogia com a já sondada.
+
+**Reuso de verificação de identidade (branch `feat/identity-reuse`).** Parar de pagar a mesma
+consulta de bureau duas vezes: `IdentityService.verify` consulta `identity_checks` antes de sair
+para a rede e, havendo um check elegível — mesmo tenant, mesmo documento, mesmo nome normalizado,
+desfecho definitivo, dentro do TTL —, grava um check **novo** copiando o desfecho e apontando
+para o original em `reused_from_id` (migration V040; o plano cita V036, desatualizado). Cada
+avaliação continua com seu próprio `identity_check` — `RiskScore.identityCheckId` segue
+identificando exatamente a verificação que sustentou aquela decisão (garantia da V028). **Só
+CPF**: `IdentityResult.company` (o `CompanyProfile` com QSA/CNAE/abertura) é transiente e não é
+persistido no check — reusar um check de PJ devolveria `company == null` e a
+`CorporateStructureRiskRule` pararia de disparar em silêncio, o mesmo fail-open que a auditoria
+mandou eliminar; reidratar o perfil do `raw_response` é entrega própria, fora de escopo.
+`UNAVAILABLE` nunca é reusado — congelaria uma indisponibilidade passada como resposta. Escopo do
+reuso é o **tenant**: reuso entre tenants repetiria o erro que o ADR-0012 corrigiu no cadastro,
+fica como opt-in futuro com ADR próprio. Desligado por padrão
+(`barrier.identity.reuse.enabled=false`), TTL `barrier.identity.reuse.ttl` (`PT24H`). Contadores
+`barrier.identity.check{outcome="fresh"|"reused"}` separam economia de custo de queda de tráfego
+— sem eles, uma flag ligada por engano numa base grande não apareceria em lugar nenhum;
+`UNAVAILABLE` não conta em nenhum dos dois, porque não houve verificação. A procedência
+(`identityReused`/`identityCheckedAt`, este seguindo `reused_from_id` até a consulta que de fato
+foi à rede) aparece tanto no `GET /v1/assessments/{id}` quanto no evento
+`barrier.assessment.completed` (`AssessmentCompletedPayload`) — o parceiro recebe o desfecho pelo
+webhook, não busca o `GET`, e uma decisão apoiada em verificação de ontem é informação que ele
+precisa para a própria trilha. Campo novo em JSON é retrocompatível e a Webhook API não
+desserializa o payload em tipo estrito (repassa como string opaca), então nada mudou nela.
+**Interação com o rescreening:** `RescreeningService` submete avaliação nova para o mesmo
+`(subject, tenant)` quando uma lista passa a apontar o cliente. Com TTL de 24h e reuso ligado, um
+rescreening disparado logo depois **vai reaproveitar** a verificação de identidade da avaliação
+anterior — é defensável (o que mudou foi a lista de sanções, não o titular), mas contraintuitivo:
+o rescreening existe porque fatos mudam, e reaproveitar a identidade não é esquecer disso, é
+reconhecer que *esse* fato (quem é o titular) não é o que mudou. **Reuso não substitui cota**:
+reprocessar 500 mil documentos distintos continua custando o mesmo (ver
+`plano-remediacao-auditoria.md`, Onda 3) — reuso ataca repetição, cota ataca volume.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (275 testes na risk-engine + 16 na webhook-api, inclui
-integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (530 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 610 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

@@ -17,6 +17,14 @@ import java.util.Set;
  */
 public record RegistrationCompleteness(boolean complete, List<String> missingFields) {
 
+  /**
+   * Texto exato do único item deste checklist que a validação cadastral do Datavalid sabe fechar
+   * (nascimento declarado, não conferido). Exposto como constante — não string mágica duplicada —
+   * para o {@code AssessmentProcessor} decidir se vale a consulta paga sem repetir a regra do
+   * checklist em dois lugares.
+   */
+  public static final String BIRTH_DATE_NOT_VERIFIED = "data de nascimento não conferida com o bureau";
+
   public RegistrationCompleteness {
     missingFields = List.copyOf(missingFields);
   }
@@ -62,7 +70,7 @@ public record RegistrationCompleteness(boolean complete, List<String> missingFie
       case "CPF" -> {
         if (profile.birthDate() == null) missing.add("data de nascimento");
         else if (requireVerification && !verifiedFields.contains(VerifiableField.BIRTH_DATE)) {
-          missing.add("data de nascimento não conferida com o bureau");
+          missing.add(BIRTH_DATE_NOT_VERIFIED);
         }
         if (isBlank(profile.nationality())) missing.add("nacionalidade");
         if (isBlank(profile.occupation())) missing.add("ocupação");

@@ -3,6 +3,7 @@ package com.barrier.riskengine.subject.controller;
 import com.barrier.riskengine.subject.controller.dto.SubjectResponse;
 
 import com.barrier.commons.mask.Documents;
+import com.barrier.riskengine.subject.domain.DocumentTypeResolver;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
 import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
@@ -30,14 +31,9 @@ public class SubjectController {
   @GetMapping("/{document}")
   public ResponseEntity<SubjectResponse> get(
       AuthenticatedTenant tenant, @PathVariable String document) {
-    String digits = document.replaceAll("\\D", "");
-    String documentType =
-        switch (digits.length()) {
-          case 11 -> "CPF";
-          case 14 -> "CNPJ";
-          default -> throw new IllegalArgumentException("Documento inválido");
-        };
-    Subject subject = subjectService.getForTenant(tenant.id(), documentType, digits);
+    DocumentTypeResolver.Resolved resolved = DocumentTypeResolver.resolve(document);
+    Subject subject =
+        subjectService.getForTenant(tenant.id(), resolved.documentType(), resolved.digits());
     return ResponseEntity.ok(
         new SubjectResponse(
             subject.id().toString(),
