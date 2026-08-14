@@ -5,4 +5,4 @@ package com.barrier.riskengine.identity.service;
  * identity independente do módulo assessment (sem ciclo entre contextos).
  */
 public record VerifyIdentityCommand(
-    String assessmentId, String documentType, String documentDigits, String name) {}
+    String assessmentId, String tenantId, String documentType, String documentDigits, String name) {}

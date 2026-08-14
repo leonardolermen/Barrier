@@ -15,4 +15,6 @@ public record AssessmentResponse(
     String reviewedBy,
     String reviewedByKey,
     String reviewReason,
-    Instant reviewedAt) {}
+    Instant reviewedAt,
+    Boolean identityReused,
+    Instant identityCheckedAt) {}
