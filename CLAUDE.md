@@ -440,6 +440,39 @@ para o gateway Serpro (diferente da etapa de biometria, que rodou contra a demon
 todo o mapeamento de contrato segue a documentação oficial verbatim e a taxonomia de erro segue
 por analogia com a já sondada.
 
+**Reuso de verificação de identidade (branch `feat/identity-reuse`).** Parar de pagar a mesma
+consulta de bureau duas vezes: `IdentityService.verify` consulta `identity_checks` antes de sair
+para a rede e, havendo um check elegível — mesmo tenant, mesmo documento, mesmo nome normalizado,
+desfecho definitivo, dentro do TTL —, grava um check **novo** copiando o desfecho e apontando
+para o original em `reused_from_id` (migration V040; o plano cita V036, desatualizado). Cada
+avaliação continua com seu próprio `identity_check` — `RiskScore.identityCheckId` segue
+identificando exatamente a verificação que sustentou aquela decisão (garantia da V028). **Só
+CPF**: `IdentityResult.company` (o `CompanyProfile` com QSA/CNAE/abertura) é transiente e não é
+persistido no check — reusar um check de PJ devolveria `company == null` e a
+`CorporateStructureRiskRule` pararia de disparar em silêncio, o mesmo fail-open que a auditoria
+mandou eliminar; reidratar o perfil do `raw_response` é entrega própria, fora de escopo.
+`UNAVAILABLE` nunca é reusado — congelaria uma indisponibilidade passada como resposta. Escopo do
+reuso é o **tenant**: reuso entre tenants repetiria o erro que o ADR-0012 corrigiu no cadastro,
+fica como opt-in futuro com ADR próprio. Desligado por padrão
+(`barrier.identity.reuse.enabled=false`), TTL `barrier.identity.reuse.ttl` (`PT24H`). Contadores
+`barrier.identity.check{outcome="fresh"|"reused"}` separam economia de custo de queda de tráfego
+— sem eles, uma flag ligada por engano numa base grande não apareceria em lugar nenhum;
+`UNAVAILABLE` não conta em nenhum dos dois, porque não houve verificação. A procedência
+(`identityReused`/`identityCheckedAt`, este seguindo `reused_from_id` até a consulta que de fato
+foi à rede) aparece tanto no `GET /v1/assessments/{id}` quanto no evento
+`barrier.assessment.completed` (`AssessmentCompletedPayload`) — o parceiro recebe o desfecho pelo
+webhook, não busca o `GET`, e uma decisão apoiada em verificação de ontem é informação que ele
+precisa para a própria trilha. Campo novo em JSON é retrocompatível e a Webhook API não
+desserializa o payload em tipo estrito (repassa como string opaca), então nada mudou nela.
+**Interação com o rescreening:** `RescreeningService` submete avaliação nova para o mesmo
+`(subject, tenant)` quando uma lista passa a apontar o cliente. Com TTL de 24h e reuso ligado, um
+rescreening disparado logo depois **vai reaproveitar** a verificação de identidade da avaliação
+anterior — é defensável (o que mudou foi a lista de sanções, não o titular), mas contraintuitivo:
+o rescreening existe porque fatos mudam, e reaproveitar a identidade não é esquecer disso, é
+reconhecer que *esse* fato (quem é o titular) não é o que mudou. **Reuso não substitui cota**:
+reprocessar 500 mil documentos distintos continua custando o mesmo (ver
+`plano-remediacao-auditoria.md`, Onda 3) — reuso ataca repetição, cota ataca volume.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.

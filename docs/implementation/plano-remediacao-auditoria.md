@@ -737,6 +737,12 @@ de outro tenant.
   *Pronto quando:* lote grande exige cota configurada por tenant (fail-closed sem ela), faixa
   `BULK` só consome capacidade ociosa, e um teste de concorrência prova que backfill de um tenant
   não atrasa o tempo real de outro.
+  ⚠️ **O reuso de verificação de identidade (`barrier.identity.reuse.*`, ver CLAUDE.md) não
+  fecha este item.** Reuso ataca repetição — o mesmo CPF, mesmo nome, mesmo tenant, dentro de
+  24h — e cota ataca volume. Reprocessar 500 mil documentos **distintos** continua custando os
+  mesmos R$20 mil do cálculo acima, porque nenhum deles tem consulta anterior para reaproveitar.
+  São controles diferentes para riscos diferentes; tratar o reuso como se reduzisse a exposição
+  de ingestão em massa daria a sensação falsa de item fechado.
 
 - [ ] **Paralelizar o processamento** — depois da cota e do cap de bureau, nesta ordem
   `AssessmentProcessor.process()` reivindica `BATCH = 50` e processa **sequencialmente numa única
