@@ -482,12 +482,45 @@ reconhecer que *esse* fato (quem é o titular) não é o que mudou. **Reuso não
 reprocessar 500 mil documentos distintos continua custando o mesmo (ver
 `plano-remediacao-auditoria.md`, Onda 3) — reuso ataca repetição, cota ataca volume.
 
+**Risco corrente do cliente (fila-origem F3/F4, módulo `riskstate`).** `risk_scores` continua sendo
+a trilha imutável (uma linha por avaliação, nunca sobrescrita); ao lado dela entra a projeção viva
+`subject_risk_state` (V041), que responde "qual é o risco deste cliente agora" — sem ela era preciso
+caçar a última avaliação concluída, e nada no código fazia isso. Chave **(subject_id, tenant_id)**,
+não `subject_id`: a decisão é por tenant no assessment (ADR-0011/0012), o mesmo cliente pode estar
+APROVADO num parceiro e REPROVADO em outro, e projeção global vazaria risco entre parceiros. O
+upsert é **monotônico no `evaluated_at` da avaliação**, não na ordem de commit — rescreening,
+assurance e decisão manual concluem fora de ordem, e uma avaliação iniciada antes e concluída depois
+não pode enterrar um estado mais novo (`SubjectRiskState.supersededBy`); empate preserva o gravado.
+A gravação é na **mesma transação** da conclusão: é projeção, não evento. Decisão humana também
+atualiza (`recordManualDecision`, usando `reviewedAt` como relógio — com `completedAt` ela empataria
+com a decisão do motor e seria descartada), preservando score e `engine_version` do motor: o
+analista muda o desfecho, não o nível. `GET /v1/subjects/{document}/risk-state`, escopado por tenant
+(404 sem vínculo), com fallback pela última avaliação concluída — nele `riskScore` volta **null**, e
+não 0, porque 0 é score válido e o mais favorável que existe; `fromProjection` diz de onde veio.
+**Por que módulo próprio e não `subject.state`:** o ArchUnit (`sem_ciclos_entre_modulos`) rejeitou as
+duas primeiras tentativas — `assessment → subject.state → assessment` e, via `RiskLevel`,
+`risk → subject.state → risk` (risk já depende de subject pelo `SubjectProfile` no `RiskContext`).
+A ligação com o pipeline é por **inversão**: `AssessmentCompletedListener` declarada em `assessment`
+(que não sabe quem reage) e implementada por `SubjectRiskStateProjector` — mesmo padrão do
+`AssuranceRecordedListener`. Mudança de nível emite `barrier.subject.risk_level_changed` pela outbox,
+na mesma transação da projeção; primeira avaliação (`null → LOW`) **não** emite (não é "o risco
+mudou", é "o cliente passou a existir", e o `assessment.completed` já cobriu), nível repetido também
+não. O payload leva `origin` (ONBOARDING/RESCREENING/ASSURANCE) e `worsened` — a política de
+notificação é do parceiro, filtrar aqui seria decidir por ele, e `worsened` evita que ele
+reimplemente a escala (a do Barrier é maior = pior, invertida em relação ao Origem). O agregado do
+envelope continua sendo o **assessmentId**, não o subject: o campo do `EventEnvelope` chama-se assim
+e vira `deliveries.assessment_id`; partição por documento é mudança deliberada do contrato (F8), não
+efeito colateral. A Webhook API consome o tópico novo no **mesmo listener e mesmo consumer-group**
+(a máquina de entrega é a mesma). Esse evento **não tem reconciliação**, de propósito e registrado
+no ADR-0017: é aviso sobre estado consultável (`GET .../risk-state`), não o registro único de um
+fato — diferente da decisão de KYC, que tem.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (530 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 610 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (539 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 619 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

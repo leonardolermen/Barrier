@@ -48,11 +48,11 @@ class SubjectRiskStateIT {
   @Autowired SubjectRiskStateService service;
   @Autowired SubjectRepository subjects;
   @Autowired AssessmentRepository assessments;
+  @Autowired org.springframework.transaction.support.TransactionTemplate tx;
 
   @Test
   void projeta_o_desfecho_e_substitui_a_linha_do_mesmo_par_subject_tenant() {
-    Subject subject = subjects.save(Subject.create("CPF", "11144477735", "Fulano de Tal"));
-    subjects.link("default", subject.id());
+    Subject subject = criarSubject("11144477735", "Fulano de Tal");
 
     Assessment primeira = concluida(subject, RiskLevel.LOW, AssessmentStatus.APROVADO);
     assertThat(service.record(primeira, 40, "motor/1.0")).isEmpty();
@@ -70,8 +70,7 @@ class SubjectRiskStateIT {
   /** A projeção é por tenant: o mesmo cliente pode estar bom num parceiro e ruim em outro. */
   @Test
   void tenants_diferentes_tem_estados_independentes_para_o_mesmo_subject() {
-    Subject subject = subjects.save(Subject.create("CPF", "52998224725", "Beltrano"));
-    subjects.link("default", subject.id());
+    Subject subject = criarSubject("52998224725", "Beltrano");
 
     service.record(concluida(subject, RiskLevel.HIGH, AssessmentStatus.EM_REVISAO), 600, "motor/1.0");
 
@@ -79,12 +78,24 @@ class SubjectRiskStateIT {
     assertThat(service.find(subject.id(), "outro-tenant")).isEmpty();
   }
 
-  private Assessment concluida(Subject subject, RiskLevel level, AssessmentStatus status) {
+  private Subject criarSubject(String documento, String nome) {
+    return tx.execute(
+        status -> {
+          Subject subject = subjects.save(Subject.create("CPF", documento, nome));
+          subjects.link("default", subject.id());
+          return subject;
+        });
+  }
+
+  private Assessment concluida(Subject subject, RiskLevel level, AssessmentStatus estado) {
     Assessment assessment =
         Assessment.submit(
             "default", subject.id().toString(), DocumentType.CPF, subject.document(), subject.name());
-    Assessment salva = assessments.save(assessment);
-    salva.complete(level, status, "decisão do motor", List.of());
-    return assessments.save(salva);
+    return tx.execute(
+        status -> {
+          Assessment salva = assessments.save(assessment);
+          salva.complete(level, estado, "decisão do motor", List.of());
+          return assessments.save(salva);
+        });
   }
 }

@@ -48,6 +48,7 @@ exatamente um mecanismo autorizado a agir sobre ele; os demais o observam e não
 | decisão publicada sem `delivery` correspondente | `DeliveryReconciliationJob` | relê o tópico (janela `PT6H`, consumidor avulso sem commit) e cria a entrega faltante | **não reprocessa avaliação**; só cria entrega, e a criação é idempotente por `eventId` |
 | `delivery` falhada com retry pendente | `DeliveryRetryScheduler` | `retryDue()` com backoff | não relê o tópico e não cria entrega nova |
 | evento na `<tópico>.DLT` | `DeliveryReconciliationJob` | é o único caminho de volta — o listener não consome a DLT | não republica no tópico original |
+| entrega perdida de `barrier.subject.risk_level_changed` | **ninguém** (sem reconciliação, deliberado) | — | o reconciliador relê só `barrier.assessment.completed`; ver nota abaixo |
 | bureau indisponível (`IdentityStatus.UNAVAILABLE`) | **ninguém** (não é falha recuperável) | a avaliação **conclui** em `EM_REVISAO` via `IdentityRiskRule` | não há re-tentativa automática: a decisão já foi tomada, e é escalar para humano |
 
 ### Proibições explícitas
@@ -61,6 +62,20 @@ Escritas no tom do ADR do Origem, para serem citáveis em code review:
 - Nada re-enfileira `FALHA_PROCESSAMENTO` automaticamente.
 - Nada re-tenta `UNAVAILABLE` de bureau em background — re-tentar seria decidir de novo o que
   já foi decidido, com uma consulta paga a mais e um segundo evento para o mesmo assessment.
+
+### Nota: por que mudança de nível não é reconciliada
+
+O `DeliveryReconciliationJob` relê um tópico só (constante `TOPIC` na classe). Quando
+`barrier.subject.risk_level_changed` entrou (fila-origem F4), a escolha foi **não** generalizar o
+job, e ela é consciente: o evento de nível é uma *notificação sobre um estado consultável*, não o
+único registro de um fato. Se a entrega se perder, o risco corrente continua em
+`subject_risk_state` e o parceiro o obtém em `GET /v1/subjects/{document}/risk-state`; a próxima
+mudança de nível reemite. Já uma decisão de KYC perdida não tem esse recurso — é o desfecho, e
+por isso ela tem reconciliação.
+
+O que **não** era aceitável era deixar isso implícito: um evento sem dono de recuperação e sem
+linha nesta tabela é indistinguível de um esquecimento. Se um dia o parceiro passar a depender do
+evento de nível como registro (e não como aviso), a decisão se inverte e o job vira multi-tópico.
 
 ### O ponto que exigiu decisão nova
 

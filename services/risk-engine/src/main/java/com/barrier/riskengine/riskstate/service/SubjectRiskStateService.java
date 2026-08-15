@@ -88,13 +88,13 @@ public class SubjectRiskStateService {
    * atualização nunca produz transição de nível.
    */
   @Transactional
-  public void recordManualDecision(Assessment assessment) {
+  public Optional<RiskLevelTransition> recordManualDecision(Assessment assessment) {
     if (assessment.subjectId() == null || assessment.riskLevel() == null) {
-      return;
+      return Optional.empty();
     }
     Optional<SubjectRiskState> current =
         repository.find(UUID.fromString(assessment.subjectId()), assessment.tenantId());
-    record(
+    return record(
         assessment,
         current.map(SubjectRiskState::score).orElse(0),
         current.map(SubjectRiskState::engineVersion).orElse(null));

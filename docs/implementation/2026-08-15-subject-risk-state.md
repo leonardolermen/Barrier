@@ -42,6 +42,16 @@ ArchUnit
 | `subject/state/service/RiskLevelChangeEventPublisher.java` | evento na outbox |
 | `webhook-api: SubjectRiskLevelListener` | consumo e entrega |
 
+**Correção durante a execução (2026-08-15):** a projeção **não** ficou em `subject.state`. O
+ArchUnit (`sem_ciclos_entre_modulos`) rejeitou: `assessment → subject.state → assessment` (o
+service recebe `Assessment`) e `risk → subject.state → risk` (a projeção guarda `RiskLevel`, e
+`risk` já dependia de `subject` pelo `SubjectProfile` no `RiskContext`). Não havia arranjo dentro
+de `subject` que resolvesse — uma projeção de risco precisa de `RiskLevel` por definição. Ficou em
+módulo próprio `com.barrier.riskengine.riskstate`, do qual ninguém depende, ligado ao pipeline por
+inversão: `AssessmentCompletedListener` declarada em `assessment` e implementada por
+`SubjectRiskStateProjector`, mesmo padrão de `AssuranceRecordedListener`. O texto abaixo é o plano
+original, preservado.
+
 **Por que `subject.state` e não dentro de `subject.profile`:** o cadastro é dossiê declarado
 pelo parceiro; a projeção é resultado do motor. Responsabilidades distintas, ciclos de vida
 distintos, e juntar as duas colocaria `subject.profile` dependendo de `risk`.

@@ -30,6 +30,14 @@ public class AssessmentCompletedListener {
 
   static final String TOPIC = "barrier.assessment.completed";
 
+  /**
+   * Mudança de nível de risco corrente do cliente (fila-origem F4). Mesmo consumidor e mesmo grupo
+   * dos desfechos: a máquina de entrega é a mesma (endpoint por tenant, HMAC, retry, idempotência
+   * por {@code eventId}), e o que muda é só o tipo do fato que chega. Um consumer-group por
+   * <i>consumidor</i> é a lição do {@code tzofe}; um por tópico entregue ao mesmo destino não é.
+   */
+  static final String RISK_LEVEL_TOPIC = "barrier.subject.risk_level_changed";
+
   private static final Logger log = LoggerFactory.getLogger(AssessmentCompletedListener.class);
 
   private final WebhookDeliveryService service;
@@ -40,7 +48,7 @@ public class AssessmentCompletedListener {
     this.objectMapper = objectMapper;
   }
 
-  @KafkaListener(topics = TOPIC, groupId = "${spring.kafka.consumer.group-id}")
+  @KafkaListener(topics = {TOPIC, RISK_LEVEL_TOPIC}, groupId = "${spring.kafka.consumer.group-id}")
   public void onMessage(String message) {
     EventEnvelope envelope = parse(message);
     String tenantId = extractTenantId(envelope.payload());

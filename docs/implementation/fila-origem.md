@@ -45,8 +45,8 @@ uma página e precisa existir *antes* de qualquer linha de UBO.
 |---|---|---|---|---|---|
 | F1 | ✅ ADR de ownership de recovery ([0017](../adr/0017-ownership-de-recovery.md)) | P9 | ADR | ~1 página | — |
 | F2 | ✅ Restrições de custo no ADR de UBO ([0018](../adr/0018-custo-de-navegacao-ubo.md)) | P6 | ADR | ~1 página | — |
-| F3 | Projeção `subject_risk_state` | P2 | código | médio | — |
-| F4 | Webhook de mudança de nível de risco | P2 | código | médio | F3 |
+| F3 | ✅ Projeção `subject_risk_state` (módulo `riskstate`) | P2 | código | médio | — |
+| F4 | ✅ Webhook de mudança de nível de risco | P2 | código | médio | F3 |
 | F5 | Alertas com baseline móvel | P3 | código | médio | F3 (parcial) |
 | F6 | Política de reavaliação + `reassessment_decision` no trace | P4 | código | médio | F3 |
 | F7 | Mesa: fila nomeada, ações manuais e SLA pausável | P5 | código | alto | F6 |
