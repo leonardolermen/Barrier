@@ -13,6 +13,8 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
 - **Lições do BMP Origem:** [docs/implementation/licoes-do-origem.md](docs/implementation/licoes-do-origem.md)
   — estudo comparativo com a esteira de KYC que roda em produção na BMP (Origem/Mishmar/
   bureaus-manager/tzofe): o que importar, em que ordem, e **o que não copiar**.
+- **Fila de execução dessas lições:** [docs/implementation/fila-origem.md](docs/implementation/fila-origem.md)
+  — F1–F9 com escopo, arquivos, dependências e critério de pronto. F1 entregue (ADR-0017).
 - **Decisões de arquitetura:** [docs/adr/](docs/adr/) (ADR-0009 define o corte atual)
 
 Existe a skill `barrier-implementation` com o checklist operacional — use-a antes de
@@ -113,6 +115,10 @@ offset**, indo para a DLT só ao esgotar `barrier.webhook.consumer.retry-max-ela
 `DeliveryReconciliationJob` (@Scheduled, janela `PT6H`) relê o tópico com um consumidor avulso
 (`assign`, sem commit) e cria entrega para toda decisão sem uma — é o que recupera o que ficou na
 DLT ou passou enquanto o consumidor estava fora. Limitado pela retenção do Kafka.
+**Quem recupera o quê está fixado no [ADR-0017](docs/adr/0017-ownership-de-recovery.md)** — um
+dono por estado de falha, com proibições explícitas (o reconciliador não reprocessa avaliação; o
+retry não relê o tópico; `FALHA_PROCESSAMENTO` e `UNAVAILABLE` de bureau não são re-enfileirados
+por ninguém). Mecanismo novo de recuperação atualiza aquela tabela.
 
 Endpoint de webhook por tenant: o destino sai de `webhook_endpoints` (V004), resolvido pelo
 `tenantId` **do evento** (`WebhookEndpointService.resolveTargetUrl`). Sem registro, não entrega —
