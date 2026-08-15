@@ -28,6 +28,15 @@ public interface AssessmentRepository {
   Optional<Assessment> findById(AssessmentId id);
 
   /**
+   * Última avaliação <b>concluída</b> daquele {@code (subject, tenant)}, mais recente primeiro.
+   *
+   * <p>Existe para o fallback da projeção de risco corrente: subject avaliado antes da V041, ou
+   * criado entre a migration e a primeira avaliação nova, não tem linha na projeção. Não é o
+   * caminho normal de leitura — a projeção é.
+   */
+  Optional<Assessment> findLastCompleted(UUID subjectId, String tenantId);
+
+  /**
    * Reivindica avaliações pendentes para processamento exclusivo desta instância, mais antigas
    * primeiro, e devolve os ids reivindicados.
    *

@@ -84,6 +84,7 @@ public class AssessmentProcessor {
   private final FieldVerificationService fieldVerificationService;
   private final RegistryValidationService registryValidationService;
   private final AssuranceService assuranceService;
+  private final java.util.List<AssessmentCompletedListener> completedListeners;
   private final AssessmentEventPublisher eventPublisher;
   private final AssessmentMetrics metrics;
   private final TransactionTemplate transactionTemplate;
@@ -101,6 +102,7 @@ public class AssessmentProcessor {
       FieldVerificationService fieldVerificationService,
       RegistryValidationService registryValidationService,
       AssuranceService assuranceService,
+      java.util.List<AssessmentCompletedListener> completedListeners,
       AssessmentEventPublisher eventPublisher,
       AssessmentMetrics metrics,
       TransactionTemplate transactionTemplate,
@@ -116,6 +118,7 @@ public class AssessmentProcessor {
     this.fieldVerificationService = fieldVerificationService;
     this.registryValidationService = registryValidationService;
     this.assuranceService = assuranceService;
+    this.completedListeners = completedListeners;
     this.eventPublisher = eventPublisher;
     this.metrics = metrics;
     this.transactionTemplate = transactionTemplate;
@@ -301,9 +304,16 @@ public class AssessmentProcessor {
     assessment.complete(decision.level(), finalStatus, decision.summary(), factors);
 
     // Estado e evento na mesma transação (transactional outbox) — e só esta parte é transacional.
+    // A projeção de risco corrente entra aqui pelo mesmo motivo: é projeção, não evento. Se a
+    // avaliação commitou, o risco corrente commitou; gravá-la fora daria uma janela em que o
+    // `GET .../risk-state` mentiria sem nada que o reconciliasse (ADR-0017).
     transactionTemplate.executeWithoutResult(
         status -> {
           repository.save(assessment);
+          completedListeners.forEach(
+              listener ->
+                  listener.onCompleted(
+                      assessment, decision.totalScore(), decision.engineVersion()));
           eventPublisher.publishCompleted(assessment);
         });
 

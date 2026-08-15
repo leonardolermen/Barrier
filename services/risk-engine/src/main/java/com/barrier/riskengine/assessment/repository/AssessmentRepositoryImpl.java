@@ -128,6 +128,21 @@ class AssessmentRepositoryImpl implements AssessmentRepository {
   }
 
   @Override
+  public Optional<Assessment> findLastCompleted(UUID subjectId, String tenantId) {
+    return jdbc
+        .query(
+            "SELECT id FROM assessments WHERE subject_id = ? AND tenant_id = ?"
+                + " AND completed_at IS NOT NULL AND risk_level IS NOT NULL"
+                + " ORDER BY completed_at DESC LIMIT 1",
+            (rs, row) -> rs.getObject("id", UUID.class),
+            subjectId,
+            tenantId)
+        .stream()
+        .findFirst()
+        .flatMap(id -> jpa.findById(id).map(AssessmentEntityMapper::toDomain));
+  }
+
+  @Override
   public boolean existsRecentByOriginAndSubject(
       UUID subjectId, String tenantId, AssessmentOrigin origin, Duration window) {
     Boolean exists =

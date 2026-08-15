@@ -81,6 +81,7 @@ class AssessmentProcessorTest {
   @Mock com.barrier.riskengine.subject.profile.service.FieldVerificationService fieldVerificationService;
   @Mock com.barrier.riskengine.subject.profile.service.RegistryValidationService registryValidationService;
   @Mock AssuranceService assuranceService;
+  @Mock AssessmentCompletedListener completedListener;
   @Mock AssessmentEventPublisher eventPublisher;
 
   private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -95,6 +96,7 @@ class AssessmentProcessorTest {
         fieldVerificationService,
         registryValidationService,
         assuranceService,
+        java.util.List.of(completedListener),
         eventPublisher,
         new AssessmentMetrics(registry),
         transactionTemplate(),
@@ -468,6 +470,7 @@ class AssessmentProcessorTest {
         fieldVerificationService,
         registryValidationService,
         assuranceService,
+        java.util.List.of(completedListener),
         eventPublisher,
         new AssessmentMetrics(registry),
         transactionTemplate(),
