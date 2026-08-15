@@ -23,6 +23,8 @@ Formato baseado em [Michael Nygard](https://cognitect.com/blog/2011/11/15/docume
 | [0014](0014-bureau-cpf-bigboost.md) | Bureau real de CPF via BigBoost (self-service, sem CNPJ) | Aceito |
 | [0015](0015-ingestao-em-massa-faixa-separada.md) | Ingestão em massa como faixa separada, com cota por tenant | Proposto |
 | [0016](0016-plataforma-completa-modelo-b.md) | Plataforma completa: verificação de veracidade, documentoscopia e biometria guardando **resultado, não acervo** | Proposto |
+| [0017](0017-ownership-de-recovery.md) | Ownership de recovery: um dono por estado de falha | Aceito |
+| [0018](0018-custo-de-navegacao-ubo.md) | Custo de navegação societária (UBO): ordem, short-circuit e sem teto de profundidade | Aceito |
 
 ## Status possíveis
 
