@@ -8,6 +8,8 @@ import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.service.AssuranceRecordedListener;
 import com.barrier.riskengine.subject.domain.Subject;
 import com.barrier.riskengine.subject.service.SubjectService;
+import com.barrier.riskengine.rescreening.policy.domain.ReassessmentTrigger;
+import com.barrier.riskengine.rescreening.policy.service.ReassessmentPolicy;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,14 +68,17 @@ public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
 
   private final AssessmentService assessments;
   private final SubjectService subjects;
+  private final ReassessmentPolicy policy;
   private final Duration reassessmentWindow;
 
   public AssuranceReassessmentTrigger(
       AssessmentService assessments,
       SubjectService subjects,
+      ReassessmentPolicy policy,
       @Value("${barrier.assurance.reassessment-window:PT5M}") Duration reassessmentWindow) {
     this.assessments = assessments;
     this.subjects = subjects;
+    this.policy = policy;
     this.reassessmentWindow = reassessmentWindow;
   }
 
@@ -123,6 +128,11 @@ public class AssuranceReassessmentTrigger implements AssuranceRecordedListener {
       }
       Subject subject = subjects.findById(check.subjectId(), check.tenantId());
       String originDetail = check.kind() + "@" + check.providerReference();
+      // Trilha da política (ADR-0019). ASSURANCE faz bypass do intervalo mínimo: uma tentativa de
+      // documentoscopia ou biometria é evento sobre a identidade daquele cliente, não rotina — e o
+      // throttle aqui continua sendo a janela de dedup acima, que é antiavalanche, não política.
+      policy.decide(
+          check.subjectId(), check.tenantId(), ReassessmentTrigger.ASSURANCE, originDetail, true);
       assessments.submit(
           SubmitAssessmentCommand.assurance(
               check.tenantId(),

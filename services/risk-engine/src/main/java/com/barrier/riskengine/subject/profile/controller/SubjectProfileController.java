@@ -49,7 +49,7 @@ public class SubjectProfileController {
     Subject subject =
         subjectService.getForTenant(tenant.id(), resolved.documentType(), resolved.digits());
 
-    SubjectProfile profile = profileService.upsert(subject.id(), tenant.id(), request.toPatch());
+    SubjectProfile profile = profileService.update(subject.id(), tenant.id(), request.toPatch());
     // A resposta precisa incluir as lacunas de verificação, não só as de preenchimento: senão o
     // parceiro lê "cadastro completo" aqui e recebe SOLICITAR_DOCUMENTO na avaliação, sem nada que
     // explique a contradição.

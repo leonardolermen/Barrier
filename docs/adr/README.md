@@ -25,6 +25,7 @@ Formato baseado em [Michael Nygard](https://cognitect.com/blog/2011/11/15/docume
 | [0016](0016-plataforma-completa-modelo-b.md) | Plataforma completa: verificação de veracidade, documentoscopia e biometria guardando **resultado, não acervo** | Proposto |
 | [0017](0017-ownership-de-recovery.md) | Ownership de recovery: um dono por estado de falha | Aceito |
 | [0018](0018-custo-de-navegacao-ubo.md) | Custo de navegação societária (UBO): ordem, short-circuit e sem teto de profundidade | Aceito |
+| [0019](0019-politica-de-reavaliacao.md) | Política de reavaliação: gatilho, materialidade e intervalo mínimo por nível | Aceito |
 
 ## Status possíveis
 

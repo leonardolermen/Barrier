@@ -129,6 +129,14 @@ public class AssessmentService {
                   command.document(),
                   command.name(),
                   command.originDetail());
+          case PROFILE_PATCH ->
+              Assessment.profilePatch(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name(),
+                  command.originDetail());
         };
     return repository.save(assessment);
   }
@@ -163,6 +171,15 @@ public class AssessmentService {
     completedListeners.forEach(listener -> listener.onCompleted(saved, null, null));
     eventPublisher.publishCompleted(saved);
     return saved;
+  }
+
+  /**
+   * Já existe avaliação em análise para aquele {@code (subject, tenant)}? Passa pelo service, e não
+   * pelo repositório, pelo mesmo motivo de {@link #existsRecentByOriginAndSubject}.
+   */
+  @Transactional(readOnly = true)
+  public boolean existsPendingBySubject(UUID subjectId, String tenantId) {
+    return repository.existsPendingBySubject(subjectId, tenantId);
   }
 
   /**

@@ -42,12 +42,13 @@ class AssuranceReassessmentTriggerTest {
 
   @Mock AssessmentService assessments;
   @Mock SubjectService subjects;
+  @Mock com.barrier.riskengine.rescreening.policy.service.ReassessmentPolicy policy;
 
   private AssuranceReassessmentTrigger trigger;
 
   @BeforeEach
   void setUp() {
-    trigger = new AssuranceReassessmentTrigger(assessments, subjects, WINDOW);
+    trigger = new AssuranceReassessmentTrigger(assessments, subjects, policy, WINDOW);
     // Padrão "sem dedup em jogo" para os testes que não exercitam a janela — evita repetir o
     // stub em todo teste que só se importa com o resto do comportamento.
     lenient()

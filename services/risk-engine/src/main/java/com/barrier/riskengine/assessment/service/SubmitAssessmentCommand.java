@@ -79,6 +79,22 @@ public record SubmitAssessmentCommand(
         tenantId, documentType, document, name, null, AssessmentOrigin.ASSURANCE, originDetail);
   }
 
+  /**
+   * Reavaliação pedida por alteração material do cadastro (ADR-0019).
+   *
+   * @param originDetail campos que mudaram, separados por vírgula — nunca os valores. O que mudou
+   *     é trilha; o que virou é dado pessoal, e já está no cadastro.
+   */
+  public static SubmitAssessmentCommand profilePatch(
+      String tenantId,
+      DocumentType documentType,
+      String document,
+      String name,
+      String originDetail) {
+    return new SubmitAssessmentCommand(
+        tenantId, documentType, document, name, null, AssessmentOrigin.PROFILE_PATCH, originDetail);
+  }
+
   public boolean hasIdempotencyKey() {
     return idempotencyKey != null && !idempotencyKey.isBlank();
   }

@@ -139,6 +139,25 @@ public class Assessment {
     return assessment;
   }
 
+  /**
+   * Avaliação criada por alteração material do cadastro (ADR-0019). Mesmo agregado e mesmo
+   * pipeline; a trilha registra quais campos mudaram.
+   *
+   * @param originDetail campos alterados, separados por vírgula — nunca os valores
+   */
+  public static Assessment profilePatch(
+      String tenantId,
+      String subjectId,
+      DocumentType documentType,
+      String rawDocument,
+      String name,
+      String originDetail) {
+    Assessment assessment = submit(tenantId, subjectId, documentType, rawDocument, name);
+    assessment.origin = AssessmentOrigin.PROFILE_PATCH;
+    assessment.originDetail = originDetail;
+    return assessment;
+  }
+
   /** Reconstrói o agregado a partir da persistência. */
   public static Assessment rehydrate(
       AssessmentId id,

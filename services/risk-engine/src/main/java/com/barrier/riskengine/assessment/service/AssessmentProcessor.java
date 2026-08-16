@@ -407,7 +407,7 @@ public class AssessmentProcessor {
                     new SubjectProfile.Partner(
                         p.name(), p.legalEntity(), p.foreign(), p.qualification()))
             .toList();
-    subjectProfileService.upsert(
+    subjectProfileService.enrichFromBureau(
         subjectId,
         tenantId,
         new SubjectProfilePatch(
@@ -447,7 +447,7 @@ public class AssessmentProcessor {
                 from.city(),
                 from.state(),
                 from.zipCode());
-    subjectProfileService.upsert(
+    subjectProfileService.enrichFromBureau(
         subjectId,
         tenantId,
         new SubjectProfilePatch(

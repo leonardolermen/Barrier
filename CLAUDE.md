@@ -515,12 +515,76 @@ efeito colateral. A Webhook API consome o tópico novo no **mesmo listener e mes
 no ADR-0017: é aviso sobre estado consultável (`GET .../risk-state`), não o registro único de um
 fato — diferente da decisão de KYC, que tem.
 
+**Alertas com baseline móvel (fila-origem F5, módulo `monitoring`).** Fecha o "afoga em silêncio"
+que o teste de carga do ADR-0015 expôs: 69.809 avaliações presas em `EM_ANALISE`, sem erro, sem
+latência ruim, sem alerta — `PipelineHealthMetrics` media, e nada comparava a medida contra nada.
+`AlertEvaluator` (`@Scheduled`, gated por `barrier.monitoring.alerts.enabled`, ligado em
+`application-prod.yml`) monta **um** snapshot por ciclo e submete a todas as `AlertRule` (Strategy,
+como `RiskRule` — alerta novo = bean novo); uma query por regra viraria carga sobre a tabela mais
+quente. Quatro regras: `backlog_analise` (limiar **fixo**, de propósito — se a fila normalmente
+demora 6h, o baseline aprenderia que 6h é normal e pararia de avisar), `vol_hora_baixo` (parceiro
+que parou de mandar: não gera erro nenhum, o sistema fica *melhor* por todo indicador técnico
+enquanto o produto está parado), `aprov_auto_alto`/`baixo` (regra desligada no registry, provider
+devolvendo vazio — o fail-open que `ScreeningCoverageRiskRule`/`CorporateStructureCoverageRiskRule`
+já tiveram que fechar duas vezes — e fraude em escala, os três com a mesma assinatura) e
+`recusa_alta`. **A comparação é sempre contra a mesma janela de 60 minutos em dias anteriores**
+(`barrier.monitoring.history-days`, 7): janela deslizante, não hora do relógio — com hora cheia, às
+14h05 o observado seria 5 minutos contra 60 históricos e `vol_hora_baixo` dispararia no início de
+toda hora. O Origem normaliza pela fração do período decorrida; medir sempre 60 minutos elimina o
+viés na origem. Três travas contra alerta que mente: `Baseline.MIN_SAMPLES` (3) cala o avaliador em
+instalação nova, `min-completed` (20) evita taxa sobre amostra pequena (3 conclusões viram 0%, 33%
+ou 100% sozinhas), e janela histórica **sem conclusão** é descartada em vez de contar como 0% (senão
+madrugada parada rebaixa a expectativa até o alerta nunca disparar). Dedup por código
+(`repeat-interval`, 1h) — fila represada por 3h com ciclo de 5min mandaria 36 mensagens idênticas.
+`AlertNotifier` é interface; o padrão só loga, para ligar o monitoramento não depender de contratar
+canal. Alerta nunca carrega documento nem nome: descreve agregados, e é isso que permite mandá-lo
+para canal com controle de acesso mais fraco que o do banco.
+
+**Política de reavaliação (fila-origem F6, [ADR-0019](docs/adr/0019-politica-de-reavaliacao.md)).**
+As travas que existiam no `RescreeningService` são todas contra *avalanche de importação*; nenhuma
+respondia "quando reavaliar um cliente é legítimo". `ReassessmentPolicy` (pacote
+`rescreening.policy`) exige **gatilho + alteração material + intervalo mínimo** por nível corrente
+(LOW 1095 dias · MEDIUM 730 · HIGH 365 · CRITICAL 183 · **sem projeção 183**, fail-safe pelo pior
+caso — desconhecido não é sinônimo de bom). O nível vem de `subject_risk_state` (F3), e a "última
+decisão" é o `evaluatedAt` da projeção. ⚠️ **Intervalo mínimo NÃO se aplica a fato adverso novo**:
+`WATCHLIST_DELTA` e `ASSURANCE` fazem **bypass**, porque entrada nova em lista de sanção é fato novo
+e suprimi-la por "já reavaliei há 30 dias" descumpre a Circular 3.978 — custo de rescreening se
+controla pelo reuso de identidade (V040), nunca deixando de reavaliar. O bypass é **propriedade do
+enum** `ReassessmentTrigger`, não convenção de código, com teste dedicado que quebra o build se
+mudar. `reassessment_decisions` (V042) grava **toda** passagem, inclusive o "não" com motivo
+(`intervalo_minimo`/`sem_alteracao_material`): sem ela, rescreening que não gerou avaliação era
+indistinguível de rescreening que nunca rodou — a mesma distinção entre *rodou e passou* e *estava
+desligada* que o motor de risco faz em toda regra. As travas antiavalanche continuam valendo, são
+ortogonais.
+
+**Decisão de produto (2026-08-15): patch cadastral reavalia o cliente.** `PROFILE_PATCH` exige
+alteração material **e fura o intervalo mínimo** — com o intervalo valendo, cliente LOW só
+reavaliaria em 1095 dias e a materialidade seria decorativa (o comportamento observável seria o de
+antes da política). Logo **o freio deste gatilho é inteiramente a materialidade**:
+`MaterialProfileChange.detect` compara campo a campo contra o cadastro atual e só considera os
+campos que alguma regra lê ou que o `RegistrationCompleteness` exige (fora: `email` e
+`cnaeDescription`); valor igual não conta, inclusive diferença só de caixa/espaço/escala decimal;
+lista de sócios vazia é "não informado", não "zerei o QSA". Sem essa comparação, o `PUT` sendo
+progressivo e mesclado, o parceiro que sincroniza cadastro em lote pagaria uma consulta de bureau
+por cliente sem ter mudado nada. Avaliação nasce com `origin = PROFILE_PATCH` e `origin_detail` =
+os campos que mudaram (nomes, **nunca** os valores). ⚠️ **O laço fechado junto:** o
+`AssessmentProcessor` grava no mesmo cadastro o que o bureau devolve, no meio da avaliação — se
+esse caminho notificasse, toda avaliação geraria outra, cada uma com consulta paga,
+indefinidamente. Os caminhos foram separados **no tipo**: `SubjectProfileService.update` (parceiro,
+notifica) e `enrichFromBureau` (bureau, não notifica), não um booleano — a diferença é grande
+demais para se errar por omissão. Regra: *o parceiro declara, o bureau confirma; só a declaração é
+fato novo*. A reação vive em `ProfilePatchReassessmentTrigger` (pacote `rescreening`), implementando
+`SubjectProfileUpdatedListener` declarada em `subject.profile` — mesma inversão do
+`AssuranceRecordedListener`, porque `subject → assessment → subject` seria ciclo. Dedup de `PT5M`
+(`barrier.subject.profile.reassessment-window`) evita uma avaliação por tecla em formulário salvo
+campo a campo.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (539 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 619 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (571 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 651 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

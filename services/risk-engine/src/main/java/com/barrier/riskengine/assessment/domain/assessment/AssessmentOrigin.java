@@ -17,5 +17,12 @@ public enum AssessmentOrigin {
   RESCREENING,
 
   /** Criada por uma verificação de documentoscopia/biometria que pediu reavaliação. */
-  ASSURANCE
+  ASSURANCE,
+
+  /**
+   * Criada por alteração material do cadastro (ADR-0019). {@code origin_detail} lista os campos
+   * que mudaram — é o que permite ao analista ver a avaliação e saber que ela existe porque o
+   * endereço mudou, não porque o cliente foi sancionado.
+   */
+  PROFILE_PATCH
 }
