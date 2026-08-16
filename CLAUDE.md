@@ -579,12 +579,35 @@ fato novo*. A reação vive em `ProfilePatchReassessmentTrigger` (pacote `rescre
 (`barrier.subject.profile.reassessment-window`) evita uma avaliação por tecla em formulário salvo
 campo a campo.
 
+**Mesa de análise (fila-origem F7, módulo `mesa`, V043).** Fecha o que o plano de remediação já
+reconhecia: *"um `POST /decision` não é case management: sem fila, SLA, atribuição, anexos,
+histórico"*. Duas tabelas próprias — `assessment_cases` (ciclo **operacional**: fila, responsável,
+abertura/fechamento) e `assessment_actions` (append-only) —, **não** colunas em `assessments`: a
+fronteira entre "o que o motor decidiu" e "o que a operação fez" é a que precisa ficar nítida numa
+fiscalização, e o módulo da mesa não escreve na tabela do motor. Filas: `ANALISE_PADRAO`,
+`ALCADA_RISCO`, `AGUARDANDO_PARCEIRO`. `MesaCaseRouter` implementa `AssessmentCompletedListener`
+(mesma inversão da projeção de risco — `assessment → mesa → assessment` seria ciclo): `EM_REVISAO`
+abre em `ANALISE_PADRAO`, `SOLICITAR_DOCUMENTO` abre em `AGUARDANDO_PARCEIRO` (esses casos existiam
+e não tinham fila nenhuma — ninguém os contava nem os cobrava), desfecho final fecha o caso.
+**Ações manuais são eventos, não só o desfecho**: é delas que o SLA é reconstruído, e guardar só a
+decisão destruiria a informação de quanto tempo o caso passou esperando alguém de fora. **SLA
+pausável** (`SlaClock`, função pura): pausa exige o **par** `DOCUMENT_REQUESTED` →
+`DOCUMENT_RECEIVED`; pedido **sem** recebimento não vira desconto — é conservador de propósito,
+porque descontar tudo após o último pedido daria à mesa um jeito trivial de zerar o próprio SLA
+(pedir um documento e nunca fechar). Recebimento sem pedido é ignorado, pedido repetido não abre
+segunda janela, pausas sobrepostas não somam duas vezes, e janela fora da vida do caso é recortada.
+Vale a frase do Origem: *"só contamos espera que dá para provar: sem registro de saída e fora da
+fila, o intervalo é descartado"*. **O SLA nunca é coluna** — é derivado da linha do tempo a cada
+leitura: contador incremental se perde no primeiro reprocessamento e não é auditável depois.
+`GET/POST /v1/mesa/...` (fila, timeline, assign, move, request/receive-document, notes); a decisão
+em si **continua** no `POST /v1/assessments/{id}/decision`, não foi duplicada.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (571 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 651 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (589 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 669 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

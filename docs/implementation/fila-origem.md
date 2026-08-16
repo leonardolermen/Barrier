@@ -23,7 +23,8 @@ Valem para **toda** entrada desta fila; não são repetidas em cada uma.
 - Regra de risco é `RiskRule` (Strategy) com fator explicável; `ENGINE_VERSION` sobe a cada
   mudança de regra/peso. Config por tenant **não** sobe `ENGINE_VERSION`.
 - Migration Flyway imutável, numeração corrente na risk-engine: **próxima livre é V043**
-  (V041 = `subject_risk_state`/F3, V042 = `reassessment_decisions`/F6).
+  (V041 = `subject_risk_state`/F3, V042 = `reassessment_decisions`/F6,
+  V043 = `assessment_cases`+`assessment_actions`/F7) — **próxima livre é V044**.
 - Nunca logar CPF/CNPJ sem máscara; segredo por env.
 - Toda entrada de código: teste de unidade + integração (Testcontainers) + ArchUnit quando
   cruzar módulo. Bug corrigido vem com teste.
@@ -50,7 +51,7 @@ uma página e precisa existir *antes* de qualquer linha de UBO.
 | F4 | ✅ Webhook de mudança de nível de risco | P2 | código | médio | F3 |
 | F5 | ✅ Alertas com baseline móvel (módulo `monitoring`) | P3 | código | médio | F3 (parcial) |
 | F6 | ✅ Política de reavaliação + trilha ([ADR-0019](../adr/0019-politica-de-reavaliacao.md)) | P4 | código | médio | F3 |
-| F7 | Mesa: fila nomeada, ações manuais e SLA pausável | P5 | código | alto | F6 |
+| F7 | ✅ Mesa: fila nomeada, ações manuais e SLA pausável (módulo `mesa`) | P5 | código | alto | F6 |
 | F8 | Ingestão de evento comportamental | P7 | código | alto | F4 |
 | F9 | Catálogo de eventos + schema registry | P8 | doc + infra | — | **gatilho**, não data |
 
