@@ -4,6 +4,7 @@ import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +23,36 @@ public interface AssessmentRepository {
    * medida que revela pipeline travado — ver {@code PipelineHealthMetrics}.
    */
   java.time.Instant oldestPendingCreatedAt();
+
+  /**
+   * Avaliações <b>criadas</b> na janela. Mede intake — é a série de que sai o alerta de silêncio
+   * (parceiro que parou de mandar), que nenhum limiar fixo pega.
+   */
+  long countCreatedBetween(Instant from, Instant to);
+
+  /**
+   * Avaliações <b>concluídas</b> na janela, agrupadas por status. É a série de que saem os alertas
+   * de deriva de taxa (aprovação automática que dispara, recusa que dispara) — o sinal que pega
+   * regra mal calibrada, provider devolvendo lixo e fraude em escala com a mesma métrica.
+   */
+  java.util.Map<com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus, Long>
+      countCompletedByStatusBetween(Instant from, Instant to);
+
+  /**
+   * Avaliações concluídas como APROVADO na janela <b>sem</b> passar por decisão humana
+   * ({@code reviewed_at IS NULL}). Separa aprovação do motor de aprovação da mesa: as duas derivam
+   * por causas diferentes e alertar sobre a soma esconderia as duas.
+   */
+  long countAutoApprovedBetween(Instant from, Instant to);
+
+  /**
+   * Já existe avaliação <b>ainda não concluída</b> para aquele {@code (subject, tenant)}?
+   *
+   * <p>Existe para o gatilho de alteração de cadastro: uma avaliação em análise ainda vai ler o
+   * cadastro quando for processada, então mudar o cadastro enquanto ela existe não pede avaliação
+   * nova — a que está na fila já vai enxergar o valor novo.
+   */
+  boolean existsPendingBySubject(UUID subjectId, String tenantId);
 
   Assessment save(Assessment assessment);
 

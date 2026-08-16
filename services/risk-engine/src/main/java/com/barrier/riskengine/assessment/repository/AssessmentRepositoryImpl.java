@@ -3,6 +3,7 @@ package com.barrier.riskengine.assessment.repository;
 import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -125,6 +126,56 @@ class AssessmentRepositoryImpl implements AssessmentRepository {
         "UPDATE assessments SET claimed_at = now() WHERE id IN (" + placeholders + ")",
         ids.toArray());
     return ids.stream().map(AssessmentId::new).toList();
+  }
+
+  @Override
+  public long countCreatedBetween(Instant from, Instant to) {
+    Long total =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM assessments WHERE created_at >= ? AND created_at < ?",
+            Long.class,
+            java.sql.Timestamp.from(from),
+            java.sql.Timestamp.from(to));
+    return total == null ? 0L : total;
+  }
+
+  @Override
+  public java.util.Map<AssessmentStatus, Long> countCompletedByStatusBetween(
+      Instant from, Instant to) {
+    java.util.Map<AssessmentStatus, Long> porStatus = new java.util.EnumMap<>(AssessmentStatus.class);
+    jdbc.query(
+        "SELECT status, count(*) AS total FROM assessments"
+            + " WHERE completed_at >= ? AND completed_at < ? GROUP BY status",
+        rs -> {
+          porStatus.put(AssessmentStatus.valueOf(rs.getString("status")), rs.getLong("total"));
+        },
+        java.sql.Timestamp.from(from),
+        java.sql.Timestamp.from(to));
+    return porStatus;
+  }
+
+  @Override
+  public boolean existsPendingBySubject(UUID subjectId, String tenantId) {
+    Boolean exists =
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM assessments WHERE subject_id = ? AND tenant_id = ?"
+                + " AND status = 'EM_ANALISE')",
+            Boolean.class,
+            subjectId,
+            tenantId);
+    return Boolean.TRUE.equals(exists);
+  }
+
+  @Override
+  public long countAutoApprovedBetween(Instant from, Instant to) {
+    Long total =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM assessments WHERE completed_at >= ? AND completed_at < ?"
+                + " AND status = 'APROVADO' AND reviewed_at IS NULL",
+            Long.class,
+            java.sql.Timestamp.from(from),
+            java.sql.Timestamp.from(to));
+    return total == null ? 0L : total;
   }
 
   @Override
