@@ -13,6 +13,8 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
 - **Lições do BMP Origem:** [docs/implementation/licoes-do-origem.md](docs/implementation/licoes-do-origem.md)
   — estudo comparativo com a esteira de KYC que roda em produção na BMP (Origem/Mishmar/
   bureaus-manager/tzofe): o que importar, em que ordem, e **o que não copiar**.
+- **Fila de execução dessas lições:** [docs/implementation/fila-origem.md](docs/implementation/fila-origem.md)
+  — F1–F9 com escopo, arquivos, dependências e critério de pronto. F1 entregue (ADR-0017).
 - **Decisões de arquitetura:** [docs/adr/](docs/adr/) (ADR-0009 define o corte atual)
 
 Existe a skill `barrier-implementation` com o checklist operacional — use-a antes de
@@ -113,6 +115,10 @@ offset**, indo para a DLT só ao esgotar `barrier.webhook.consumer.retry-max-ela
 `DeliveryReconciliationJob` (@Scheduled, janela `PT6H`) relê o tópico com um consumidor avulso
 (`assign`, sem commit) e cria entrega para toda decisão sem uma — é o que recupera o que ficou na
 DLT ou passou enquanto o consumidor estava fora. Limitado pela retenção do Kafka.
+**Quem recupera o quê está fixado no [ADR-0017](docs/adr/0017-ownership-de-recovery.md)** — um
+dono por estado de falha, com proibições explícitas (o reconciliador não reprocessa avaliação; o
+retry não relê o tópico; `FALHA_PROCESSAMENTO` e `UNAVAILABLE` de bureau não são re-enfileirados
+por ninguém). Mecanismo novo de recuperação atualiza aquela tabela.
 
 Endpoint de webhook por tenant: o destino sai de `webhook_endpoints` (V004), resolvido pelo
 `tenantId` **do evento** (`WebhookEndpointService.resolveTargetUrl`). Sem registro, não entrega —
@@ -476,12 +482,132 @@ reconhecer que *esse* fato (quem é o titular) não é o que mudou. **Reuso não
 reprocessar 500 mil documentos distintos continua custando o mesmo (ver
 `plano-remediacao-auditoria.md`, Onda 3) — reuso ataca repetição, cota ataca volume.
 
+**Risco corrente do cliente (fila-origem F3/F4, módulo `riskstate`).** `risk_scores` continua sendo
+a trilha imutável (uma linha por avaliação, nunca sobrescrita); ao lado dela entra a projeção viva
+`subject_risk_state` (V041), que responde "qual é o risco deste cliente agora" — sem ela era preciso
+caçar a última avaliação concluída, e nada no código fazia isso. Chave **(subject_id, tenant_id)**,
+não `subject_id`: a decisão é por tenant no assessment (ADR-0011/0012), o mesmo cliente pode estar
+APROVADO num parceiro e REPROVADO em outro, e projeção global vazaria risco entre parceiros. O
+upsert é **monotônico no `evaluated_at` da avaliação**, não na ordem de commit — rescreening,
+assurance e decisão manual concluem fora de ordem, e uma avaliação iniciada antes e concluída depois
+não pode enterrar um estado mais novo (`SubjectRiskState.supersededBy`); empate preserva o gravado.
+A gravação é na **mesma transação** da conclusão: é projeção, não evento. Decisão humana também
+atualiza (`recordManualDecision`, usando `reviewedAt` como relógio — com `completedAt` ela empataria
+com a decisão do motor e seria descartada), preservando score e `engine_version` do motor: o
+analista muda o desfecho, não o nível. `GET /v1/subjects/{document}/risk-state`, escopado por tenant
+(404 sem vínculo), com fallback pela última avaliação concluída — nele `riskScore` volta **null**, e
+não 0, porque 0 é score válido e o mais favorável que existe; `fromProjection` diz de onde veio.
+**Por que módulo próprio e não `subject.state`:** o ArchUnit (`sem_ciclos_entre_modulos`) rejeitou as
+duas primeiras tentativas — `assessment → subject.state → assessment` e, via `RiskLevel`,
+`risk → subject.state → risk` (risk já depende de subject pelo `SubjectProfile` no `RiskContext`).
+A ligação com o pipeline é por **inversão**: `AssessmentCompletedListener` declarada em `assessment`
+(que não sabe quem reage) e implementada por `SubjectRiskStateProjector` — mesmo padrão do
+`AssuranceRecordedListener`. Mudança de nível emite `barrier.subject.risk_level_changed` pela outbox,
+na mesma transação da projeção; primeira avaliação (`null → LOW`) **não** emite (não é "o risco
+mudou", é "o cliente passou a existir", e o `assessment.completed` já cobriu), nível repetido também
+não. O payload leva `origin` (ONBOARDING/RESCREENING/ASSURANCE) e `worsened` — a política de
+notificação é do parceiro, filtrar aqui seria decidir por ele, e `worsened` evita que ele
+reimplemente a escala (a do Barrier é maior = pior, invertida em relação ao Origem). O agregado do
+envelope continua sendo o **assessmentId**, não o subject: o campo do `EventEnvelope` chama-se assim
+e vira `deliveries.assessment_id`; partição por documento é mudança deliberada do contrato (F8), não
+efeito colateral. A Webhook API consome o tópico novo no **mesmo listener e mesmo consumer-group**
+(a máquina de entrega é a mesma). Esse evento **não tem reconciliação**, de propósito e registrado
+no ADR-0017: é aviso sobre estado consultável (`GET .../risk-state`), não o registro único de um
+fato — diferente da decisão de KYC, que tem.
+
+**Alertas com baseline móvel (fila-origem F5, módulo `monitoring`).** Fecha o "afoga em silêncio"
+que o teste de carga do ADR-0015 expôs: 69.809 avaliações presas em `EM_ANALISE`, sem erro, sem
+latência ruim, sem alerta — `PipelineHealthMetrics` media, e nada comparava a medida contra nada.
+`AlertEvaluator` (`@Scheduled`, gated por `barrier.monitoring.alerts.enabled`, ligado em
+`application-prod.yml`) monta **um** snapshot por ciclo e submete a todas as `AlertRule` (Strategy,
+como `RiskRule` — alerta novo = bean novo); uma query por regra viraria carga sobre a tabela mais
+quente. Quatro regras: `backlog_analise` (limiar **fixo**, de propósito — se a fila normalmente
+demora 6h, o baseline aprenderia que 6h é normal e pararia de avisar), `vol_hora_baixo` (parceiro
+que parou de mandar: não gera erro nenhum, o sistema fica *melhor* por todo indicador técnico
+enquanto o produto está parado), `aprov_auto_alto`/`baixo` (regra desligada no registry, provider
+devolvendo vazio — o fail-open que `ScreeningCoverageRiskRule`/`CorporateStructureCoverageRiskRule`
+já tiveram que fechar duas vezes — e fraude em escala, os três com a mesma assinatura) e
+`recusa_alta`. **A comparação é sempre contra a mesma janela de 60 minutos em dias anteriores**
+(`barrier.monitoring.history-days`, 7): janela deslizante, não hora do relógio — com hora cheia, às
+14h05 o observado seria 5 minutos contra 60 históricos e `vol_hora_baixo` dispararia no início de
+toda hora. O Origem normaliza pela fração do período decorrida; medir sempre 60 minutos elimina o
+viés na origem. Três travas contra alerta que mente: `Baseline.MIN_SAMPLES` (3) cala o avaliador em
+instalação nova, `min-completed` (20) evita taxa sobre amostra pequena (3 conclusões viram 0%, 33%
+ou 100% sozinhas), e janela histórica **sem conclusão** é descartada em vez de contar como 0% (senão
+madrugada parada rebaixa a expectativa até o alerta nunca disparar). Dedup por código
+(`repeat-interval`, 1h) — fila represada por 3h com ciclo de 5min mandaria 36 mensagens idênticas.
+`AlertNotifier` é interface; o padrão só loga, para ligar o monitoramento não depender de contratar
+canal. Alerta nunca carrega documento nem nome: descreve agregados, e é isso que permite mandá-lo
+para canal com controle de acesso mais fraco que o do banco.
+
+**Política de reavaliação (fila-origem F6, [ADR-0019](docs/adr/0019-politica-de-reavaliacao.md)).**
+As travas que existiam no `RescreeningService` são todas contra *avalanche de importação*; nenhuma
+respondia "quando reavaliar um cliente é legítimo". `ReassessmentPolicy` (pacote
+`rescreening.policy`) exige **gatilho + alteração material + intervalo mínimo** por nível corrente
+(LOW 1095 dias · MEDIUM 730 · HIGH 365 · CRITICAL 183 · **sem projeção 183**, fail-safe pelo pior
+caso — desconhecido não é sinônimo de bom). O nível vem de `subject_risk_state` (F3), e a "última
+decisão" é o `evaluatedAt` da projeção. ⚠️ **Intervalo mínimo NÃO se aplica a fato adverso novo**:
+`WATCHLIST_DELTA` e `ASSURANCE` fazem **bypass**, porque entrada nova em lista de sanção é fato novo
+e suprimi-la por "já reavaliei há 30 dias" descumpre a Circular 3.978 — custo de rescreening se
+controla pelo reuso de identidade (V040), nunca deixando de reavaliar. O bypass é **propriedade do
+enum** `ReassessmentTrigger`, não convenção de código, com teste dedicado que quebra o build se
+mudar. `reassessment_decisions` (V042) grava **toda** passagem, inclusive o "não" com motivo
+(`intervalo_minimo`/`sem_alteracao_material`): sem ela, rescreening que não gerou avaliação era
+indistinguível de rescreening que nunca rodou — a mesma distinção entre *rodou e passou* e *estava
+desligada* que o motor de risco faz em toda regra. As travas antiavalanche continuam valendo, são
+ortogonais.
+
+**Decisão de produto (2026-08-15): patch cadastral reavalia o cliente.** `PROFILE_PATCH` exige
+alteração material **e fura o intervalo mínimo** — com o intervalo valendo, cliente LOW só
+reavaliaria em 1095 dias e a materialidade seria decorativa (o comportamento observável seria o de
+antes da política). Logo **o freio deste gatilho é inteiramente a materialidade**:
+`MaterialProfileChange.detect` compara campo a campo contra o cadastro atual e só considera os
+campos que alguma regra lê ou que o `RegistrationCompleteness` exige (fora: `email` e
+`cnaeDescription`); valor igual não conta, inclusive diferença só de caixa/espaço/escala decimal;
+lista de sócios vazia é "não informado", não "zerei o QSA". Sem essa comparação, o `PUT` sendo
+progressivo e mesclado, o parceiro que sincroniza cadastro em lote pagaria uma consulta de bureau
+por cliente sem ter mudado nada. Avaliação nasce com `origin = PROFILE_PATCH` e `origin_detail` =
+os campos que mudaram (nomes, **nunca** os valores). ⚠️ **O laço fechado junto:** o
+`AssessmentProcessor` grava no mesmo cadastro o que o bureau devolve, no meio da avaliação — se
+esse caminho notificasse, toda avaliação geraria outra, cada uma com consulta paga,
+indefinidamente. Os caminhos foram separados **no tipo**: `SubjectProfileService.update` (parceiro,
+notifica) e `enrichFromBureau` (bureau, não notifica), não um booleano — a diferença é grande
+demais para se errar por omissão. Regra: *o parceiro declara, o bureau confirma; só a declaração é
+fato novo*. A reação vive em `ProfilePatchReassessmentTrigger` (pacote `rescreening`), implementando
+`SubjectProfileUpdatedListener` declarada em `subject.profile` — mesma inversão do
+`AssuranceRecordedListener`, porque `subject → assessment → subject` seria ciclo. Dedup de `PT5M`
+(`barrier.subject.profile.reassessment-window`) evita uma avaliação por tecla em formulário salvo
+campo a campo.
+
+**Mesa de análise (fila-origem F7, módulo `mesa`, V043).** Fecha o que o plano de remediação já
+reconhecia: *"um `POST /decision` não é case management: sem fila, SLA, atribuição, anexos,
+histórico"*. Duas tabelas próprias — `assessment_cases` (ciclo **operacional**: fila, responsável,
+abertura/fechamento) e `assessment_actions` (append-only) —, **não** colunas em `assessments`: a
+fronteira entre "o que o motor decidiu" e "o que a operação fez" é a que precisa ficar nítida numa
+fiscalização, e o módulo da mesa não escreve na tabela do motor. Filas: `ANALISE_PADRAO`,
+`ALCADA_RISCO`, `AGUARDANDO_PARCEIRO`. `MesaCaseRouter` implementa `AssessmentCompletedListener`
+(mesma inversão da projeção de risco — `assessment → mesa → assessment` seria ciclo): `EM_REVISAO`
+abre em `ANALISE_PADRAO`, `SOLICITAR_DOCUMENTO` abre em `AGUARDANDO_PARCEIRO` (esses casos existiam
+e não tinham fila nenhuma — ninguém os contava nem os cobrava), desfecho final fecha o caso.
+**Ações manuais são eventos, não só o desfecho**: é delas que o SLA é reconstruído, e guardar só a
+decisão destruiria a informação de quanto tempo o caso passou esperando alguém de fora. **SLA
+pausável** (`SlaClock`, função pura): pausa exige o **par** `DOCUMENT_REQUESTED` →
+`DOCUMENT_RECEIVED`; pedido **sem** recebimento não vira desconto — é conservador de propósito,
+porque descontar tudo após o último pedido daria à mesa um jeito trivial de zerar o próprio SLA
+(pedir um documento e nunca fechar). Recebimento sem pedido é ignorado, pedido repetido não abre
+segunda janela, pausas sobrepostas não somam duas vezes, e janela fora da vida do caso é recortada.
+Vale a frase do Origem: *"só contamos espera que dá para provar: sem registro de saída e fora da
+fila, o intervalo é descartado"*. **O SLA nunca é coluna** — é derivado da linha do tempo a cada
+leitura: contador incremental se perde no primeiro reprocessamento e não é auditável depois.
+`GET/POST /v1/mesa/...` (fila, timeline, assign, move, request/receive-document, notes); a decisão
+em si **continua** no `POST /v1/assessments/{id}/decision`, não foi duplicada.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (530 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 610 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (589 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 669 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

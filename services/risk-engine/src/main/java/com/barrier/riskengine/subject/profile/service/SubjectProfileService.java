@@ -21,17 +21,83 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SubjectProfileService {
 
-  private final SubjectProfileRepository repository;
+  private static final org.slf4j.Logger log =
+      org.slf4j.LoggerFactory.getLogger(SubjectProfileService.class);
 
-  public SubjectProfileService(SubjectProfileRepository repository) {
+  private final SubjectProfileRepository repository;
+  private final java.util.List<SubjectProfileUpdatedListener> listeners;
+
+  public SubjectProfileService(
+      SubjectProfileRepository repository, java.util.List<SubjectProfileUpdatedListener> listeners) {
     this.repository = repository;
+    this.listeners = listeners;
   }
 
-  /** Aplica o patch sobre o cadastro que este tenant declarou, criando-o se ainda não existir. */
+  /**
+   * Atualização <b>declarada pelo parceiro</b> ({@code PUT /v1/subjects/{document}/profile}).
+   * Alteração material dispara reavaliação (ADR-0019).
+   */
   @Transactional
-  public SubjectProfile upsert(UUID subjectId, String tenantId, SubjectProfilePatch patch) {
+  public SubjectProfile update(UUID subjectId, String tenantId, SubjectProfilePatch patch) {
     SubjectProfile current = find(subjectId, tenantId);
-    return repository.save(patch.applyTo(current));
+    java.util.Set<String> changed =
+        com.barrier.riskengine.subject.profile.domain.MaterialProfileChange.detect(current, patch);
+    SubjectProfile saved = repository.save(patch.applyTo(current));
+    if (!changed.isEmpty()) {
+      notifyAfterCommit(subjectId, tenantId, changed);
+    }
+    return saved;
+  }
+
+  /**
+   * Enriquecimento automático a partir do bureau, durante o processamento de uma avaliação.
+   *
+   * <p><b>Não notifica ninguém, e é isto que impede um laço infinito:</b> o
+   * {@code AssessmentProcessor} grava aqui os dados objetivos que o bureau devolveu, no meio da
+   * avaliação. Se este caminho disparasse reavaliação por alteração material, toda avaliação
+   * geraria outra avaliação — cada uma com sua consulta paga de bureau — indefinidamente. O
+   * parceiro declara; o bureau confirma. Só a declaração é fato novo.
+   *
+   * <p>Método separado em vez de um {@code boolean notify}: a diferença é grande demais para ficar
+   * num parâmetro que se erra por omissão.
+   */
+  @Transactional
+  public SubjectProfile enrichFromBureau(
+      UUID subjectId, String tenantId, SubjectProfilePatch patch) {
+    return repository.save(patch.applyTo(find(subjectId, tenantId)));
+  }
+
+  /**
+   * Só depois do commit: a reavaliação vai reler o cadastro, e notificar antes entregaria o valor
+   * antigo. Mesmo raciocínio do {@code AssuranceService.scheduleNotification}.
+   */
+  private void notifyAfterCommit(UUID subjectId, String tenantId, java.util.Set<String> changed) {
+    if (listeners.isEmpty()) {
+      return;
+    }
+    if (!org.springframework.transaction.support.TransactionSynchronizationManager
+        .isSynchronizationActive()) {
+      dispatch(subjectId, tenantId, changed);
+      return;
+    }
+    org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+        new org.springframework.transaction.support.TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            dispatch(subjectId, tenantId, changed);
+          }
+        });
+  }
+
+  private void dispatch(UUID subjectId, String tenantId, java.util.Set<String> changed) {
+    for (SubjectProfileUpdatedListener listener : listeners) {
+      try {
+        listener.onMaterialChange(subjectId, tenantId, changed);
+      } catch (RuntimeException e) {
+        // Falha ao reagir não pode invalidar o cadastro que já foi gravado com sucesso.
+        log.error("Falha ao reagir à alteração de cadastro do subject {}", subjectId, e);
+      }
+    }
   }
 
   /** Verifica se o cadastro deste tenant cobre o checklist mínimo do tipo de documento. */

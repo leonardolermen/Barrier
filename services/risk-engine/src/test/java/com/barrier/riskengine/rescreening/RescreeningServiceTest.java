@@ -31,13 +31,14 @@ class RescreeningServiceTest {
 
   @Mock MonitoredSubjectRepository subjects;
   @Mock AssessmentService assessments;
+  @Mock com.barrier.riskengine.rescreening.policy.service.ReassessmentPolicy policy;
 
   private RescreeningService service() {
     return service(true, 500);
   }
 
   private RescreeningService service(boolean enabled, int teto) {
-    return new RescreeningService(subjects, assessments, enabled, teto, 0.90, 6);
+    return new RescreeningService(subjects, assessments, policy, enabled, teto, 0.90, 6);
   }
 
   private static MonitoredSubject subject(String nome, String... tenants) {

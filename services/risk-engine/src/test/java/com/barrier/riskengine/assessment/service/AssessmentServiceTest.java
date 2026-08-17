@@ -37,9 +37,11 @@ class AssessmentServiceTest {
   @Mock SubjectService subjectService;
   @Mock AssessmentEventPublisher eventPublisher;
   @Mock IdempotencyService idempotency;
+  @Mock AssessmentCompletedListener completedListener;
 
   private AssessmentService service() {
-    return new AssessmentService(repository, subjectService, eventPublisher, idempotency);
+    return new AssessmentService(
+        repository, subjectService, eventPublisher, idempotency, java.util.List.of(completedListener));
   }
 
   private Assessment emRevisao(String tenantId) {
@@ -203,6 +205,23 @@ class AssessmentServiceTest {
     assertThat(result.reviewedBy()).isEqualTo("analista@empresa");
     assertThat(result.reviewedByKey()).isEqualTo("chave-teste");
     verify(eventPublisher).publishCompleted(result);
+  }
+
+  /**
+   * A projeção de risco corrente precisa refletir a decisão do analista, não a do motor: sem isto,
+   * o {@code GET .../risk-state} responderia EM_REVISAO depois de o parceiro já ter aprovado.
+   */
+  @Test
+  void decideAtualizaORiscoCorrenteDoCliente() {
+    Assessment a = emRevisao("default");
+    when(repository.findById(a.id())).thenReturn(Optional.of(a));
+    when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    Assessment result =
+        service().decide(a.id(), "default", false, "analista@empresa", "chave-teste", "documentação insuficiente");
+
+    verify(completedListener).onCompleted(result, null, null);
+    assertThat(result.status()).isEqualTo(AssessmentStatus.REPROVADO);
   }
 
   @Test

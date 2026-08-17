@@ -187,3 +187,12 @@ barrier:
       months: 6
       score: 150
     sensitive-cnae-score: 200
+  monitoring:
+    # Alertas do pipeline. Desligados por padrão: sem histórico real o baseline não tem o que
+    # comparar (ver Baseline.MIN_SAMPLES). Ligados em application-prod.yml.
+    alerts:
+      enabled: false
+    # Dias de histórico do baseline — a mesma janela de 60 minutos em cada um dos dias anteriores.
+    history-days: 7
+    # Quanto tempo um mesmo código de alerta espera antes de repetir.
+    repeat-interval: PT1H

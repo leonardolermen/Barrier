@@ -30,3 +30,9 @@ barrier:
     # CSNU: obrigação legal direta (Lei 13.810/2019). Não é opcional em produção.
     un:
       enabled: true
+  monitoring:
+    # Alertas com baseline móvel (fila-origem F5). Ligados em produção e desligados em dev pelo
+    # motivo de sempre: em dev a série histórica é ruído, e alerta que grita sem motivo é alerta
+    # que o time aprende a ignorar antes de precisar dele.
+    alerts:
+      enabled: true

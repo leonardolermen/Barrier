@@ -77,6 +77,11 @@ antes da etapa 2 estar pronta:
 4. **UBO até 3º grau**, com provider de relacionamentos atrás de interface e stub em dev; UBO
    indeterminado força REVIEW em vez de passar em silêncio.
 
+   A estratégia de **custo** desta etapa está no
+   [ADR-0018](0018-custo-de-navegacao-ubo.md) — ordem por custo/benefício, short-circuit com
+   propagação ascendente e a proibição de cortar a navegação por profundidade. Ele vale antes
+   de existir código aqui: "até 3º grau" é a obrigação mínima, não um teto de navegação.
+
 ## Alternativas consideradas
 
 - **As três frentes em paralelo** — entrega mais rápida no papel. Descartada: colocaria captura de

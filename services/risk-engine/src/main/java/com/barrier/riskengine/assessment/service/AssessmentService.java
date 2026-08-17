@@ -28,16 +28,19 @@ public class AssessmentService {
   private final SubjectService subjectService;
   private final AssessmentEventPublisher eventPublisher;
   private final IdempotencyService idempotency;
+  private final java.util.List<AssessmentCompletedListener> completedListeners;
 
   public AssessmentService(
       AssessmentRepository repository,
       SubjectService subjectService,
       AssessmentEventPublisher eventPublisher,
-      IdempotencyService idempotency) {
+      IdempotencyService idempotency,
+      java.util.List<AssessmentCompletedListener> completedListeners) {
     this.repository = repository;
     this.subjectService = subjectService;
     this.eventPublisher = eventPublisher;
     this.idempotency = idempotency;
+    this.completedListeners = completedListeners;
   }
 
   /**
@@ -126,6 +129,14 @@ public class AssessmentService {
                   command.document(),
                   command.name(),
                   command.originDetail());
+          case PROFILE_PATCH ->
+              Assessment.profilePatch(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name(),
+                  command.originDetail());
         };
     return repository.save(assessment);
   }
@@ -154,8 +165,32 @@ public class AssessmentService {
     Assessment assessment = get(id, tenantId);
     assessment.decide(approve, reviewedBy, reviewedByKey, reason);
     Assessment saved = repository.save(assessment);
+    // Mesma transação: a projeção de risco corrente não pode divergir da decisão que acabou de
+    // ser tomada. Sem isto, o GET responderia a decisão do motor depois de o analista tê-la
+    // revertido.
+    completedListeners.forEach(listener -> listener.onCompleted(saved, null, null));
     eventPublisher.publishCompleted(saved);
     return saved;
+  }
+
+  /**
+   * Já existe avaliação em análise para aquele {@code (subject, tenant)}? Passa pelo service, e não
+   * pelo repositório, pelo mesmo motivo de {@link #existsRecentByOriginAndSubject}.
+   */
+  @Transactional(readOnly = true)
+  public boolean existsPendingBySubject(UUID subjectId, String tenantId) {
+    return repository.existsPendingBySubject(subjectId, tenantId);
+  }
+
+  /**
+   * Última avaliação concluída daquele {@code (subject, tenant)} — fallback de leitura do risco
+   * corrente quando a projeção ainda não tem linha para o cliente. Passa pelo service, e não pelo
+   * repositório, pelo mesmo motivo de {@link #existsRecentByOriginAndSubject}: este é o portão do
+   * módulo.
+   */
+  @Transactional(readOnly = true)
+  public Optional<Assessment> findLastCompleted(UUID subjectId, String tenantId) {
+    return repository.findLastCompleted(subjectId, tenantId);
   }
 
   /**

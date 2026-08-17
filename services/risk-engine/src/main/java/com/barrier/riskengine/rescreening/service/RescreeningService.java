@@ -4,6 +4,8 @@ import com.barrier.commons.name.NameNormalizer;
 import com.barrier.commons.name.NameTokens;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentService;
+import com.barrier.riskengine.rescreening.policy.domain.ReassessmentTrigger;
+import com.barrier.riskengine.rescreening.policy.service.ReassessmentPolicy;
 import com.barrier.riskengine.assessment.service.SubmitAssessmentCommand;
 import com.barrier.riskengine.rescreening.domain.MonitoredSubject;
 import com.barrier.riskengine.rescreening.repository.interfaces.MonitoredSubjectRepository;
@@ -59,6 +61,7 @@ public class RescreeningService implements WatchlistImportListener {
 
   private final MonitoredSubjectRepository subjects;
   private final AssessmentService assessments;
+  private final ReassessmentPolicy policy;
   private final boolean enabled;
   private final int maxSubjectsPerImport;
   private final double threshold;
@@ -67,6 +70,7 @@ public class RescreeningService implements WatchlistImportListener {
   public RescreeningService(
       MonitoredSubjectRepository subjects,
       AssessmentService assessments,
+      ReassessmentPolicy policy,
       @Value("${barrier.rescreening.enabled:true}") boolean enabled,
       @Value("${barrier.rescreening.max-subjects-per-import:500}") int maxSubjectsPerImport,
       // Mesmo limiar e mesmo piso de tamanho do screening por nome. Divergir aqui produziria a
@@ -76,6 +80,7 @@ public class RescreeningService implements WatchlistImportListener {
       @Value("${barrier.screening.fuzzy.min-name-length:6}") int minNameLength) {
     this.subjects = subjects;
     this.assessments = assessments;
+    this.policy = policy;
     this.enabled = enabled;
     this.maxSubjectsPerImport = maxSubjectsPerImport;
     this.threshold = threshold;
@@ -157,6 +162,12 @@ public class RescreeningService implements WatchlistImportListener {
   /** Falha de um cliente não interrompe os demais: o resto da lista continua sendo monitorado. */
   private boolean submit(MonitoredSubject subject, String tenantId, String originDetail) {
     try {
+      // Passa pela política para deixar trilha (ADR-0019). WATCHLIST_DELTA faz bypass do intervalo
+      // mínimo por construção — entrada nova em lista de sanção é fato adverso novo, e suprimi-la
+      // por "já reavaliei há 30 dias" descumpre a Circular 3.978. O que a política agrega aqui,
+      // portanto, não é filtro: é o registro de que o controle rodou.
+      policy.decide(
+          subject.id(), tenantId, ReassessmentTrigger.WATCHLIST_DELTA, originDetail, true);
       assessments.submit(
           SubmitAssessmentCommand.rescreening(
               tenantId,

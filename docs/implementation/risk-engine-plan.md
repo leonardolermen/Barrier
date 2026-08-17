@@ -209,7 +209,8 @@ startup.
 - **Retenção de 10 anos** (Circular BCB 3.978) — política de retenção/expurgo, hoje inexistente.
 - **Criptografia em repouso / KMS** — documento e cadastro hoje ficam em texto plano no banco.
 - **UBO além do 1º grau** — `CorporateStructureRiskRule` só navega o QSA direto; falta
-  navegação da árvore societária até a pessoa física final.
+  navegação da árvore societária até a pessoa física final. Restrições de custo obrigatórias
+  antes de escrever o código: [ADR-0018](../adr/0018-custo-de-navegacao-ubo.md).
 - **Bureau real de CPF via Serpro** — `BigBoostBureauProvider` (ADR-0014) já cobre esse gap sem
   depender de CNPJ; `SerproBureauProvider` continua como esqueleto para quando a empresa estiver
   formalizada e o convênio oficial (Receita Federal) fizer sentido como alternativa/fallback.
