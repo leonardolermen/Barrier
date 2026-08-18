@@ -22,9 +22,10 @@ Valem para **toda** entrada desta fila; não são repetidas em cada uma.
 - Evento só por **transactional outbox**; consumidor idempotente (Kafka at-least-once).
 - Regra de risco é `RiskRule` (Strategy) com fator explicável; `ENGINE_VERSION` sobe a cada
   mudança de regra/peso. Config por tenant **não** sobe `ENGINE_VERSION`.
-- Migration Flyway imutável, numeração corrente na risk-engine: **próxima livre é V043**
+- Migration Flyway imutável, numeração corrente na risk-engine:
   (V041 = `subject_risk_state`/F3, V042 = `reassessment_decisions`/F6,
-  V043 = `assessment_cases`+`assessment_actions`/F7) — **próxima livre é V044**.
+  V043 = `assessment_cases`+`assessment_actions`/F7, V044 = `behavior_events`/F8) —
+  **próxima livre é V045**.
 - Nunca logar CPF/CNPJ sem máscara; segredo por env.
 - Toda entrada de código: teste de unidade + integração (Testcontainers) + ArchUnit quando
   cruzar módulo. Bug corrigido vem com teste.
@@ -52,8 +53,14 @@ uma página e precisa existir *antes* de qualquer linha de UBO.
 | F5 | ✅ Alertas com baseline móvel (módulo `monitoring`) | P3 | código | médio | F3 (parcial) |
 | F6 | ✅ Política de reavaliação + trilha ([ADR-0019](../adr/0019-politica-de-reavaliacao.md)) | P4 | código | médio | F3 |
 | F7 | ✅ Mesa: fila nomeada, ações manuais e SLA pausável (módulo `mesa`) | P5 | código | alto | F6 |
-| F8 | Ingestão de evento comportamental | P7 | código | alto | F4 |
-| F9 | Catálogo de eventos + schema registry | P8 | doc + infra | — | **gatilho**, não data |
+| F8 | ✅ Ingestão de evento comportamental (módulo `behavior`) | P7 | código | alto | F4 |
+| F9 | ✅ Catálogo de eventos ([event-catalog](../architecture/event-catalog.md)); registry adiado com critério | P8 | doc + infra | — | disparado pelo F8 |
+
+**Fechamento das lacunas apontadas na revisão da fila (2026-08-16):** o job diário de reavaliação
+periódica (o gatilho que faltava para `PERIODIC`) e o `PagerDutyAlertNotifier` (sem o qual o F5
+detectava sem avisar). Seguem abertas, e conscientes: `REINTAKE` sem chamador, anexos de caso
+(dependem de retenção/criptografia da Fase 6), regras que leem o acervo comportamental, UBO não
+construído (o ADR-0018 é pré-requisito, não entrega) e schema registry adiado com critério.
 
 **F9 não entra na fila por ordem — entra por gatilho.** A spec é explícita: com dois
 deployables e um tópico, registry é cerimônia. Ele acorda no **terceiro consumidor** de

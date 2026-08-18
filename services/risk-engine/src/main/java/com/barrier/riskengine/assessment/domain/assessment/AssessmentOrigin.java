@@ -24,5 +24,12 @@ public enum AssessmentOrigin {
    * que mudaram — é o que permite ao analista ver a avaliação e saber que ela existe porque o
    * endereço mudou, não porque o cliente foi sancionado.
    */
-  PROFILE_PATCH
+  PROFILE_PATCH,
+
+  /**
+   * Reavaliação periódica de rotina (re-KYC), disparada pelo job diário quando o intervalo do nível
+   * de risco do cliente vence. {@code origin_detail} registra o nível e o prazo aplicados — é o que
+   * permite ao analista saber que a avaliação existe por rotina, não por fato novo.
+   */
+  PERIODIC_REVIEW
 }

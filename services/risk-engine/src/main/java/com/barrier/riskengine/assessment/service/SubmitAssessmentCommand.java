@@ -95,6 +95,23 @@ public record SubmitAssessmentCommand(
         tenantId, documentType, document, name, null, AssessmentOrigin.PROFILE_PATCH, originDetail);
   }
 
+  /** Reavaliação periódica de rotina (re-KYC), disparada pelo job diário. */
+  public static SubmitAssessmentCommand periodicReview(
+      String tenantId,
+      DocumentType documentType,
+      String document,
+      String name,
+      String originDetail) {
+    return new SubmitAssessmentCommand(
+        tenantId,
+        documentType,
+        document,
+        name,
+        null,
+        AssessmentOrigin.PERIODIC_REVIEW,
+        originDetail);
+  }
+
   public boolean hasIdempotencyKey() {
     return idempotencyKey != null && !idempotencyKey.isBlank();
   }
