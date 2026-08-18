@@ -602,12 +602,46 @@ leitura: contador incremental se perde no primeiro reprocessamento e não é aud
 `GET/POST /v1/mesa/...` (fila, timeline, assign, move, request/receive-document, notes); a decisão
 em si **continua** no `POST /v1/assessments/{id}/decision`, não foi duplicada.
 
+**Ingestão comportamental (fila-origem F8, módulo `behavior`, V044).** Fundação do monitoramento
+pós-onboarding (item 7 da Fase 8 do `risk-engine-plan`): `behavior_events` é acervo de **fatos
+imutáveis** — não há `update` nem `delete` na interface do repositório, e essa ausência é a defesa;
+corrigir o passado destruiria a base sobre a qual uma decisão foi tomada, correção se faz com evento
+novo. `POST /v1/behavior-events` responde **202** (o fato foi aceito, nada foi decidido a partir
+dele), é **idempotente por `sourceEventId`** do parceiro (reprocessamento da fila dele contaria a
+mesma transação duas vezes) e reenvio duplicado também responde 202 com `duplicate=true` — reenviar
+precisa ser seguro e barato, senão o parceiro evita reenviar e perde fato de verdade. `occurredAt`
+no futuro além de `barrier.behavior.max-future-skew` (PT5M) é corrigido para o recebimento e
+logado: fato "do futuro" ficaria eternamente dentro de qualquer janela deslizante construída sobre
+estes eventos. **Ingestão não dispara reavaliação** — o volume é de outra ordem (uma transação por
+compra, não uma por onboarding), e ligar cada fato a uma avaliação completa faria do cliente mais
+ativo o mais caro; as regras que lerão o acervo são entrega própria, e é lá que a política de
+disparo será decidida. O que se importou do `tzofe` é o **modelo de ingestão**, nunca regra como
+dado — expressão editável em runtime sacrificaria `ENGINE_VERSION` e a trilha reproduzível.
+`barrier.behavior.recorded` é particionado por **`subjectId`**: o Origem usa o `document`, mas chave
+de partição aparece em log de broker, métrica de lag e inspetor de tópico — lugares sem o controle
+de acesso do banco —, e o `subjectId` é único por documento (ADR-0011), dando a mesma garantia de
+ordem por entidade sem espalhar CPF pela observabilidade. O payload livre do parceiro **não** viaja
+no evento: fica no acervo, e quem precisar dele lê a base.
+
+**Catálogo de eventos (fila-origem F9).** O gatilho de P8 era "terceiro consumidor ou primeiro
+payload que muda de forma"; `barrier.behavior.recorded` levou o barramento de um para três tópicos,
+então [docs/architecture/event-catalog.md](docs/architecture/event-catalog.md) passou a existir —
+normativo, com produtor, chave de partição, consumidores e payload de cada evento, mais as regras
+comuns (outbox obrigatório, idempotência por `eventId`, consumer-group por consumidor, nada de PII
+em chave de partição). **Schema registry segue não existindo, com critério escrito:** entra quando o
+produtor deixar de ser único ou na primeira quebra real a coordenar entre times que não compilam
+juntos — hoje o `commons` dá compatibilidade em tempo de compilação e registry seria cerimônia. O
+catálogo é a mitigação, e só funciona se for atualizado no mesmo PR que muda o evento; desatualizado
+é pior que inexistente, porque dá confiança falsa. ⚠️ Registrado lá: `EventEnvelope.assessmentId` é
+o id do **agregado** de cada evento, não necessariamente uma avaliação — o nome é histórico e a
+`deliveries.assessment_id` da Webhook API depende dele.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (589 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 669 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (593 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 673 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).
