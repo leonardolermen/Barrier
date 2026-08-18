@@ -196,3 +196,10 @@ barrier:
     history-days: 7
     # Quanto tempo um mesmo código de alerta espera antes de repetir.
     repeat-interval: PT1H
+  behavior:
+    # Ingestão de fato comportamental (fila-origem F8). Ligada: gravar fato não decide nada e não
+    # custa consulta paga — o que custa é a regra que vai ler o acervo, e ela ainda não existe.
+    enabled: true
+    # Tolerância de relógio adiantado do parceiro. Fato "do futuro" fica eternamente dentro de
+    # qualquer janela deslizante construída sobre estes eventos.
+    max-future-skew: PT5M
