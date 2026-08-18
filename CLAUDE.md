@@ -636,12 +636,42 @@ catálogo é a mitigação, e só funciona se for atualizado no mesmo PR que mud
 o id do **agregado** de cada evento, não necessariamente uma avaliação — o nome é histórico e a
 `deliveries.assessment_id` da Webhook API depende dele.
 
+**Reavaliação periódica (re-KYC) — o gatilho que faltava.** `PeriodicReassessmentJob` (cron
+`0 30 3 * * *`, madrugada porque o lote compete com o onboarding pelo mesmo pipeline global) varre
+`subject_risk_state` e submete avaliação com `origin = PERIODIC_REVIEW` para quem venceu o intervalo
+do seu nível. Até aqui a `ReassessmentPolicy` sabia decidir sobre `PERIODIC` e **nada a acionava**:
+o intervalo por faixa era só *freio*, nunca *gatilho*, e a reavaliação periódica que o F3 existia
+para destravar não acontecia. Risco aqui é **custo**, não corretude — cada cliente devido é uma
+avaliação completa com consulta paga: **desligado por padrão**
+(`barrier.rescreening.periodic.enabled`), **teto por execução** (`max-per-run`, 200 — ligar numa
+base com anos de histórico tornaria devido um lote enorme de uma vez; o teto vira fila drenada ao
+longo de dias, mais antigo primeiro) e **não empilha** (cliente com avaliação em análise é pulado,
+porque ela vai concluir e atualizar a projeção). A consulta pré-filtra pelo **menor** prazo da
+tabela (`ReassessmentPolicy.menorIntervalo()`, 183d) e a política decide pelo nível de cada cliente:
+escrever os quatro prazos em SQL criaria uma segunda cópia da política, e duas cópias divergem.
+⚠️ **Limitação conhecida:** o teto é global e a ordem por antiguidade não isola tenants — parceiro
+com base maior consome a maior parte da cota diária. É o problema que a cota por tenant do ADR-0015
+resolve para ingestão em massa, e a solução deve ser a mesma.
+
+**Canal real de alerta (PagerDuty).** `PagerDutyAlertNotifier` (Events API v2) tira o F5 do papel:
+a única implementação de `AlertNotifier` escrevia em log, então fila represada às 3h disparava
+alerta para um arquivo. `dedup_key` = código do alerta, então `backlog_analise` repetido atualiza o
+incidente aberto em vez de criar dezenas (o dedup por tempo do `AlertEvaluator` evita o tráfego;
+este evita o ruído do lado de lá). `WARNING` vai como `warning`, **não** `error` — aviso que acorda
+alguém deixa de ser aviso. Chave por env (`PAGERDUTY_ROUTING_KEY`), `@ConditionalOnProperty`
+desligado por padrão, timeouts curtos nos **dois** lados: POST pendurado travaria a thread do
+scheduler e o monitoramento pararia de monitorar. Ligado sem chave loga erro e segue — o
+`LoggingAlertNotifier` já registrou o alerta, nada se perde em silêncio. Alerta nunca carrega
+documento nem nome, e é isso que permite mandá-lo a um serviço externo. **Não verificado ao vivo:**
+sem routing key neste ambiente, o caminho até o PagerDuty real nunca foi exercitado — validar em
+homologação forçando um `backlog_analise` antes de virar plantão.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (593 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 673 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (604 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 684 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

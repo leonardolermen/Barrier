@@ -94,7 +94,7 @@ public class ReassessmentPolicy {
    * <p>Cliente bom se reavalia a cada 3 anos; cliente ruim, a cada 6 meses. É contraintuitivo até
    * se lembrar de que reavaliar custa consulta paga: o gasto vai para onde o risco está.
    */
-  private static Duration intervaloMinimo(RiskLevel nivel) {
+  public static Duration intervaloMinimo(RiskLevel nivel) {
     if (nivel == null) {
       return DESCONHECIDO;
     }
@@ -104,6 +104,17 @@ public class ReassessmentPolicy {
       case HIGH -> Duration.ofDays(365);
       case CRITICAL -> Duration.ofDays(183);
     };
+  }
+
+  /**
+   * Menor intervalo da tabela — o do pior nível de risco. É o pré-filtro do job periódico: nada
+   * mais novo que isto pode estar vencido para nenhum nível, então a varredura não precisa olhar.
+   */
+  public static Duration menorIntervalo() {
+    return java.util.Arrays.stream(RiskLevel.values())
+        .map(ReassessmentPolicy::intervaloMinimo)
+        .min(Duration::compareTo)
+        .orElse(DESCONHECIDO);
   }
 
   private ReassessmentDecision registrar(ReassessmentDecision decision) {

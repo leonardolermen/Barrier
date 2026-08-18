@@ -56,6 +56,12 @@ uma página e precisa existir *antes* de qualquer linha de UBO.
 | F8 | ✅ Ingestão de evento comportamental (módulo `behavior`) | P7 | código | alto | F4 |
 | F9 | ✅ Catálogo de eventos ([event-catalog](../architecture/event-catalog.md)); registry adiado com critério | P8 | doc + infra | — | disparado pelo F8 |
 
+**Fechamento das lacunas apontadas na revisão da fila (2026-08-16):** o job diário de reavaliação
+periódica (o gatilho que faltava para `PERIODIC`) e o `PagerDutyAlertNotifier` (sem o qual o F5
+detectava sem avisar). Seguem abertas, e conscientes: `REINTAKE` sem chamador, anexos de caso
+(dependem de retenção/criptografia da Fase 6), regras que leem o acervo comportamental, UBO não
+construído (o ADR-0018 é pré-requisito, não entrega) e schema registry adiado com critério.
+
 **F9 não entra na fila por ordem — entra por gatilho.** A spec é explícita: com dois
 deployables e um tópico, registry é cerimônia. Ele acorda no **terceiro consumidor** de
 `barrier.assessment.completed` ou no **primeiro payload que muda de forma**. Se F8 for

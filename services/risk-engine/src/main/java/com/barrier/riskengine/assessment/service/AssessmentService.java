@@ -137,6 +137,14 @@ public class AssessmentService {
                   command.document(),
                   command.name(),
                   command.originDetail());
+          case PERIODIC_REVIEW ->
+              Assessment.periodicReview(
+                  command.tenantId(),
+                  subject.id().toString(),
+                  command.documentType(),
+                  command.document(),
+                  command.name(),
+                  command.originDetail());
         };
     return repository.save(assessment);
   }

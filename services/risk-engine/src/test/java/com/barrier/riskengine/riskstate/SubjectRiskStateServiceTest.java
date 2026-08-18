@@ -176,5 +176,16 @@ class SubjectRiskStateServiceTest {
       states.put(state.subjectId() + "|" + state.tenantId(), state);
       return state;
     }
+
+    @Override
+    public List<SubjectRiskState> findDueForPeriodicReview(
+        java.time.Duration menorIntervalo, int limit) {
+      java.time.Instant corte = Instant.now().minus(menorIntervalo);
+      return states.values().stream()
+          .filter(s -> s.evaluatedAt().isBefore(corte))
+          .sorted(java.util.Comparator.comparing(SubjectRiskState::evaluatedAt))
+          .limit(limit)
+          .toList();
+    }
   }
 }

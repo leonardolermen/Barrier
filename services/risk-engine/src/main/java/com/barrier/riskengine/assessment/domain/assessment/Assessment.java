@@ -158,6 +158,23 @@ public class Assessment {
     return assessment;
   }
 
+  /**
+   * Reavaliação periódica de rotina (re-KYC). Mesmo agregado e mesmo pipeline; a trilha registra o
+   * nível e o intervalo que a tornaram devida.
+   */
+  public static Assessment periodicReview(
+      String tenantId,
+      String subjectId,
+      DocumentType documentType,
+      String rawDocument,
+      String name,
+      String originDetail) {
+    Assessment assessment = submit(tenantId, subjectId, documentType, rawDocument, name);
+    assessment.origin = AssessmentOrigin.PERIODIC_REVIEW;
+    assessment.originDetail = originDetail;
+    return assessment;
+  }
+
   /** Reconstrói o agregado a partir da persistência. */
   public static Assessment rehydrate(
       AssessmentId id,

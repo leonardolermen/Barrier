@@ -7,6 +7,7 @@ import com.barrier.riskengine.riskstate.repository.interfaces.SubjectRiskStateJp
 import com.barrier.riskengine.riskstate.repository.interfaces.SubjectRiskStateRepository;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -17,9 +18,33 @@ import org.springframework.stereotype.Repository;
 class SubjectRiskStateRepositoryImpl implements SubjectRiskStateRepository {
 
   private final SubjectRiskStateJpaRepository jpa;
+  private final JdbcTemplate jdbc;
 
-  SubjectRiskStateRepositoryImpl(SubjectRiskStateJpaRepository jpa) {
+  SubjectRiskStateRepositoryImpl(SubjectRiskStateJpaRepository jpa, JdbcTemplate jdbc) {
     this.jpa = jpa;
+    this.jdbc = jdbc;
+  }
+
+  @Override
+  public java.util.List<SubjectRiskState> findDueForPeriodicReview(
+      java.time.Duration menorIntervalo, int limit) {
+    return jdbc.query(
+        "SELECT * FROM subject_risk_state"
+            + " WHERE evaluated_at < now() - (? * interval '1 second')"
+            + " ORDER BY evaluated_at ASC LIMIT ?",
+        (rs, row) ->
+            new SubjectRiskState(
+                rs.getObject("subject_id", java.util.UUID.class),
+                rs.getString("tenant_id"),
+                RiskLevel.valueOf(rs.getString("risk_level")),
+                rs.getInt("risk_score"),
+                AssessmentStatus.valueOf(rs.getString("decision")),
+                rs.getObject("assessment_id", java.util.UUID.class),
+                rs.getString("engine_version"),
+                rs.getTimestamp("evaluated_at").toInstant(),
+                rs.getTimestamp("updated_at").toInstant()),
+        menorIntervalo.toSeconds(),
+        limit);
   }
 
   @Override
