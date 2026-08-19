@@ -129,7 +129,12 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   coberto pelo filtro (o teste que faltava, não o caso que faltava). ✅ ambos.
   </details>
 
-- [ ] **Nenhum teste de camada web em `mesa` e `behavior`** 🔴
+- [x] **Nenhum teste de camada web em `mesa` e `behavior`** 🔴 — **fechado 2026-08-19**
+  `CaseApiIntegrationTest` (5) e `BehaviorEventApiIntegrationTest` (6) cobrem as três coisas que um
+  teste de domínio não alcança: **auth** (enumerando cada grupo de rota, porque foi um grupo
+  inteiro ficar fora da allowlist que criou o problema), **escopo de tenant** (caso ausente responde
+  igual para qualquer tenant — senão vira oráculo de id; idempotência do behavior é por tenant) e
+  **contrato de status** (202 com `duplicate`, 400 em fila inexistente, 200 com lista vazia).
   É por isso que o item acima passou. `CaseServiceTest`, `SlaClockTest` e
   `BehaviorEventServiceTest` cobrem o domínio com qualidade; a fronteira HTTP não tem nada.
   Não é lacuna de cobertura, é lacuna de **categoria** — e o custo dela foi duas entregas
@@ -141,7 +146,12 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   *Pronto quando:* cada controller tem teste de fronteira (auth, escopo de tenant, contrato de
   status), no padrão de `WebhookEndpointApiIntegrationTest`.
 
-- [ ] **`/actuator` sem autenticação** 🟠
+- [x] **`/actuator` sem autenticação** 🟠 — **fechado 2026-08-19**
+  Porta de gestão separada (9090/9091), ausente do `Service`. Porta em vez de filtro de propósito:
+  filtro dependeria de acertar o padrão de rota de novo, que é como `/v1/mesa` ficou aberto.
+  `ActuatorPortIsolationTest` afirma pela **porta pública** que os endpoints dão 404, que a de
+  gestão serve as probes, e que as duas são de fato distintas (senão o primeiro passaria por
+  acidente).
   `management.endpoints.web.exposure.include=health,info,metrics,prometheus` e **nenhum filtro
   cobre `/actuator`** (não há Spring Security no classpath). `/actuator/prometheus` entrega
   volume por tenant, taxa de aprovação/recusa e profundidade de fila: inteligência competitiva,
@@ -150,7 +160,10 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   *Pronto quando:* actuator em porta separada não exposta, ou atrás de auth; teste provando
   401/404 na porta pública.
 
-- [ ] **Não existe CI, não existe Dockerfile, não existe IaC** 🔴
+- [x] **Não existe CI, não existe Dockerfile, não existe IaC** 🔴 — **fechado 2026-08-19** (`d5bb9cc`)
+  CI em `.github/workflows/ci.yml` (verify com Testcontainers + build das imagens + scan de CVE),
+  `Dockerfile` multi-stage e manifests em `deploy/k8s/`. Ver
+  [plano-escala-horizontal.md](plano-escala-horizontal.md).
   `find -iname Dockerfile` retorna vazio; não há `.github/`. O `docker-compose.yml` sobe só
   Postgres e Kafka de dev. Consequências: a suíte de 684 testes é verde **por alegação** (nunca
   em pipeline); todo o desenho de lease/`SKIP LOCKED`/`@Version` existe para réplicas que
@@ -163,13 +176,33 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   *Pronto quando:* push roda `mvnw verify` com Testcontainers e falha o build; imagem publicada
   e subindo com `docker compose up`; scan de dependência ativo; badge no README.
 
-- [ ] **`JSONB` nas colunas de evidência** 🟠 — *item já aberto na Onda 1*
-  Ver [plano-remediacao-auditoria.md](plano-remediacao-auditoria.md). Sobe para P0 aqui porque
-  agora há um consumidor que estoura de verdade: PJ com QSA grande + múltiplos matches +
-  `evaluated_json` com 12 regras em `VARCHAR(4000)`. O que não cabe é **a evidência de
-  auditoria**, e o modo de falha é poison pill.
+- [x] **`JSONB` nas colunas de evidência** 🟠 — **já estava resolvido; item da auditoria estava desatualizado**
+  A **V026** já converteu `hits_json`, `results_json` e `partners_json` para JSONB (e `factors`
+  para TEXT), depois de um CNPJ com 41 sócios derrubar a avaliação inteira. A auditoria listou o
+  item como aberto sem conferir as migrations — vale como lembrete de que achado de auditoria
+  também precisa de verificação.
 
-- [ ] **`IllegalStateException → 409` genérico vaza mensagem interna** 🟢
+  **Mas a varredura encontrou o que a V026 não pegou:** `outbox.payload` e `deliveries.payload`
+  continuavam `VARCHAR(4000)`. Corrigido em V047/V007 — preventivo, não corretivo (os três
+  eventos de hoje têm forma fixa e campos curtos), porque o modo de falha ali é pior: a gravação
+  da outbox roda na **mesma transação** que conclui a avaliação, então payload grande não perde o
+  evento — **reverte a conclusão**, e a avaliação refaz as consultas pagas até
+  `FALHA_PROCESSAMENTO`. Basta alguém acrescentar os fatores explicáveis ao payload para o teto
+  voltar a morder.
+
+  ⚠️ **TEXT, não JSONB**, ao contrário da V026: `WebhookDeliveryService` calcula o HMAC sobre o
+  payload **lido do banco** e envia essa mesma string. JSONB normaliza (reordena chaves, remove
+  espaços), então o parceiro receberia bytes diferentes dos serializados pelo produtor. Fidelidade
+  de bytes é requisito nessa coluna; a consultabilidade que justificou JSONB na evidência não vale
+  o risco.
+
+- [x] **`IllegalStateException → 409` genérico vaza mensagem interna** 🟢 — **fechado 2026-08-19**
+  `AssessmentStateException` e `AssuranceDisabledException` no padrão do
+  `DocumentGateNotSatisfiedException`; o handler genérico saiu e esses casos viram 500 sem detalhe.
+  **O tipo da exceção passou a ser a decisão do que é público.** `ProblemExceptionHandlerTest` é
+  reflexivo e falha se qualquer handler voltar a tratar exceção genérica da plataforma — com
+  `IllegalArgumentException → 400` registrada como exceção consciente à regra, para não ser
+  "corrigida" depois por simetria.
   O handler devolve `e.getMessage()` ao chamador. Foi assim que a mensagem
   "Rota declara AuthenticatedTenant mas não está coberta pelo filtro" ficou pública. Mapear as
   causas legítimas (kill switch desligado etc.) em exceções próprias — o projeto já faz isso

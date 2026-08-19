@@ -225,7 +225,7 @@ public class Assessment {
   public void complete(
       RiskLevel riskLevel, AssessmentStatus finalStatus, String decision, List<String> factors) {
     if (this.status != AssessmentStatus.EM_ANALISE) {
-      throw new IllegalStateException("Avaliação já concluída: " + id.asString());
+      throw new AssessmentStateException("Avaliação já concluída: " + id.asString());
     }
     if (finalStatus == AssessmentStatus.EM_ANALISE) {
       throw new IllegalArgumentException("Status final não pode ser EM_ANALISE");
@@ -244,7 +244,7 @@ public class Assessment {
    */
   public void decide(boolean approve, String reviewedBy, String reviewedByKey, String reason) {
     if (this.status != AssessmentStatus.EM_REVISAO) {
-      throw new IllegalStateException("Avaliação não está em revisão: " + id.asString());
+      throw new AssessmentStateException("Avaliação não está em revisão: " + id.asString());
     }
     if (reviewedBy == null || reviewedBy.isBlank()) {
       throw new IllegalArgumentException("reviewedBy obrigatório");
@@ -270,7 +270,7 @@ public class Assessment {
    */
   public void recordFailure(String error, int maxAttempts, Instant nextAttemptAt) {
     if (this.status != AssessmentStatus.EM_ANALISE) {
-      throw new IllegalStateException("Só avaliação em análise registra falha: " + id.asString());
+      throw new AssessmentStateException("Só avaliação em análise registra falha: " + id.asString());
     }
     this.attempts++;
     this.lastError = truncate(error);

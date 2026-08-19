@@ -49,6 +49,20 @@ spring:
       thread-name-prefix: barrier-sched-
 
 management:
+  server:
+    # Actuator em porta PRÓPRIA, que o Service do Kubernetes não publica.
+    #
+    # Antes ele era servido na mesma porta da API de negócio, e nenhum filtro cobre /actuator (não
+    # há Spring Security no classpath; TenantAuthenticationFilter e AdminApiKeyFilter só olham
+    # /v1/). Ou seja: qualquer chamador anônimo lia /actuator/prometheus, que entrega volume por
+    # tenant, taxa de aprovação e recusa e profundidade de fila — inteligência competitiva sobre os
+    # parceiros, e sinal de fraude, porque um atacante observa em agregado se a tentativa dele
+    # passou.
+    #
+    # Porta separada em vez de filtro de propósito: filtro dependeria de acertar o padrão de rota,
+    # que é exatamente como /v1/mesa ficou aberto. Aqui a superfície some da porta pública por
+    # construção. Probes do kubelet e scrape do Prometheus falam com esta porta dentro do cluster.
+    port: ${MANAGEMENT_PORT:9090}
   endpoints:
     web:
       exposure:

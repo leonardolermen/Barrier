@@ -51,6 +51,9 @@ server:
   shutdown: graceful
 
 management:
+  server:
+    # Actuator em porta própria; ver a nota longa no application.yml da risk-engine.
+    port: ${MANAGEMENT_PORT:9091}
   endpoints:
     web:
       exposure:

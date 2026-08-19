@@ -3,6 +3,8 @@ package com.barrier.riskengine.web;
 import com.barrier.riskengine.assessment.domain.exceptions.AssessmentNotFoundException;
 import com.barrier.riskengine.assessment.domain.exceptions.IdempotencyConflictException;
 import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentException;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStateException;
+import com.barrier.riskengine.assurance.domain.AssuranceDisabledException;
 import com.barrier.riskengine.assurance.domain.DocumentGateNotSatisfiedException;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
@@ -42,8 +44,19 @@ class ProblemExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 
-  @ExceptionHandler(IllegalStateException.class)
-  ProblemDetail handleConflict(IllegalStateException e) {
+  /**
+   * Conflitos de estado do domínio: 409 com o motivo, porque o chamador precisa saber o que
+   * aconteceu — dois revisores decidindo o mesmo caso é cenário real.
+   *
+   * <p>Antes isto era {@code @ExceptionHandler(IllegalStateException.class)}, e por isso devolvia
+   * também a mensagem de qualquer erro interno que usasse a exceção genérica da plataforma. Foi
+   * assim que um chamador <b>não autenticado</b> recebeu <i>"Rota declara AuthenticatedTenant mas
+   * não está coberta pelo TenantAuthenticationFilter"</i>. Sem o handler genérico, esses casos
+   * viram 500 sem detalhe, que é o correto para erro de programação — ver
+   * {@code ProblemExceptionHandlerTest}.
+   */
+  @ExceptionHandler({AssessmentStateException.class, AssuranceDisabledException.class})
+  ProblemDetail handleConflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 
