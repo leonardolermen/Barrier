@@ -19,7 +19,8 @@ O núcleo de decisão é **em processo** dentro da Risk Engine (os módulos iden
    3. **risk** — o motor roda as regras ativas (Strategy, filtradas pelo *rule registry*),
       soma um **score 0–1000**, deriva o nível (LOW/MEDIUM/HIGH/CRITICAL) e a recomendação
       (APPROVE/REVIEW/REJECT) → `RiskDecision`. As regras consomem identidade, screening,
-      cadastro, sinais de rede (GeoIP/device/telefone/email) e histórico interno.
+      cadastro, assurance e cobertura de listas. Sinais de rede (GeoIP/device) e histórico
+      interno são Fase 8 do risk-engine-plan e **não existem** hoje.
    4. A recomendação vira o status (APROVADO/EM_REVISAO/REPROVADO); se o cadastro (CMN
       4.753) estiver incompleto **ou não verificado**, `APROVADO` vira
       `SOLICITAR_DOCUMENTO` — fila própria, não EDD: falta de campo não pede analista, pede o

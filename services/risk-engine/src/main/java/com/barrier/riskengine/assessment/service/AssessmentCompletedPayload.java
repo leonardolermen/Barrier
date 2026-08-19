@@ -6,7 +6,7 @@ import java.time.Instant;
 
 /**
  * Payload do evento {@code barrier.assessment.completed} (contrato v1 — acréscimo retrocompatível
- * de campo, ver Task 4 de reuso-de-verificacao-de-identidade.md).
+ * de campo — ver docs/architecture/event-catalog.md).
  *
  * <p>{@code identityReused}/{@code identityCheckedAt} existem porque o parceiro recebe o desfecho
  * por este evento, não pelo {@code GET} — se a decisão se apoia numa verificação de ontem, é

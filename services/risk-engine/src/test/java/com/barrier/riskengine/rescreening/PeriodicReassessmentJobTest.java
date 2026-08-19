@@ -46,12 +46,13 @@ class PeriodicReassessmentJobTest {
   @Mock ReassessmentPolicy policy;
   @Mock AssessmentService assessments;
   @Mock SubjectService subjects;
+  @Mock com.barrier.commons.jobs.SingletonJobLock jobLock;
 
   private PeriodicReassessmentJob job;
 
   @BeforeEach
   void setUp() {
-    job = new PeriodicReassessmentJob(riskState, policy, assessments, subjects, true, 200);
+    job = new PeriodicReassessmentJob(riskState, policy, assessments, subjects, jobLock, true, 200);
     lenient()
         .when(subjects.findById(any(), anyString()))
         .thenReturn(Subject.create("CPF", "11144477735", "Fulano"));
@@ -124,7 +125,7 @@ class PeriodicReassessmentJobTest {
   @Test
   void desligado_por_padrao_nao_varre_nada() {
     var desligado =
-        new PeriodicReassessmentJob(riskState, policy, assessments, subjects, false, 200);
+        new PeriodicReassessmentJob(riskState, policy, assessments, subjects, jobLock, false, 200);
 
     desligado.run();
 
@@ -134,7 +135,7 @@ class PeriodicReassessmentJobTest {
   /** O teto vira o limite da consulta: o acúmulo é drenado ao longo de dias, não de uma vez. */
   @Test
   void teto_por_execucao_e_repassado_a_consulta() {
-    var limitado = new PeriodicReassessmentJob(riskState, policy, assessments, subjects, true, 7);
+    var limitado = new PeriodicReassessmentJob(riskState, policy, assessments, subjects, jobLock, true, 7);
     when(riskState.findDueForPeriodicReview(any(), anyInt())).thenReturn(List.of());
 
     limitado.reassessDue();

@@ -1,5 +1,6 @@
 package com.barrier.webhook.service;
 
+import com.barrier.commons.jobs.SingletonJobLock;
 import com.barrier.commons.event.EventEnvelope;
 import com.barrier.commons.observability.Correlation;
 import com.barrier.webhook.repository.DeliveryRepository;
@@ -54,22 +55,45 @@ public class DeliveryReconciliationJob {
   private final WebhookDeliveryService deliveryService;
   private final ObjectMapper objectMapper;
   private final Duration window;
+  private final SingletonJobLock jobLock;
 
   public DeliveryReconciliationJob(
       ConsumerFactory<String, String> consumerFactory,
       DeliveryRepository repository,
       WebhookDeliveryService deliveryService,
       ObjectMapper objectMapper,
+      SingletonJobLock jobLock,
       @Value("${barrier.webhook.reconciliation.window:PT6H}") Duration window) {
     this.consumerFactory = consumerFactory;
     this.repository = repository;
     this.deliveryService = deliveryService;
     this.objectMapper = objectMapper;
+    this.jobLock = jobLock;
     this.window = window;
   }
 
+  /**
+   * Reconcilia <b>uma vez no cluster</b>.
+   *
+   * <p>Sem o lock, as 5 réplicas abriam 5 consumidores avulsos varrendo a mesma janela de 6 horas
+   * do tópico, no mesmo instante — trabalho multiplicado por cinco sobre o broker e sobre o banco.
+   * A entrega em si é idempotente por {@code eventId}, então não haveria duplicata; o desperdício é
+   * que era real, e ele cai justamente sobre o mecanismo que existe para funcionar quando o resto
+   * já falhou.
+   *
+   * <p>Piso de 10 minutos: menor que o ciclo de 15, para não pular uma janela legítima, e grande o
+   * bastante para uma réplica atrasada não revarrer o que acabou de ser varrido.
+   */
   @Scheduled(cron = "${barrier.webhook.reconciliation.cron:0 */15 * * * *}")
   public void reconcile() {
+    jobLock.runIfLeader(
+        "delivery-reconciliation",
+        Duration.ofMinutes(10),
+        Duration.ofMinutes(30),
+        this::reconcileOnce);
+  }
+
+  private void reconcileOnce() {
     int recuperados = reconcileSince(Instant.now().minus(window));
     if (recuperados > 0) {
       log.warn(

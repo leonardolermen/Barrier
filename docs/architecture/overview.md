@@ -19,8 +19,8 @@ Dois deployables no monorepo — ver [ADR-0009](../adr/0009-risk-engine-modular-
 
 1. **Risk Engine API** (`services/risk-engine`, `:8080`): um único deployable que encapsula
    **assessment, identity, screening, risk, subject/profile (cadastro CMN 4.753), tenant
-   (config de risco por parceiro) e device/geoip/phone/email/credit/history** (sinais de
-   risco adicionais) como módulos internos em camadas clássicas, conversando por chamada de
+   (config de risco por parceiro), assurance, rescreening, riskstate, mesa, monitoring,
+   behavior e serpro** como módulos internos em camadas clássicas, conversando por chamada de
    método em processo. Publica `barrier.assessment.completed` no Kafka via outbox.
 2. **Webhook API** (`services/webhook-api`, `:8082`): consome `assessment.completed` e entrega
    o resultado no endpoint do cliente, com HMAC, retry/backoff e idempotência.

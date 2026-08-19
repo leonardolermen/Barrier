@@ -1,7 +1,9 @@
 package com.barrier.riskengine.screening.watchlist;
 
 import com.barrier.riskengine.screening.domain.WatchlistDelta;
+import com.barrier.commons.jobs.SingletonJobLock;
 import com.barrier.riskengine.screening.repository.interfaces.WatchlistEntryRepository;
+import java.time.Duration;
 import java.util.List;
 
 import com.barrier.riskengine.screening.watchlist.interfaces.WatchlistSource;
@@ -38,16 +40,19 @@ public class WatchlistImporter implements ApplicationRunner {
   private final WatchlistEntryRepository repository;
   private final WatchlistImportStatus status;
   private final List<WatchlistImportListener> listeners;
+  private final SingletonJobLock jobLock;
 
   public WatchlistImporter(
       List<WatchlistSource> sources,
       WatchlistEntryRepository repository,
       WatchlistImportStatus status,
-      List<WatchlistImportListener> listeners) {
+      List<WatchlistImportListener> listeners,
+      SingletonJobLock jobLock) {
     this.sources = sources;
     this.repository = repository;
     this.status = status;
     this.listeners = listeners;
+    this.jobLock = jobLock;
   }
 
   @Override
@@ -55,10 +60,26 @@ public class WatchlistImporter implements ApplicationRunner {
     importAll();
   }
 
-  /** Atualização periódica (padrão: diariamente às 03:00). */
+  /**
+   * Atualização periódica (padrão: diariamente às 03:00), <b>uma vez no cluster</b>.
+   *
+   * <p>Sem o lock, cinco réplicas baixavam o ZIP da OFAC/CGU/ONU às 03:00 e chamavam {@code
+   * replaceSource} cinco vezes sobre a mesma tabela. Pior que o desperdício: o {@code
+   * WatchlistDelta} alimenta o rescreening, então uma importação podia virar cinco avalanches de
+   * reavaliação, cada uma com consulta paga de bureau.
+   *
+   * <p>Piso de 1h para que a réplica com cron atrasado não reexecute a mesma janela; teto de 2h
+   * como folga sobre o pior download observado — é quando o job volta a ser reivindicável se o pod
+   * morrer no meio.
+   *
+   * <p>A carga de subida ({@link #run}) <b>não</b> passa pelo lock, de propósito: instalação nova
+   * precisa popular a base para poder decidir, e {@code replaceSource} é idempotente. O que o lock
+   * elimina é a repetição diária, não a primeira carga.
+   */
   @Scheduled(cron = "${barrier.watchlist.refresh-cron:0 0 3 * * *}")
   public void scheduledRefresh() {
-    importAll();
+    jobLock.runIfLeader(
+        "watchlist-import", Duration.ofHours(1), Duration.ofHours(2), this::importAll);
   }
 
   public void importAll() {

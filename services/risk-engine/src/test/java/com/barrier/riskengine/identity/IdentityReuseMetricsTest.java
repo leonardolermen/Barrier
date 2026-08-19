@@ -22,8 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * Contadores de procedência da verificação de identidade — ver
- * docs/implementation/reuso-de-verificacao-de-identidade.md Task 4.
+ * Contadores de procedência da verificação de identidade (reuso de check, V040).
  *
  * <p>Sem separar reuso de consulta fresca, uma queda de custo é indistinguível de uma queda de
  * tráfego — e uma flag de reuso ligada por engano numa base grande não apareceria em lugar

@@ -1,11 +1,15 @@
 # Fila de implementação — lições do BMP Origem
 
-> **Para quem executa:** esta é a **fila**, não o plano de cada item. Cada entrada define
-> escopo, arquivos, dependências e critério de pronto — o suficiente para decidir *o que vem
-> agora* e para abrir a branch. Itens de código (F3 em diante) ganham plano bite-sized próprio
-> em `docs/implementation/` quando entrarem em execução, no modelo do
-> [reuso-de-verificacao-de-identidade.md](reuso-de-verificacao-de-identidade.md) — que é o
-> plano do único item já entregue.
+> **🏁 FILA DRENADA (2026-08-18).** F1–F9 todas entregues. Este documento fica como
+> **registro do escopo e do critério de pronto de cada item** — é o que explica por que o
+> `mesa`, o `riskstate`, o `monitoring` e o `behavior` existem, e os comentários de código
+> citam os números F por nome. Não há nada aqui para executar.
+>
+> **O que vem agora não está aqui:** ver
+> [plano-auditoria-2026-08-18.md](plano-auditoria-2026-08-18.md) (P0–P4 da auditoria externa)
+> e [plano-remediacao-auditoria.md](plano-remediacao-auditoria.md) (itens abertos das ondas).
+> Os planos bite-sized por item entregue foram removidos — a decisão e o racional de cada um
+> estão no `CLAUDE.md` e nos ADRs, que são lidos a cada sessão.
 
 **Spec:** [licoes-do-origem.md](licoes-do-origem.md) (P1–P9 e "o que **não** copiar")
 **Cruzamentos:** [plano-remediacao-auditoria.md](plano-remediacao-auditoria.md) ·

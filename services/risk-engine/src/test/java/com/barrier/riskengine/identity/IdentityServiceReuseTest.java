@@ -26,8 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * `IdentityService` consultando reuso antes de sair para a rede — ver
- * docs/implementation/reuso-de-verificacao-de-identidade.md Task 3.
+ * `IdentityService` consultando reuso antes de sair para a rede (V040).
  */
 @ExtendWith(MockitoExtension.class)
 class IdentityServiceReuseTest {

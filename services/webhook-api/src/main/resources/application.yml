@@ -1,10 +1,16 @@
 spring:
   application:
     name: webhook-api
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/barrier}
     username: ${DB_USER:barrier}
     password: ${DB_PASSWORD:barrier}
+    hikari:
+      # Ver a conta em services/risk-engine/.../application.yml: o pool é por POD, e o total
+      # somado das duas aplicações precisa caber no max_connections do Postgres.
+      maximum-pool-size: ${DB_POOL_SIZE:5}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -19,6 +25,11 @@ spring:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    listener:
+      # Threads de consumo por pod. Com 6 particoes e 5 pods, 1 thread por pod ja distribui bem;
+      # o valor existe para o caso de particoes >> pods (drenar backlog sem subir replica).
+      # Teto util: particoes / pods. Acima disso, thread ociosa.
+      concurrency: ${KAFKA_CONCURRENCY:1}
     consumer:
       group-id: webhook-api
       auto-offset-reset: earliest
@@ -36,12 +47,19 @@ spring:
 
 server:
   port: ${SERVER_PORT:8082}
+  # Drena requisicao em voo no scale-down; ver a nota equivalente na risk-engine.
+  shutdown: graceful
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      # Probes separadas para o Kubernetes (liveness reinicia, readiness tira do balanceador).
+      probes:
+        enabled: true
 
 logging:
   level:

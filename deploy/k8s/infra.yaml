@@ -1,0 +1,104 @@
+# Postgres e Kafka para o cluster LOCAL de verificação. Não é manifesto de produção:
+# sem persistência, sem réplica, senha de desenvolvimento. Em produção os dois são serviços
+# gerenciados (RDS/MSK ou equivalente), fora do cluster.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: barrier-secrets
+type: Opaque
+stringData:
+  db-password: barrier
+  admin-api-key: chave-de-admin-local-com-tamanho-suficiente
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          env:
+            - name: POSTGRES_DB
+              value: barrier
+            - name: POSTGRES_USER
+              value: barrier
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: barrier-secrets, key: db-password } }
+          # O default de max_connections é 100 e as duas aplicações somam 65 com 5 réplicas
+          # cada. Explícito aqui para o teste de 5 pods não esbarrar no limite e o sintoma
+          # ("não conecta") não ser confundido com bug de concorrência.
+          args: ["-c", "max_connections=200"]
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "barrier"] }
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: kafka }
+  template:
+    metadata:
+      labels: { app: kafka }
+    spec:
+      containers:
+        - name: kafka
+          image: apache/kafka:3.8.0
+          ports:
+            - containerPort: 9092
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            - name: KAFKA_LISTENERS
+              value: PLAINTEXT://:9092,CONTROLLER://:9093
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka:9092
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: 1@localhost:9093
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            # Desligada de propósito: com auto-criação, um erro de digitação no nome do tópico
+            # cria um tópico novo em silêncio em vez de falhar — e foi a auto-criação que deu
+            # aos tópicos 1 partição e escondeu o teto de escala. Aqui, quem cria é o
+            # KafkaTopicsConfig, explicitamente.
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "false"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+spec:
+  selector: { app: kafka }
+  ports: [{ port: 9092, targetPort: 9092 }]

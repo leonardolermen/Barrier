@@ -1,0 +1,77 @@
+name: CI
+
+# O item que bloqueava todos os outros do plano de auditoria: a suíte era verde **por alegação**
+# — nunca havia rodado em pipeline, e os testes de integração com Testcontainers dependiam de
+# alguém ter Docker de pé na própria máquina. Enquanto isso não existir, toda correção é aposta
+# sem rede.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+# Push seguido de push na mesma branch cancela o build anterior: fila de CI que só cresce vira
+# CI que ninguém espera, e CI que ninguém espera não barra nada.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build + testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: corretto
+          cache: maven
+
+      # Roda unidade + integração (Testcontainers) + arquitetura. O runner do GitHub já tem
+      # Docker, que é o que os 14 testes de integração precisam.
+      - name: mvnw verify
+        run: ./mvnw -B verify
+
+      - name: Publicar relatório de testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: "**/target/surefire-reports/**"
+          retention-days: 7
+
+  images:
+    name: imagens docker
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        service: [risk-engine, webhook-api]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Só constrói: publicar exige registry e credencial, que são decisão de infra ainda não
+      # tomada. O valor aqui é que um Dockerfile quebrado falha o build em vez de ser descoberto
+      # no dia do deploy.
+      - name: build ${{ matrix.service }}
+        run: docker build --build-arg SERVICE=${{ matrix.service }} -t barrier/${{ matrix.service }}:ci .
+
+  security:
+    name: vulnerabilidade em dependência
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Stack de vanguarda (Java 25 + Spring Boot 4.0) sem nenhuma varredura de CVE era um dos
+      # achados da auditoria. Não falha o build por enquanto — primeiro é preciso ver o ruído de
+      # base para calibrar a severidade que barra.
+      - name: Trivy (dependências)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: "0"
