@@ -722,6 +722,51 @@ regulatório que não rodou.
 ⚠️ **Não verificado:** `deploy/verify-disjuncao.sh` (disjunção entre processos sob carga) foi
 escrito e não executado ponta a ponta; matar pod no meio de um lote; e o KEDA nunca foi instalado.
 
+**Paralelismo do pipeline (branch `perf/paralelismo-pipeline`) — o que a auditoria de performance
+fechou depois.** Três achados, todos do mesmo tipo: controle que *parece* existir e não é exercido.
+
+- **Thread de scheduler é recurso do serviço, não do job.** A risk-engine já tinha subido
+  `spring.task.scheduling.pool.size` para 4 (1 thread compartilhada congelava avaliação durante a
+  importação das 03:00); a **webhook-api ficou com o default de 1**, e isso só passou a doer quando
+  a entrega virou paralela: `retryDue()` espera o lote inteiro (`allOf`) *na thread do scheduler*.
+  Lote de 100 com 3 workers são ~34 rodadas; destinos pendurados até o read-timeout de 10s dão
+  ~7 minutos com a única thread ocupada — e quem divide essa thread é o `DeliveryReconciliationJob`,
+  que o ADR-0017 nomeia dono da recuperação da DLT. O controle de recuperação perdia execuções sem
+  erro nenhum. Regra: **paralelizar o trabalho de um job aumenta o tempo que ele ocupa a thread do
+  scheduler, não diminui** — quem paraleliza um `@Scheduled` tem de olhar o pool de scheduling junto.
+
+- **Invariante em comentário é invariante que não existe.** A amarra
+  `workers <= maximum-pool-size - 2` estava escrita nos dois `application.yml` e verificada em lugar
+  nenhum: `ASSESSMENT_WORKERS=12` com `DB_POOL_SIZE=8` subia normal e degradava em *timeout ao obter
+  conexão* — sintoma que manda o investigador olhar o banco, não a variável de ambiente. Virou
+  `WorkerPoolReadinessGuard` (`commons`, no padrão dos outros cinco guards de startup), declarado
+  por bean em cada serviço para o erro citar a propriedade exata e as duas saídas (baixar workers ou
+  subir o pool). A **reserva não é folga arbitrária**: são as conexões de quem não passa pelo
+  semáforo — ingestão HTTP, relay de outbox, os `@Scheduled`.
+
+- **A ordem por chave de partição tinha uma janela entre pods, e o teste que existia não a via.**
+  `DeliveryOrderingIntegrationTest` prova a ordem *dentro de um pod* e passava verde com o furo
+  aberto. Descoberto ao investigar por que o teste novo passava sem a correção: `selectClaimable`
+  aplica `FOR UPDATE` a **todas** as linhas que retorna, **inclusive as que o filtro em memória
+  descarta** — então duas entregas já existentes do mesmo subject ficam as duas travadas, e o caso
+  comum nunca esteve furado. A proteção é real e é *efeito colateral* de um filtro que roda depois:
+  se o filtro virar SQL, ela some. O que estava furado é a entrega que **nasce depois** do `SELECT`
+  da outra réplica (o listener do Kafka insere o tempo todo): ninguém a travou, e sob
+  `READ COMMITTED` o `claimed_at` não commitado da irmã é invisível — a outra réplica conclui
+  "ninguém em voo" e as duas saem em paralelo. Fechado com `pg_try_advisory_xact_lock` serializando
+  **a reivindicação** (um `SELECT` + `UPDATE`s, milissegundos, sem rede); a **entrega** continua
+  paralela, que é onde o tempo está. `try` e não a variante que espera: quem não pega a trava pula o
+  ciclo (1s) em vez de empilhar transações abertas. Advisory aqui e tabela no `SingletonJobLock` não
+  se contradizem — lá o lease dura o download e tem de sobreviver à morte do pod; aqui "morreu o
+  pod, soltou o lock" é o comportamento desejado. `claimDue` **recusa rodar fora de transação**,
+  porque nela o advisory auto-commita e a exclusão sumiria em silêncio.
+
+⚠️ **Aberto nesta frente:** o `allOf().join()` compra head-of-line blocking (o ciclo dura o elemento
+mais lento — 3 destinos pendurados param 97 entregas prontas); o teto de workers é **por pod**,
+então o "teto de consultas pagas de bureau" do Javadoc é 5× maior no cluster; e a vazão foi medida
+só com **bureau simulado** — com bureau real o gargalo é o pool de conexões, não as threads.
+Remedir antes de considerar o ADR-0015 fechado.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.

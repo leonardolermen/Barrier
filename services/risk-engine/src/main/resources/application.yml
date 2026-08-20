@@ -126,6 +126,10 @@ barrier:
     # Amarra dura: workers <= maximum-pool-size - 2 (folga para ingestao e demais jobs). Com
     # DB_POOL_SIZE=8, o teto e 6. Subir workers sem subir o pool troca "fila lenta" por "timeout
     # ao obter conexao", e a mensagem de erro nao distingue os dois casos.
+    #
+    # A amarra e VERIFICADA na subida (WorkerPoolReadinessGuard): enquanto vivia so aqui, era
+    # comentario — ASSESSMENT_WORKERS=12 com DB_POOL_SIZE=8 subia normal e quebrava sob carga,
+    # com o sintoma apontando para o banco.
     workers: ${ASSESSMENT_WORKERS:4}
     processor-delay-ms: 2000
     # Posse de uma avaliação reivindicada. Precisa ser maior que o pior caso de processamento

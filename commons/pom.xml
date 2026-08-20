@@ -24,6 +24,15 @@
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
         </dependency>
+        <!--
+            Vem transitivamente pelo starter-data-jpa, mas o WorkerPoolReadinessGuard compila contra
+            ela: dependencia usada em codigo se declara, senao uma troca de pool no starter quebra a
+            compilacao aqui sem ninguem ter mexido neste modulo.
+        -->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+        </dependency>
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
