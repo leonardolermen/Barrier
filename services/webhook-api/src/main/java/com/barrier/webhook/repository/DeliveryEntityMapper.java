@@ -14,6 +14,7 @@ final class DeliveryEntityMapper {
     e.setTenantId(d.tenantId());
     e.setTargetUrl(d.targetUrl());
     e.setPayload(d.payload());
+    e.setPartitionKey(d.partitionKey());
     e.setStatus(d.status());
     e.setAttempts(d.attempts());
     e.setLastError(d.lastError());
@@ -32,6 +33,7 @@ final class DeliveryEntityMapper {
         e.getTenantId(),
         e.getTargetUrl(),
         e.getPayload(),
+        e.getPartitionKey(),
         e.getStatus(),
         e.getAttempts(),
         e.getLastError(),

@@ -15,6 +15,16 @@ public class Delivery {
   private final String tenantId;
   private final String targetUrl;
   private final String payload;
+
+  /**
+   * Chave de ordenação da entrega: duas entregas com a mesma chave nunca saem em paralelo.
+   *
+   * <p>É o subject, não o tenant (serializaria o parceiro grande) nem o assessment (a decisão e a
+   * mudança de nível do mesmo cliente têm assessments diferentes e precisam ser ordenadas entre si).
+   * {@code null} significa "sem ordem exigida" — fail-open, o desconhecido não trava a fila.
+   */
+  private final String partitionKey;
+
   private DeliveryStatus status;
   private int attempts;
   private String lastError;
@@ -30,6 +40,7 @@ public class Delivery {
       String tenantId,
       String targetUrl,
       String payload,
+      String partitionKey,
       Instant createdAt) {
     this.id = id;
     this.eventId = eventId;
@@ -37,6 +48,7 @@ public class Delivery {
     this.tenantId = tenantId;
     this.targetUrl = targetUrl;
     this.payload = payload;
+    this.partitionKey = partitionKey;
     this.status = DeliveryStatus.PENDING;
     this.attempts = 0;
     this.nextAttemptAt = createdAt;
@@ -49,9 +61,21 @@ public class Delivery {
 
   /** Cria uma entrega pendente para o evento. */
   public static Delivery create(
-      UUID eventId, String assessmentId, String tenantId, String targetUrl, String payload) {
+      UUID eventId,
+      String assessmentId,
+      String tenantId,
+      String targetUrl,
+      String payload,
+      String partitionKey) {
     return new Delivery(
-        UUID.randomUUID(), eventId, assessmentId, tenantId, targetUrl, payload, Instant.now());
+        UUID.randomUUID(),
+        eventId,
+        assessmentId,
+        tenantId,
+        targetUrl,
+        payload,
+        partitionKey,
+        Instant.now());
   }
 
   /** Reconstrói a partir da persistência. */
@@ -62,6 +86,7 @@ public class Delivery {
       String tenantId,
       String targetUrl,
       String payload,
+      String partitionKey,
       DeliveryStatus status,
       int attempts,
       String lastError,
@@ -69,7 +94,9 @@ public class Delivery {
       Instant claimedAt,
       Instant createdAt,
       Instant deliveredAt) {
-    Delivery d = new Delivery(id, eventId, assessmentId, tenantId, targetUrl, payload, createdAt);
+    Delivery d =
+        new Delivery(
+            id, eventId, assessmentId, tenantId, targetUrl, payload, partitionKey, createdAt);
     d.status = status;
     d.attempts = attempts;
     d.lastError = lastError;
@@ -131,6 +158,10 @@ public class Delivery {
 
   public String payload() {
     return payload;
+  }
+
+  public String partitionKey() {
+    return partitionKey;
   }
 
   public DeliveryStatus status() {

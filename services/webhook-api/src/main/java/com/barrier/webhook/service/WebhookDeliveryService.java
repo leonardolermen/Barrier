@@ -12,12 +12,14 @@ import com.barrier.webhook.repository.DeliveryRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Entrega os resultados de avaliação ao endpoint do cliente.
@@ -38,6 +40,7 @@ public class WebhookDeliveryService {
   private final WebhookProperties properties;
   private final TransactionTemplate transactionTemplate;
   private final Duration lease;
+  private final ObjectMapper objectMapper;
 
   public WebhookDeliveryService(
       DeliveryRepository repository,
@@ -46,6 +49,7 @@ public class WebhookDeliveryService {
       HmacSigner signer,
       WebhookProperties properties,
       TransactionTemplate transactionTemplate,
+      ObjectMapper objectMapper,
       @Value("${barrier.webhook.lease:PT2M}") Duration lease) {
     this.repository = repository;
     this.endpoints = endpoints;
@@ -53,6 +57,7 @@ public class WebhookDeliveryService {
     this.signer = signer;
     this.properties = properties;
     this.transactionTemplate = transactionTemplate;
+    this.objectMapper = objectMapper;
     // Precisa ser maior que o pior caso de uma tentativa (connect + read timeout do cliente);
     // curta demais faz outro worker reenviar enquanto o POST original ainda está em voo.
     this.lease = lease;
@@ -85,7 +90,8 @@ public class WebhookDeliveryService {
                   envelope.assessmentId(),
                   tenantId,
                   targetUrl,
-                  envelope.payload()));
+                  envelope.payload(),
+                  partitionKeyDe(envelope.payload())));
     } catch (DataIntegrityViolationException e) {
       log.debug("Entrega concorrente para o evento {}; ignorando", envelope.eventId());
       return;
@@ -110,6 +116,27 @@ public class WebhookDeliveryService {
     }
     due.forEach(this::attempt);
     return due.size();
+  }
+
+  /**
+   * Chave de ordenação a partir do payload.
+   *
+   * <p>Não sai do envelope: o {@code assessmentId} dele é o id do <b>agregado</b> do evento, e dois
+   * eventos sobre o mesmo cliente (a decisão e a mudança de nível de risco) têm agregados
+   * diferentes. Ordenar por ele não ordenaria nada.
+   *
+   * <p>Payload sem subject — ou ilegível — devolve {@code null}: <b>sem ordem exigida é melhor que
+   * entrega bloqueada</b>. Payload ilegível já tem tratamento próprio no consumo
+   * ({@code MalformedEventException} → DLT); não é aqui que ele deve falhar.
+   */
+  private String partitionKeyDe(String payload) {
+    try {
+      Map<String, Object> corpo = objectMapper.readValue(payload, Map.class);
+      Object subject = corpo.get("subjectId");
+      return subject == null ? null : subject.toString();
+    } catch (RuntimeException e) {
+      return null;
+    }
   }
 
   private void attempt(Delivery delivery) {

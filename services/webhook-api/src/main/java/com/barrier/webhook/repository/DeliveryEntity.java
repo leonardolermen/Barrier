@@ -41,6 +41,10 @@ class DeliveryEntity {
   @Column(name = "payload", nullable = false, length = 4000)
   private String payload;
 
+  /** Chave de ordenacao da entrega; NULL = sem ordem exigida. Ver V008. */
+  @Column(name = "partition_key", length = 64)
+  private String partitionKey;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 20)
   private DeliveryStatus status;

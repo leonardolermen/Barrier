@@ -59,6 +59,7 @@ class WebhookDeliveryServiceTest {
         signer,
         properties,
         transactionTemplate(),
+        new tools.jackson.databind.ObjectMapper(),
         Duration.ofMinutes(2));
   }
 
@@ -133,7 +134,7 @@ class WebhookDeliveryServiceTest {
    */
   @Test
   void entregaNasceReivindicadaParaOSchedulerNaoCompetirComOListener() {
-    Delivery nova = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}");
+    Delivery nova = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}", "subject-1");
 
     assertThat(nova.claimedAt()).isNotNull();
     assertThat(nova.claimedAt()).isEqualTo(nova.createdAt());
@@ -142,7 +143,7 @@ class WebhookDeliveryServiceTest {
   /** Falha libera a posse: quem governa a próxima tentativa é o backoff, não a lease. */
   @Test
   void falhaLiberaAPosse() {
-    Delivery d = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}");
+    Delivery d = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}", "subject-1");
 
     d.markFailed("erro", 5, java.time.Instant.now().plusSeconds(30));
 
@@ -153,7 +154,7 @@ class WebhookDeliveryServiceTest {
   /** O reprocessamento reivindica antes de postar — ler sem posse era o que duplicava a entrega. */
   @Test
   void retryDueReivindicaAsEntregasAntesDeTentar() {
-    Delivery pendente = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}");
+    Delivery pendente = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}", "subject-1");
     when(repository.claimDue(any(), org.mockito.ArgumentMatchers.anyInt(), any()))
         .thenReturn(java.util.List.of(pendente));
     when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
