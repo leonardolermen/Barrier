@@ -36,16 +36,38 @@ Tomadas explicitamente antes do desenho:
 | Custo de bureau | **teto conservador + métrica** | A cota por tenant é o freio de verdade, mas é frente maior; não pode ser pré-requisito para destravar a fila |
 | Justiça entre tenants | **FIFO agora** | Noisy neighbor é real, e a solução certa é a cota (P1) — que resolve também ingestão em massa e fatura. Meia-justiça aqui seria segunda cópia da política, e duas cópias divergem |
 
-## Abordagem: claim + fan-out em pool limitado
+## Abordagem: claim + fan-out em virtual threads com teto
 
 Para os dois casos: o claim do lote continua idêntico (uma transação curta, lease, `SKIP LOCKED`);
-o que muda é que o lote é distribuído num pool de tamanho fixo e o ciclo espera o lote terminar.
+o que muda é que o lote é distribuído em virtual threads, com um semáforo como teto, e o ciclo
+espera o lote terminar.
 
-**Virtual threads foram consideradas e descartadas.** O workload é I/O-bound em bureau, que é o caso
-de uso clássico de Loom, e o Java 25 as tem. Mas o recurso limitante aqui **não é thread**: é o pool
-de conexões e, sobretudo, o teto de custo de bureau — que é um controle desejado, não um acidente.
-Virtual threads dariam milhares de tarefas empilhando sobre 8 conexões. **O limite é a feature; um
-pool fixo é o limite.**
+**Virtual threads + `Semaphore`**, e a combinação é o ponto.
+
+O workload é I/O-bound em bureau — caso de uso clássico de Loom — e o Java 25 as tem estáveis (o
+_pinning_ em blocos `synchronized`, que era o principal senão, foi resolvido no JDK 24). Mas o
+recurso limitante aqui **não é thread**: é o pool de conexões e, sobretudo, o teto de custo de
+bureau, que é um controle desejado e não um acidente. `newVirtualThreadPerTaskExecutor()` sozinho
+não tem teto — ele aceitaria o lote inteiro e empilharia 50 tarefas sobre 8 conexões.
+
+Por isso as duas coisas juntas:
+
+```java
+private final ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+private final Semaphore permissoes = new Semaphore(workers);
+```
+
+O **semáforo** é o teto (o controle de custo); a **virtual thread** é o que faz uma tarefa bloqueada
+esperando o bureau não segurar uma thread de plataforma.
+
+**Sendo honesto sobre o ganho hoje:** com teto de 4, isto se comporta praticamente igual a um pool
+fixo de 4 — o benefício é marginal. Ele aparece quando o teto sobe: com 50 ou 200 permissões, o
+custo por tarefa em espera some, o dimensionamento deixa de ser afinação de pool, e o pool de
+conexões vira o backpressure natural. É investimento na direção em que este componente vai crescer,
+não otimização do estado atual.
+
+⚠️ **O que virtual thread NÃO resolve:** ela não cria conexão de banco nem cota de bureau. As
+amarras de sizing abaixo continuam valendo integralmente.
 
 ---
 
@@ -56,19 +78,30 @@ pool fixo é o limite.**
 public int process() {
   List<AssessmentId> lote = repository.claimPending(BATCH, lease);
   var tarefas = lote.stream()
-      .map(id -> CompletableFuture.supplyAsync(() -> processOne(id), pool))
+      .map(id -> CompletableFuture.supplyAsync(() -> comPermissao(() -> processOne(id)), pool))
       .toList();
   CompletableFuture.allOf(tarefas.toArray(CompletableFuture[]::new)).join();
   return (int) tarefas.stream().filter(CompletableFuture::join).count();
 }
+
+/** O semáforo é o teto de concorrência — e, por consequência, o teto de consulta paga. */
+private boolean comPermissao(Supplier<Boolean> tarefa) {
+  permissoes.acquireUninterruptibly();
+  try {
+    return tarefa.get();
+  } finally {
+    permissoes.release();
+  }
+}
 ```
 
-### Pool próprio, não o do scheduler
+### Executor próprio, não o do scheduler
 
 O `spring.task.scheduling.pool.size` é 4, compartilhado com `OutboxRelay`, `WatchlistImporter`,
 `AlertEvaluator`, `AssuranceResultPoller` e o purge de idempotência. Fan-out para lá faria a
 importação de watchlist das 03:00 competir com o processamento — que é o problema que aquele
-`pool.size: 4` já tentou resolver uma vez (era 1).
+`pool.size: 4` já tentou resolver uma vez (era 1). O executor de virtual threads é do processador,
+e o `@Scheduled` só dispara o ciclo.
 
 ### Esperar o lote é deliberado
 
@@ -94,7 +127,7 @@ Com `DB_POOL_SIZE=8`, no máximo 6 workers. Subir workers sem subir o pool troca
 
 ### Configuração e ganho
 
-- `barrier.assessment.workers` (default **4**)
+- `barrier.assessment.workers` (default **4**) — permissões do semáforo, não tamanho de pool
 - métrica: o contador `barrier.identity.check` já existe; o alerta é sobre consultas/minuto
 
 Esperado: **6/s → ~25/s** por instância. Não são os 8× teóricos porque o `fixedDelay` de 2s
@@ -216,6 +249,7 @@ acaba, e `max_connections` passa a ser parâmetro de capacidade, não de infra.
 
 | O quê | Como |
 |---|---|
+| Semáforo é o teto de fato | N tarefas submetidas, no máximo `workers` em execução simultânea — sem isso o teto de custo é decorativo |
 | Disjunção sob concorrência | Estender `ConcurrentClaimIntegrationTest`: N workers, nenhuma avaliação processada duas vezes, nenhuma órfã |
 | Correlação atravessa o pool | Teste afirmando que o log/MDC da decisão carrega o `correlationId` da requisição original |
 | Ordem por subject | Duas entregas do mesmo `partition_key`: a segunda não é reivindicada enquanto a primeira está em voo |
