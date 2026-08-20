@@ -1,6 +1,8 @@
 package com.barrier.riskengine.screening.repository;
 
+import com.barrier.commons.name.NameNormalizer;
 import com.barrier.riskengine.screening.domain.WatchlistDelta;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -27,9 +29,48 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
   private static final String INSERT =
       "INSERT INTO watchlist_entries"
           + " (id, source, entry_type, document, document_partial, name, detail, list_version,"
-          + " imported_at)"
-          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+          + " imported_at, name_normalized)"
+          + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   private static final int BATCH_SIZE = 1000;
+
+  /**
+   * Candidatos por trigrama, com um predicado {@code <%} POR TOKEN.
+   *
+   * <p><b>UNION e não OR, e o benchmark é que mostrou.</b> Duas versões anteriores ficaram MAIS
+   * LENTAS que o {@code findAll()} que vieram substituir — ~940ms contra ~350ms sobre 100 mil
+   * entradas:
+   *
+   * <ol>
+   *   <li>{@code EXISTS (SELECT 1 FROM unnest(...))}: dentro de um {@code EXISTS} correlacionado o
+   *       planner não empurra a condição para o índice — varre a tabela e avalia a subconsulta
+   *       linha a linha;
+   *   <li>predicados {@code OR} um a um: com <b>um</b> token o plano era {@code BitmapOr} sobre o
+   *       GIN (2,5ms); com <b>três</b>, o planner estimou que três bitmap scans custam mais que um
+   *       {@code Seq Scan} e escolheu varrer — avaliando {@code <%} em cada uma das 100 mil linhas,
+   *       três vezes. {@code Rows Removed by Filter: 100002}.
+   * </ol>
+   *
+   * <p>Com {@code UNION}, cada ramo é uma consulta independente com um predicado só, e cada uma usa
+   * seu índice. É o mesmo resultado lógico com plano determinístico — não depende de o estimador
+   * concordar que o índice vale a pena.
+   *
+   * <p>A lição vale além desta consulta: <b>"usa índice" não é propriedade do SQL, é decisão do
+   * planner</b>, e ela muda com o número de predicados e o tamanho da tabela. Só o EXPLAIN sobre
+   * volume real responde.
+   *
+   * <p>SQL montado dinamicamente pelo número de tokens: os placeholders são {@code ?}, e os valores
+   * vão por parâmetro — não há concatenação de dado do chamador na consulta.
+   */
+  private static String candidatesSql(int tokenCount) {
+    String colunas = "SELECT source, entry_type, document, document_partial, name, detail";
+    StringBuilder sql = new StringBuilder();
+    for (int i = 0; i < tokenCount; i++) {
+      sql.append(colunas)
+          .append(" FROM watchlist_entries WHERE ? <% name_normalized\nUNION\n");
+    }
+    sql.append(colunas).append(" FROM watchlist_entries WHERE name_normalized IS NULL");
+    return sql.toString();
+  }
 
   /** Chaves naturais da versão atual de uma fonte, para calcular o delta da próxima importação. */
   private static final String NATURAL_KEYS =
@@ -76,6 +117,10 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
           ps.setString(7, r.detail());
           ps.setString(8, version);
           ps.setObject(9, importedAt);
+          // Normalizado aqui, pelo NameNormalizer, e não em SQL: normalização em dois lugares
+          // diverge, e a divergência apareceria como candidato não encontrado — falso negativo
+          // silencioso, que é o único erro sem conserto num controle de sanções.
+          ps.setString(10, NameNormalizer.normalize(r.name()));
         });
 
     if (previous.isEmpty()) {
@@ -117,6 +162,47 @@ class WatchlistEntryRepositoryImpl implements WatchlistEntryRepository {
   @Override
   public List<WatchlistRecord> findNameEntries() {
     return jpa.findAll().stream().map(WatchlistEntryRepositoryImpl::toRecord).toList();
+  }
+
+  /**
+   * Candidatos a match por nome, vindos do índice de trigramas (V048).
+   *
+   * <p><b>Blocking, não decisão.</b> Esta consulta só reduz o conjunto que o
+   * {@code FuzzyNameWatchlistProvider} vai comparar; quem decide continua sendo a cobertura token a
+   * token com Jaro-Winkler, inalterada. Por isso o limiar de trigrama é <b>deliberadamente mais
+   * frouxo</b> que o de decisão: o custo de um candidato a mais é uma comparação em memória, e o de
+   * um candidato a menos é um sancionado não encontrado.
+   *
+   * <p>{@code word_similarity} ({@code <%}) e não {@code similarity} ({@code %}): a pergunta é "algum
+   * token desta entrada é parecido com o token que procuro", não "as duas strings inteiras se
+   * parecem". Similaridade de string inteira erraria em "SILVA, JOSE ANTONIO" contra "JOSE ANTONIO
+   * DA SILVA" quando os nomes têm tamanhos diferentes, que é o caso normal entre lista e cadastro.
+   *
+   * <p>Linhas com {@code name_normalized IS NULL} entram sempre: é o fail-open que mantém o
+   * comportamento antigo enquanto a coluna não estiver preenchida (ver V048).
+   */
+  @Override
+  @Transactional(readOnly = true)
+  public List<WatchlistRecord> findNameCandidates(Set<String> tokens, double blockingThreshold) {
+    if (tokens.isEmpty()) {
+      return List.of();
+    }
+    // O limiar de word_similarity é uma GUC de sessão. `SET LOCAL` a limita à transação corrente,
+    // então não vaza para outra consulta que use <% na mesma conexão do pool. É executado como
+    // statement separado de propósito: dentro da consulta, o planner avaliaria o set_config depois
+    // de escolher o plano, e o índice seria consultado com o limiar errado.
+    jdbc.execute("SET LOCAL pg_trgm.word_similarity_threshold = " + blockingThreshold);
+    return jdbc.query(
+        candidatesSql(tokens.size()),
+        (rs, rowNum) ->
+            new WatchlistRecord(
+                rs.getString("source"),
+                MatchType.valueOf(rs.getString("entry_type")),
+                rs.getString("document"),
+                rs.getString("document_partial"),
+                rs.getString("name"),
+                rs.getString("detail")),
+        tokens.toArray());
   }
 
   @Override

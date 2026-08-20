@@ -3,6 +3,7 @@ package com.barrier.riskengine.screening.repository.interfaces;
 import com.barrier.riskengine.screening.domain.WatchlistDelta;
 import com.barrier.riskengine.screening.domain.WatchlistRecord;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 
 /** Repositório de domínio das entradas de watchlist ingeridas. */
@@ -27,6 +28,16 @@ public interface WatchlistEntryRepository {
    * valem ao mesmo tempo, e um nome que casa não escapa só porque a entrada tem documento.
    */
   List<WatchlistRecord> findNameEntries();
+
+  /**
+   * Candidatos a match por nome, filtrados por indice de trigramas.
+   *
+   * <p>Substitui o carregamento da base inteira no caminho quente. O parametro e um LIMIAR DE
+   * BLOCKING, nao de decisao: quem decide continua sendo a cobertura token a token do provider.
+   * Frouxo de proposito — candidato a mais custa uma comparacao em memoria, candidato a menos e um
+   * sancionado nao encontrado.
+   */
+  List<WatchlistRecord> findNameCandidates(Set<String> tokens, double blockingThreshold);
 
   /**
    * Versão da lista atualmente carregada, por fonte — o snapshot do que o screening consultou.

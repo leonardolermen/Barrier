@@ -214,7 +214,38 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
 
 ## 🟠 P1 — MVP (1–3 meses)
 
-- [ ] **`findNameEntries()` é `jpa.findAll()`: a watchlist inteira em heap, por avaliação** 🔴
+- [x] **`findNameEntries()` é `jpa.findAll()`: a watchlist inteira em heap, por avaliação** 🔴 — **fechado 2026-08-19** (branch `perf/screening-indexado`)
+  Blocking por trigrama (`pg_trgm`, operador `<%`, V048). **31× mais rápido** com 100 mil entradas:
+  360ms → 13ms, medido, não estimado. Pior caso (`JOSE SILVA`, os tokens mais comuns da base)
+  traz 11,6% da base em vez de 100%.
+
+  **O benchmark reprovou duas implementações minhas antes de aprovar a terceira**, e esse é o
+  registro que importa:
+
+  | Versão | Tempo | Plano do Postgres |
+  |---|---|---|
+  | `findAll()` original | 360ms | 100.000 linhas materializadas |
+  | `EXISTS (unnest(...))` | 939ms | seq scan + subconsulta por linha |
+  | predicados `OR` | 946ms | **seq scan** — o planner recusou o índice |
+  | `UNION` | **13ms** | bitmap index scan por ramo |
+
+  Com **um** token o `OR` virava `BitmapOr` sobre o GIN em 2,5ms; com **três**, o planner estimou
+  que três bitmap scans custam mais que varrer e escolheu `Seq Scan`, avaliando `<%` nas 100 mil
+  linhas três vezes (`Rows Removed by Filter: 100002`). **"Usa índice" não é propriedade do SQL, é
+  decisão do planner** — e muda com o número de predicados e o tamanho da tabela. `UNION` torna o
+  plano determinístico.
+
+  Também vale registrar uma hipótese **errada** que custou uma rodada: atribuí o custo a
+  dirty-checking de 100 mil entidades JPA deixadas pelo aquecimento; reordenei as medições e o
+  número não mudou. Só o `EXPLAIN ANALYZE` da consulta *exata* (com o mesmo número de tokens e o
+  mesmo limiar) deu a resposta — o EXPLAIN que eu tinha rodado antes usava 1 token e o limiar
+  default, e por isso mostrava um plano que a aplicação nunca executava.
+
+  Duas decisões de segurança no desenho: **normalização em Java, nunca em SQL** (duas
+  implementações divergem, e a divergência vira candidato não encontrado — falso negativo
+  silencioso); e **fail-open** — `name_normalized` nasce NULL e essas linhas entram sempre como
+  candidatas, então enquanto a coluna não estiver preenchida o comportamento é o antigo: mais
+  lento, nunca menos abrangente.
   `WatchlistEntryRepositoryImpl:119`. O `FuzzyNameWatchlistProvider` materializa **a tabela
   toda** e roda Jaro-Winkler token a token sobre ela, uma vez por avaliação (o `searchAll`
   batendo todas as partes de uma vez já economiza o que dava — o problema é o `findAll`). Em
@@ -229,7 +260,23 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   fonética) e o fuzzy roda só sobre eles; benchmark com **500k entradas reais** mostrando p99 e
   alocação estáveis; e o golden dataset abaixo provando que **o recall não caiu**.
 
-- [ ] **Golden dataset rotulado de screening + calibragem por recall** 🔴
+- [x] **Golden dataset rotulado de screening + calibragem por recall** 🔴 — **fechado 2026-08-19**
+  `golden-dataset.csv` (48 pares rotulados) + `ScreeningRecallTest` (curva) +
+  `BlockingRecallIntegrationTest` (o blocking não descarta nenhum par que o algoritmo casaria).
+  A curva mostra 0.90 numa região **plana** — recall 1.00 de 0.80 a 0.94 —, o que transforma
+  "0.90 porque pareceu razoável" em "0.90 porque a região é estável".
+
+  **O conjunto criticou a si mesmo:** a primeira versão dava precisão 1.00 até com limiar 0.80,
+  sinal de que os negativos eram fáceis demais e o eixo de falso positivo não era exercitado por
+  nada. Com negativos difíceis o teste quebrou e revelou o trade-off real — a 0.90 casam
+  `SILVA`×`SILVEIRA`, `PINTO`×`PINHO`, `CLAUDIA`×`CLAUDIO`, `ANDRADE`×`ANDRADA`. É a decisão
+  **certa**: 0.96 levaria a precisão a 1.00 e o recall a 0.92 — trocaria quatro revisões manuais
+  por um sancionado não encontrado.
+
+  ⚠️ **Limitação declarada no próprio CSV:** o conjunto é sintético e estrutural. Trava o
+  comportamento do algoritmo nos padrões conhecidos; **não** estima recall de produção. Casos reais
+  rotulados por analista, com a distribuição de verdade, seguem sendo trabalho próprio — e é isso
+  que fecharia a calibragem para um regulador.
   Item já aberto no plano de remediação, promovido aqui a pré-requisito do anterior. O limiar
   0.90 por token foi escolhido por raciocínio — bom raciocínio, registrado — e não por curva de
   recall/precisão. Sem conjunto rotulado, não há como provar que o índice do item acima não
