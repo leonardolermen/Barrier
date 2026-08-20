@@ -8,7 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Optional;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -39,10 +38,6 @@ public class TenantAuthenticationFilter extends OncePerRequestFilter {
   private static final Logger log = LoggerFactory.getLogger(TenantAuthenticationFilter.class);
   private static final String BEARER = "Bearer ";
 
-  /** Rotas de negócio. Actuator e endpoints administrativos ficam de fora. */
-  private static final Pattern PROTECTED_PATHS =
-      Pattern.compile("^/v1/(assessments|subjects)(/.*)?$");
-
   private final ApiKeyService apiKeyService;
 
   public TenantAuthenticationFilter(ApiKeyService apiKeyService) {
@@ -51,7 +46,7 @@ public class TenantAuthenticationFilter extends OncePerRequestFilter {
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
-    return !PROTECTED_PATHS.matcher(request.getRequestURI()).matches();
+    return !ApiRoutes.isTenantScoped(request.getRequestURI());
   }
 
   @Override

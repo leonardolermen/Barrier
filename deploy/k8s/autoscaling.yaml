@@ -1,0 +1,86 @@
+# Autoscaling da risk-engine por PROFUNDIDADE DE FILA, não por CPU.
+#
+# Por que não HPA por CPU — e a evidência é do próprio projeto, não teoria: o pipeline é
+# I/O-bound em consulta de bureau, então a CPU fica BAIXA exatamente quando a fila está
+# afogando. Foi assim que o teste de carga do ADR-0015 terminou com 69.809 avaliações presas
+# em EM_ANALISE sem erro, sem latência ruim e sem alerta. Um HPA por CPU teria medido saúde
+# num sistema parado e não escalaria nada.
+#
+# O sinal certo já existia e não era usado por ninguém: `barrier_assessment_pending_count`
+# (PipelineHealthMetrics). Escalar por ele exige KEDA — o HPA padrão não lê métrica de
+# aplicação sem o adapter de custom metrics, e o KEDA embrulha isso.
+#
+# ⚠️ PRÉ-REQUISITOS não incluídos aqui (o cluster local não os tem):
+#   - KEDA instalado (`helm install keda kedacore/keda -n keda --create-namespace`)
+#   - Prometheus coletando /actuator/prometheus dos pods
+# Sem os dois, este arquivo não faz nada — de propósito, não é aplicado por padrão.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: risk-engine
+spec:
+  scaleTargetRef:
+    name: risk-engine
+
+  # O piso NÃO é 0. Escala a zero mataria os @Scheduled — o processador de avaliações, o relay
+  # da outbox e o importador de watchlist só rodam com pod de pé, e "sem fila agora" não é o
+  # mesmo que "nada a fazer". Um pod parado é barato; uma watchlist que não atualizou porque
+  # ninguém estava vivo às 03:00 é um controle regulatório que não rodou.
+  minReplicaCount: 2
+
+  # O teto é amarrado a DUAS restrições, e ambas são reais:
+  #  1. conexões: maxReplicas * DB_POOL_SIZE(8) + webhook-api(5*5) precisa caber no
+  #     max_connections do Postgres;
+  #  2. custo de bureau: cada réplica a mais consome a mesma fila mais rápido, e cada avaliação
+  #     é uma consulta paga. Autoscaler sem teto transforma pico de tráfego em pico de FATURA.
+  # Enquanto a cota por tenant (P1 do plano de auditoria) não existir, este teto é o único
+  # freio de custo que há.
+  maxReplicaCount: 10
+
+  pollingInterval: 30
+  # Janela de calma antes de reduzir: a fila oscila, e encolher no vale para crescer de novo
+  # dois minutos depois paga o custo de subida (Flyway, importação inicial) sem ganho nenhum.
+  cooldownPeriod: 300
+
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc:9090
+        # 50 pendentes por réplica: com o lote de 50 do AssessmentProcessor, é "cada réplica tem
+        # aproximadamente um lote de trabalho à frente". Acima disso, a fila está crescendo mais
+        # rápido do que se drena.
+        query: sum(barrier_assessment_pending_count)
+        threshold: "50"
+
+    # Segundo gatilho, e o mais importante dos dois: contagem alta pode ser pico normal sendo
+    # absorvido, mas IDADE alta significa que algo não está sendo drenado. É a métrica que teria
+    # gritado no teste de carga do ADR-0015 — as 69.809 avaliações não eram só muitas, eram
+    # ANTIGAS. O KEDA usa o maior valor entre os gatilhos.
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc:9090
+        query: max(barrier_assessment_pending_oldest_seconds)
+        threshold: "300"
+---
+# A webhook-api escala por LAG DE CONSUMO, não por fila em banco: o trabalho dela chega por
+# Kafka. O teto de 6 não é arbitrário — é o número de partições (KafkaTopicsConfig). Réplica
+# além do número de partições fica sem atribuição e não consome nada: custaria conexão de banco
+# e memória para ficar ociosa.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: webhook-api
+spec:
+  scaleTargetRef:
+    name: webhook-api
+  minReplicaCount: 2
+  maxReplicaCount: 6
+  pollingInterval: 30
+  cooldownPeriod: 300
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: kafka:9092
+        consumerGroup: webhook-api
+        topic: barrier.assessment.completed
+        lagThreshold: "100"

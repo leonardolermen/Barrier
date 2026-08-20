@@ -1,6 +1,7 @@
 package com.barrier.riskengine.rescreening.service;
 
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
+import com.barrier.commons.jobs.SingletonJobLock;
 import com.barrier.riskengine.assessment.service.AssessmentService;
 import com.barrier.riskengine.assessment.service.SubmitAssessmentCommand;
 import com.barrier.riskengine.rescreening.policy.domain.ReassessmentTrigger;
@@ -60,6 +61,7 @@ public class PeriodicReassessmentJob {
   private final ReassessmentPolicy policy;
   private final AssessmentService assessments;
   private final SubjectService subjects;
+  private final SingletonJobLock jobLock;
   private final boolean enabled;
   private final int maxPerRun;
 
@@ -68,12 +70,14 @@ public class PeriodicReassessmentJob {
       ReassessmentPolicy policy,
       AssessmentService assessments,
       SubjectService subjects,
+      SingletonJobLock jobLock,
       @Value("${barrier.rescreening.periodic.enabled:false}") boolean enabled,
       @Value("${barrier.rescreening.periodic.max-per-run:200}") int maxPerRun) {
     this.riskState = riskState;
     this.policy = policy;
     this.assessments = assessments;
     this.subjects = subjects;
+    this.jobLock = jobLock;
     this.enabled = enabled;
     this.maxPerRun = maxPerRun;
   }
@@ -88,6 +92,20 @@ public class PeriodicReassessmentJob {
     if (!enabled) {
       return;
     }
+    jobLock.runIfLeader(
+        "periodic-reassessment", Duration.ofHours(1), Duration.ofHours(2), this::runOnce);
+  }
+
+  /**
+   * O lote roda <b>uma vez no cluster</b>. Sem o lock, cinco réplicas executavam o mesmo cron e o
+   * {@code max-per-run} de 200 virava 1000 avaliações por noite — cada uma com consulta paga de
+   * bureau. O teto continuaria escrito no código e violado na prática, que é a pior combinação:
+   * um controle de custo que a leitura do código diz existir e a fatura diz que não.
+   *
+   * <p>O piso de 1h é o que impede uma réplica com cron atrasado de reexecutar a mesma janela e
+   * dobrar o lote.
+   */
+  private void runOnce() {
     try {
       int criadas = reassessDue();
       if (criadas > 0) {

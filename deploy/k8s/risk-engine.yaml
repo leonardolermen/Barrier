@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: risk-engine
+  labels: { app: risk-engine }
+spec:
+  replicas: 5
+  selector:
+    matchLabels: { app: risk-engine }
+  template:
+    metadata:
+      labels: { app: risk-engine }
+    spec:
+      # Precisa ser MAIOR que spring.lifecycle.timeout-per-shutdown-phase (30s), senão o kubelet
+      # manda SIGKILL no meio do dreno e o graceful shutdown não serviu para nada.
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: risk-engine
+          image: barrier/risk-engine:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_URL
+              value: jdbc:postgresql://postgres:5432/barrier
+            - name: DB_USER
+              value: barrier
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: barrier-secrets, key: db-password } }
+            - name: KAFKA_BOOTSTRAP
+              value: kafka:9092
+            - name: ADMIN_API_KEY
+              valueFrom: { secretKeyRef: { name: barrier-secrets, key: admin-api-key } }
+            # 5 réplicas * 8 = 40 conexões. Ver a conta no application.yml.
+            - name: DB_POOL_SIZE
+              value: "8"
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            # A JVM usa MaxRAMPercentage=75 sobre ESTE limit. Mudar o limit muda o heap.
+            limits: { memory: "1Gi" }
+
+          # "Pode receber tráfego?" — falhou, sai do balanceador (não reinicia).
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+
+          # "O processo está vivo?" — falhou, o pod REINICIA. Por isso é deliberadamente burra:
+          # só o estado de liveness do Spring, nunca o health completo. O WatchlistHealthIndicator
+          # fora daqui é intencional — cobertura de lista caída reiniciaria os 5 pods em loop por
+          # um problema que reiniciar não resolve (ver application.yml).
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # Cobre a subida lenta (Flyway + importação inicial de watchlist) sem afrouxar a
+          # liveness depois: enquanto esta passa, as outras não contam falha.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 5
+            failureThreshold: 60
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: risk-engine
+spec:
+  selector: { app: risk-engine }
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+# Impede que um rolling update ou drain de nó derrube todas as réplicas de uma vez.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: risk-engine
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels: { app: risk-engine }

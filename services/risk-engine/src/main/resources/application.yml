@@ -1,10 +1,22 @@
 spring:
   application:
     name: risk-engine
+  lifecycle:
+    # Teto do dreno. Precisa ser MENOR que o terminationGracePeriodSeconds do Deployment,
+    # senão o k8s manda SIGKILL no meio do dreno e o graceful não serviu para nada.
+    timeout-per-shutdown-phase: 30s
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/barrier}
     username: ${DB_USER:barrier}
     password: ${DB_PASSWORD:barrier}
+    hikari:
+      # Sizing explícito porque o default (10) é por POD, não global: 5 réplicas da risk-engine
+      # + 5 da webhook-api já são 100 conexões, e o default de max_connections do Postgres é 100
+      # — sobrando zero para migration, psql de plantão e monitoramento. A conta que precisa
+      # fechar é:  (pods_risk * pool_risk) + (pods_webhook * pool_webhook) + folga < max_connections
+      # Com 8 e 5 réplicas: 40 + (5*5)=25 -> 65, deixando ~35 de folga.
+      # Subir réplica sem revisar isto troca "fila lenta" por "não conecta no banco".
+      maximum-pool-size: ${DB_POOL_SIZE:8}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -44,12 +56,34 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+      # Probes separadas para o Kubernetes. A distinção não é cosmética:
+      #
+      #   liveness  = "o processo está vivo?"       -> falhou, o k8s REINICIA o pod
+      #   readiness = "pode receber tráfego agora?" -> falhou, o k8s TIRA DO LOAD BALANCER
+      #
+      # Por padrão o Spring põe apenas livenessState/readinessState nos grupos, e indicador
+      # customizado NÃO entra em nenhum dos dois. Isso está certo, e aqui é deliberado: o
+      # WatchlistHealthIndicator não pode entrar em nenhuma das duas probes.
+      #
+      #  - na liveness, cobertura de lista caída reiniciaria os 5 pods em loop, por um problema
+      #    que reiniciar não resolve;
+      #  - na readiness, os 5 pods sairiam do balanceador ao mesmo tempo (todos leem a mesma
+      #    base) e a queda de cobertura viraria indisponibilidade total.
+      #
+      # A ausência de cobertura já tem tratamento próprio e melhor: ScreeningCoverageRiskRule
+      # força REVIEW. O health serve para alertar, não para orquestrar.
+      probes:
+        enabled: true
   metrics:
     tags:
       application: ${spring.application.name}
 
 server:
   port: ${SERVER_PORT:8080}
+  # Sem isto, todo scale-down do autoscaler corta requisição em voo E abandona o lease do lote no
+  # meio — a linha só volta a ser reivindicável quando o lease expira. Com graceful, o Tomcat para
+  # de aceitar conexão nova e drena as em andamento.
+  shutdown: graceful
 
 logging:
   # Correlação e avaliação no console de dev; em prod o log é JSON e o MDC vai inteiro (ver

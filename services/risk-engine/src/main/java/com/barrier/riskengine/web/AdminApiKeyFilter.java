@@ -7,7 +7,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,15 +40,6 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
 
   private static final Logger log = LoggerFactory.getLogger(AdminApiKeyFilter.class);
 
-  /**
-   * {@code /v1/risk-rules[/...]}, {@code /v1/tenants/{id}/risk-config} e
-   * {@code /v1/tenants/{id}/api-keys}. A emissão de credencial entra aqui pelo motivo mais óbvio:
-   * se fosse self-service, qualquer um emitiria a chave de qualquer tenant e a autenticação não
-   * valeria nada.
-   */
-  private static final Pattern ADMIN_PATHS =
-      Pattern.compile("^/v1/(risk-rules(/.*)?|tenants/[^/]+/(risk-config|api-keys))$");
-
   private final String configuredKey;
 
   public AdminApiKeyFilter(@Value("${barrier.admin.api-key:}") String configuredKey) {
@@ -58,7 +48,7 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
-    return !ADMIN_PATHS.matcher(request.getRequestURI()).matches();
+    return !ApiRoutes.isAdmin(request.getRequestURI());
   }
 
   @Override

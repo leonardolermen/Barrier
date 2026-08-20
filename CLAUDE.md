@@ -5,16 +5,24 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
 
 ## Ao implementar código, siga SEMPRE
 
-- **O que falta para produção:** [docs/implementation/plano-remediacao-auditoria.md](docs/implementation/plano-remediacao-auditoria.md)
+- **O QUE VEM AGORA (leia primeiro):** [docs/implementation/plano-auditoria-2026-08-18.md](docs/implementation/plano-auditoria-2026-08-18.md)
+  — P0–P4 da auditoria externa de `e141669`. **Escopo novo está congelado até P0 e P1 fecharem.**
+  P0 hoje: `/v1/mesa/**` e `/v1/behavior-events` estão fora do filtro de auth (F7 e F8
+  inacessíveis), `/actuator` aberto, e não existe CI nem Dockerfile.
+- **O que falta para produção (itens abertos das ondas):** [docs/implementation/plano-remediacao-auditoria.md](docs/implementation/plano-remediacao-auditoria.md)
   — plano vivo da auditoria de KYC/PLD-FT, com critérios de pronto. Consulte antes de propor
   trabalho novo: o que está lá é o que reduz risco de verdade.
+- **Escala horizontal (em execução):** [docs/implementation/plano-escala-horizontal.md](docs/implementation/plano-escala-horizontal.md)
+  — 5 réplicas em k8s atrás de LB. As filas com `SKIP LOCKED` já são seguras; faltam container,
+  probes, partições de Kafka, lock nos 5 `@Scheduled` singleton e prova em `kind`.
 - **Padrões de código:** [docs/implementation/coding-standards.md](docs/implementation/coding-standards.md)
 - **Plano da Risk Engine:** [docs/implementation/risk-engine-plan.md](docs/implementation/risk-engine-plan.md)
 - **Lições do BMP Origem:** [docs/implementation/licoes-do-origem.md](docs/implementation/licoes-do-origem.md)
   — estudo comparativo com a esteira de KYC que roda em produção na BMP (Origem/Mishmar/
   bureaus-manager/tzofe): o que importar, em que ordem, e **o que não copiar**.
 - **Fila de execução dessas lições:** [docs/implementation/fila-origem.md](docs/implementation/fila-origem.md)
-  — F1–F9 com escopo, arquivos, dependências e critério de pronto. F1 entregue (ADR-0017).
+  — F1–F9 com escopo e critério de pronto. **Fila drenada:** todas entregues; fica como registro
+  do porquê de `mesa`/`riskstate`/`monitoring`/`behavior` existirem.
 - **Decisões de arquitetura:** [docs/adr/](docs/adr/) (ADR-0009 define o corte atual)
 
 Existe a skill `barrier-implementation` com o checklist operacional — use-a antes de
@@ -666,12 +674,64 @@ documento nem nome, e é isso que permite mandá-lo a um serviço externo. **Nã
 sem routing key neste ambiente, o caminho até o PagerDuty real nunca foi exercitado — validar em
 homologação forçando um `backlog_analise` antes de virar plantão.
 
+**Escala horizontal — 5 réplicas em Kubernetes ([plano](docs/implementation/plano-escala-horizontal.md)).**
+O mecanismo difícil já existia e nunca tinha sido exercitado: as quatro filas de trabalho usam
+`FOR UPDATE SKIP LOCKED` + lease, a API é stateless e o Flyway pega advisory lock. Faltava tudo em
+volta. Agora existem `Dockerfile` multi-stage, CI (`.github/workflows/ci.yml`), manifests em
+`deploy/k8s/` e verificação em `kind`.
+
+`SingletonJobLock` (`commons`, V045 na risk-engine e V006 na webhook-api) faz job `@Scheduled` rodar
+uma vez **no cluster**: sem ele, `WatchlistImporter`, `PeriodicReassessmentJob`, `AlertEvaluator` e
+`DeliveryReconciliationJob` rodavam nos 5 pods — 5 downloads de OFAC/CGU/ONU, e o `max-per-run=200`
+do re-KYC virando 1000 avaliações pagas por noite. É **lease em tabela, não advisory lock**: o
+advisory é ligado à sessão (exigiria fixar a conexão do Hikari) e a variante `_xact_` manteria
+transação aberta durante os minutos de um download. Tem **duas durações**: `lockAtMostFor` (teto,
+libera se o pod morrer) e `lockAtLeastFor` (**piso** — sem ele, réplica com cron atrasado por clock
+skew reexecuta a janela e o teto do job fica escrito no código e violado na prática). Piso zero é
+deliberado no `AlertEvaluator`: ali reexecutar cedo é barato e pular um ciclo é o dano. A tabela é
+duplicada por schema de propósito (cada deployable é dono do seu; o escopo do lock é por serviço);
+o código é único. ⚠️ Mover para o `commons` **não** publica o bean nos dois serviços: a
+`RiskEngineApplication` está em `com.barrier` e escaneia tudo, a `WebhookApplication` está em
+`com.barrier.webhook` e escaneia só ela — por isso `webhook.config.JobLockConfig` declara o bean
+explicitamente, em vez de ampliar o scan e puxar os beans de outbox junto.
+
+**Estado que é do cluster não pode viver na memória de uma instância** — o padrão apareceu **três
+vezes** nesta frente, sempre com comentário explicando por que estava certo, e as três só foram
+detectadas rodando com réplicas de verdade:
+- `KafkaTopicsConfig` expunha `List<NewTopic>`, que o `KafkaAdmin` **ignora em silêncio** (ele
+  procura `NewTopic` ou `KafkaAdmin.NewTopics`). Nenhum tópico era criado, o broker auto-criava com
+  **1 partição**, e 1 partição = 1 consumidor: a webhook-api não escalava, por mais pods que
+  subissem. Hoje são 3 tópicos × 6 partições, com `KafkaTopicCreationIntegrationTest` provando
+  contra o broker — o unitário passava verde sem provar o wiring.
+- `WatchlistImportStatus` era `ConcurrentHashMap` por pod, com racional escrito de que isso era
+  deliberado. Não era: `replaceSource` grava em `watchlist_entries`, **compartilhada**. A lista
+  sempre foi global, só a medição era local — e uma réplica cujo download falhou forçava REVIEW em
+  tudo que atendia, com a tabela populada pelas outras. Foi para o banco (V046) junto com o lock,
+  na mesma entrega: fazer o lock sozinho deixaria 4 pods sem cobertura mandando 100% para revisão.
+- O dedup do `AlertEvaluator` era `HashMap` de instância. Com piso zero a **liderança rotaciona**,
+  então o pod A notificava e o B renotificava o mesmo código no ciclo seguinte. Corrigido reusando
+  o próprio lease com chave `alert:<código>` — "não repetir antes de X" **é** um lease com piso X.
+
+Autoscaling (`deploy/k8s/autoscaling.yaml`, exige KEDA+Prometheus, não aplicado por padrão): **HPA
+por CPU está errado aqui** — o pipeline é I/O-bound em bureau, a CPU fica baixa exatamente quando a
+fila afoga (foi assim que 69.809 avaliações ficaram presas sem sinal técnico ruim). Escala por
+profundidade **e idade** da fila; a webhook-api por lag, com teto = nº de partições. `minReplicas`
+não é 0: escalar a zero mataria os `@Scheduled`, e watchlist que não atualizou às 03:00 é controle
+regulatório que não rodou.
+
+⚠️ **Não verificado:** `deploy/verify-disjuncao.sh` (disjunção entre processos sob carga) foi
+escrito e não executado ponta a ponta; matar pod no meio de um lote; e o KEDA nunca foi instalado.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
 
-Build validado: `./mvnw test` verde (604 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 684 no total, inclui integração com Testcontainers). `./mvnw spotless:apply` **não roda no JDK 25** — o
+Build validado: `./mvnw test` verde (627 testes na risk-engine + 53 na webhook-api + 27 no
+commons — 707 no total, inclui integração com Testcontainers). **Precisa de Docker rodando** —
+sem ele os testes de integração erram com `Can't get Docker image` e a suíte fica verde só na
+aparência. Se o Docker Desktop travar em `initializing Inference manager`, o motivo são sockets
+órfãos indeletáveis no diretório `Docker/run` do AppData local: renomeie o diretório (apagar não
+funciona, nem como admin) e ele recria limpo. `./mvnw spotless:apply` **não roda no JDK 25** — o
 google-java-format do spotless 2.44 quebra com `NoSuchMethodError` em `Log$DeferredDiagnosticHandler`;
 formatar à mão até subir o plugin.
 JDK local: `C:\Users\leona\.jdks\corretto-25.0.3` (setar `JAVA_HOME` antes do `mvnw`).

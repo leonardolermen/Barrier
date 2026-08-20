@@ -8,6 +8,11 @@ instituição financeira regulada.
 "como sabemos que X está funcionando". Marque `[x]` só quando o critério for satisfeito e
 houver teste cobrindo. Ao fechar um item, registre o commit ao lado.
 
+**Auditoria posterior (2026-08-18):** este plano segue válido nos itens abertos, mas o foco do
+trabalho mudou — ver [plano-auditoria-2026-08-18.md](plano-auditoria-2026-08-18.md), que é o
+que se lê primeiro. Aquele pergunta "isto vira produto em produção?"; este pergunta "a decisão
+está correta?".
+
 **Regra que vale para todo este plano:** a auditoria encontrou um padrão, não uma lista de
 bugs — *o sistema falha aberto em todo ponto onde deveria falhar fechado*, e a documentação
 afirmava controles que o código não tinha. Qualquer item novo aqui deve ser avaliado contra

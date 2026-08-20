@@ -1,6 +1,7 @@
 package com.barrier.riskengine.monitoring.service;
 
 import com.barrier.riskengine.assessment.repository.interfaces.AssessmentRepository;
+import com.barrier.commons.jobs.SingletonJobLock;
 import com.barrier.riskengine.monitoring.domain.Alert;
 import com.barrier.riskengine.monitoring.service.interfaces.AlertNotifier;
 import com.barrier.riskengine.monitoring.service.interfaces.AlertRule;
@@ -8,9 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,17 +43,19 @@ public class AlertEvaluator {
   private final List<AlertNotifier> notifiers;
   private final int historyDays;
   private final Duration repeatInterval;
-  private final Map<String, Instant> lastNotified = new HashMap<>();
+  private final SingletonJobLock jobLock;
 
   public AlertEvaluator(
       AssessmentRepository repository,
       List<AlertRule> rules,
       List<AlertNotifier> notifiers,
+      SingletonJobLock jobLock,
       @Value("${barrier.monitoring.history-days:7}") int historyDays,
       @Value("${barrier.monitoring.repeat-interval:PT1H}") Duration repeatInterval) {
     this.repository = repository;
     this.rules = rules;
     this.notifiers = notifiers;
+    this.jobLock = jobLock;
     this.historyDays = historyDays;
     this.repeatInterval = repeatInterval;
   }
@@ -66,6 +67,22 @@ public class AlertEvaluator {
    */
   @Scheduled(fixedDelayString = "${barrier.monitoring.evaluate-delay-ms:300000}")
   public void evaluate() {
+    jobLock.runIfLeader(
+        "alert-evaluation", Duration.ZERO, Duration.ofMinutes(10), this::evaluateOnce);
+  }
+
+  /**
+   * Avalia uma vez no cluster.
+   *
+   * <p><b>Sem piso</b> ({@code Duration.ZERO}), diferente dos jobs diários: aqui reexecutar cedo é
+   * barato e <b>pular um ciclo é o dano</b> — o avaliador existe justamente porque a fila afogou em
+   * silêncio uma vez. O teto de 10 minutos cobre o ciclo de 5 com folga e libera se o pod morrer.
+   *
+   * <p>Consequência do piso zero, medida em cluster de 5 réplicas: a <b>liderança rotaciona</b> —
+   * cada ciclo pode ser avaliado por um pod diferente. Por isso o dedup <b>não</b> pode viver em
+   * memória de instância (ver {@link #dispatch}).
+   */
+  private void evaluateOnce() {
     try {
       PipelineSnapshot snapshot = snapshot(Instant.now());
       for (AlertRule rule : rules) {
@@ -108,12 +125,26 @@ public class AlertEvaluator {
         repository.countAutoApprovedBetween(from, to));
   }
 
+  /**
+   * Dedup por código, <b>compartilhado entre réplicas</b>.
+   *
+   * <p>Era um {@code HashMap} em memória, e com a liderança rotacionando entre os pods isso não
+   * dedupava nada: o pod A notificava, o pod B ganhava o ciclo seguinte com o mapa vazio e
+   * notificava de novo o mesmo código. Mesmo defeito que a cobertura de watchlist tinha — estado
+   * que é do <b>cluster</b> guardado na memória de uma instância. Que o
+   * {@code PagerDutyAlertNotifier} deduplique pelo {@code dedup_key} do lado dele é sorte de um
+   * canal específico; {@code AlertNotifier} é interface, e Slack ou e-mail receberiam cinco.
+   *
+   * <p>O mecanismo é o próprio {@link SingletonJobLock}: "não repetir este alerta antes de
+   * {@code repeatInterval}" é exatamente um lease por código com piso igual ao intervalo. Sem
+   * tabela nova — a semântica já existia, faltava perceber que era a mesma.
+   */
   private void dispatch(Alert alert) {
-    Instant ultima = lastNotified.get(alert.code());
-    if (ultima != null && ultima.isAfter(Instant.now().minus(repeatInterval))) {
-      return;
-    }
-    lastNotified.put(alert.code(), Instant.now());
+    jobLock.runIfLeader(
+        "alert:" + alert.code(), repeatInterval, repeatInterval, () -> notificar(alert));
+  }
+
+  private void notificar(Alert alert) {
     notifiers.forEach(
         notifier -> {
           try {

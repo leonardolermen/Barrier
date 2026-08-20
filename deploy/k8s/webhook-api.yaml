@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-api
+  labels: { app: webhook-api }
+spec:
+  # 5 réplicas só fazem sentido porque os tópicos passaram a ter 6 partições
+  # (KafkaTopicsConfig). Com a auto-criação anterior — 1 partição — quatro destes pods
+  # ficariam ociosos, consumindo conexão de banco e não consumindo evento nenhum.
+  replicas: 5
+  selector:
+    matchLabels: { app: webhook-api }
+  template:
+    metadata:
+      labels: { app: webhook-api }
+    spec:
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: webhook-api
+          image: barrier/webhook-api:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          env:
+            - name: DB_URL
+              value: jdbc:postgresql://postgres:5432/barrier
+            - name: DB_USER
+              value: barrier
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: barrier-secrets, key: db-password } }
+            - name: KAFKA_BOOTSTRAP
+              value: kafka:9092
+            - name: DB_POOL_SIZE
+              value: "5"
+          resources:
+            requests: { cpu: "100m", memory: "384Mi" }
+            limits: { memory: "768Mi" }
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8082 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8082 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8082 }
+            periodSeconds: 5
+            failureThreshold: 60
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-api
+spec:
+  selector: { app: webhook-api }
+  ports:
+    - port: 8082
+      targetPort: 8082
+  type: ClusterIP

@@ -67,7 +67,8 @@ caro: a decisão passa a se apoiar em evidência que a trilha apresenta como fre
 compartilhado vazava dossiê alheio. Reuso **dentro do mesmo tenant** é seguro e resolve a
 maior parte do custo; reuso **entre tenants** exige ADR próprio.
 
-→ Plano detalhado: [reuso-de-verificacao-de-identidade.md](reuso-de-verificacao-de-identidade.md)
+→ **Entregue** (V040, `feat/identity-reuse`). O racional está no `CLAUDE.md`; o plano
+bite-sized foi removido depois da entrega.
 
 ---
 
@@ -319,5 +320,6 @@ não por valor comercial.
 | 8 | Ingestão de evento comportamental (P7) | alto | monitoramento pós-onboarding |
 | 9 | Catálogo de eventos + registry (P8) | — | só no gatilho descrito em P8 |
 
-O item 1 tem plano de implementação escrito:
-[reuso-de-verificacao-de-identidade.md](reuso-de-verificacao-de-identidade.md).
+**Todos os nove itens foram entregues** — ver [fila-origem.md](fila-origem.md) (F1–F9) para o
+escopo e o critério de pronto de cada um. O que vem agora está em
+[plano-auditoria-2026-08-18.md](plano-auditoria-2026-08-18.md).
