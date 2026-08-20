@@ -92,6 +92,10 @@ barrier:
     secret-rotation-overlap: PT24H
     max-attempts: 5
     base-backoff: 30s
+    # Teto de entregas simultaneas. Amarra dura: workers <= maximum-pool-size - 2 (folga para o
+    # listener e para os jobs). Com pool 5, o teto e 3. Subir sem subir o pool troca "entrega lenta"
+    # por "timeout ao obter conexao", e a mensagem de erro nao distingue os dois casos.
+    workers: ${WEBHOOK_WORKERS:3}
     # 1s e nao 5s: desde que o listener parou de entregar inline, este ciclo virou a latencia da
     # PRIMEIRA tentativa, nao so a do retry. Com 5s, toda entrega esperaria ate 5 segundos.
     retry-delay-ms: 1000

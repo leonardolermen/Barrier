@@ -60,6 +60,7 @@ class WebhookDeliveryServiceTest {
         properties,
         transactionTemplate(),
         new tools.jackson.databind.ObjectMapper(),
+        3,
         Duration.ofMinutes(2));
   }
 

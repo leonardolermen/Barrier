@@ -13,6 +13,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +46,11 @@ public class WebhookDeliveryService {
   private final Duration lease;
   private final ObjectMapper objectMapper;
 
+  /** Virtual threads: a tarefa fica bloqueada esperando o destino, nao uma thread de plataforma. */
+  private final ExecutorService entregas = Executors.newVirtualThreadPerTaskExecutor();
+
+  private final Semaphore permissoes;
+
   public WebhookDeliveryService(
       DeliveryRepository repository,
       WebhookEndpointService endpoints,
@@ -50,6 +59,7 @@ public class WebhookDeliveryService {
       WebhookProperties properties,
       TransactionTemplate transactionTemplate,
       ObjectMapper objectMapper,
+      @Value("${barrier.webhook.workers:3}") int workers,
       @Value("${barrier.webhook.lease:PT2M}") Duration lease) {
     this.repository = repository;
     this.endpoints = endpoints;
@@ -58,6 +68,7 @@ public class WebhookDeliveryService {
     this.properties = properties;
     this.transactionTemplate = transactionTemplate;
     this.objectMapper = objectMapper;
+    this.permissoes = new Semaphore(workers);
     // Precisa ser maior que o pior caso de uma tentativa (connect + read timeout do cliente);
     // curta demais faz outro worker reenviar enquanto o POST original ainda está em voo.
     this.lease = lease;
@@ -120,8 +131,31 @@ public class WebhookDeliveryService {
     if (due == null || due.isEmpty()) {
       return 0;
     }
-    due.forEach(this::attempt);
+    var tarefas =
+        due.stream()
+            .map(d -> CompletableFuture.runAsync(() -> comPermissao(() -> attempt(d)), entregas))
+            .toList();
+    // Espera o lote: sem isto o ciclo seguinte reivindicaria com o anterior ainda em voo, e a
+    // concorrência real deixaria de ser a que o teto declara.
+    CompletableFuture.allOf(tarefas.toArray(CompletableFuture[]::new)).join();
     return due.size();
+  }
+
+  /**
+   * O semáforo é o teto de entregas simultâneas — e, por consequência, o que protege o pool de
+   * conexões e o parceiro de receber uma rajada.
+   *
+   * <p>Virtual thread não cria conexão de banco nem paciência no destino: sem este limite, o lote
+   * inteiro (100) sairia de uma vez sobre um pool de 5 conexões. <b>O limite é a feature</b> —
+   * {@code newVirtualThreadPerTaskExecutor()} sozinho não tem nenhum.
+   */
+  private void comPermissao(Runnable tarefa) {
+    permissoes.acquireUninterruptibly();
+    try {
+      tarefa.run();
+    } finally {
+      permissoes.release();
+    }
   }
 
   /**

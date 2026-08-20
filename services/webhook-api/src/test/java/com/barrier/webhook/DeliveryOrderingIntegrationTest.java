@@ -29,10 +29,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * <p>Precisa de Postgres real: a exclusão depende de a reivindicação e a consulta de "quem está em
  * voo" enxergarem o mesmo estado transacional.
  */
-@SpringBootTest(
-    // Scheduler desligado: com retry-delay de 1s ele reivindicaria as entregas ANTES do teste,
-    // e a falha apareceria como "a ordem nao funciona" em vez de "o teste tem corrida".
-    properties = "barrier.webhook.retry-delay-ms=3600000")
+@SpringBootTest
 @Testcontainers
 class DeliveryOrderingIntegrationTest {
 
@@ -40,6 +37,15 @@ class DeliveryOrderingIntegrationTest {
 
   @Container @ServiceConnection
   static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
+
+  /**
+   * Scheduler substituido por mock, e nao apenas com retry-delay alto: @Scheduled(fixedDelay)
+   * dispara a PRIMEIRA execucao imediatamente, independente do delay, e desde que a entrega virou
+   * paralela ela reivindica as linhas antes das assercoes. A falha aparecia como "a ordem nao
+   * funciona" — diagnostico errado para uma corrida de teste.
+   */
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
+  com.barrier.webhook.service.DeliveryRetryScheduler scheduler;
 
   @Autowired DeliveryRepository repository;
   @Autowired org.springframework.transaction.PlatformTransactionManager txManager;
@@ -114,7 +120,7 @@ class DeliveryOrderingIntegrationTest {
                (id, event_id, assessment_id, tenant_id, target_url, payload, status,
                 attempts, next_attempt_at, created_at, partition_key)
         VALUES (?, ?, 'a-1', 'default', 'http://localhost:9000', '{}', 'PENDING',
-                0, now(), now(), ?)
+                0, now() - interval '1 minute', now(), ?)
         """,
         UUID.randomUUID(),
         UUID.randomUUID(),
