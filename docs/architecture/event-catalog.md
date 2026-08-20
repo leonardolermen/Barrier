@@ -43,9 +43,17 @@ registrado aqui para ninguém interpretar o campo pelo nome.
 | **Consumidores** | `webhook-api` (`AssessmentCompletedListener`), `DeliveryReconciliationJob` (releitura avulsa, sem group) |
 | **Quando** | avaliação atinge desfecho, pelo motor ou por decisão humana. **Reemitido** na decisão manual |
 
-Payload: `AssessmentCompletedPayload` — `assessmentId`, `tenantId`, `status`, `riskLevel`,
-`decision`, `factors`, `documentType`, documento **mascarado**, `origin`, `originDetail`,
-`identityReused`, `identityCheckedAt`, `completedAt`.
+Payload: `AssessmentCompletedPayload` — `assessmentId`, `tenantId`, `subjectId`, `status`,
+`riskLevel`, `decision`, `completedAt`, `identityReused`, `identityCheckedAt`.
+
+⚠️ **Corrigido em 2026-08-19:** este catálogo listava `factors`, `documentType`, documento
+mascarado, `origin` e `originDetail`, que **nunca estiveram no payload** — o parceiro que os
+esperasse receberia `null` sem explicação. É o modo de falha que o próprio catálogo existe para
+evitar, e a razão de ele precisar ser atualizado no mesmo PR que muda o evento.
+
+**`subjectId` é a chave de ordenação da entrega.** Duas entregas do mesmo subject nunca saem em
+paralelo; de subjects diferentes, sim — sem ele, a decisão e a mudança de nível de risco do mesmo
+cliente teriam chaves distintas e poderiam chegar fora de ordem.
 
 **Reemissão é esperada:** o mesmo `assessmentId` gera um evento na conclusão automática e outro na
 decisão do analista, com `eventId` diferentes. Consumidor que trata "já vi esta avaliação" como

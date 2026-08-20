@@ -49,13 +49,29 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
   private final double threshold;
   private final int minNameLength;
 
+  private final double blockingThreshold;
+
   public FuzzyNameWatchlistProvider(
       WatchlistEntryRepository repository,
       @Value("${barrier.screening.fuzzy.threshold:0.90}") double threshold,
-      @Value("${barrier.screening.fuzzy.min-name-length:6}") int minNameLength) {
+      @Value("${barrier.screening.fuzzy.min-name-length:6}") int minNameLength,
+      @Value("${barrier.screening.fuzzy.blocking-threshold:0.45}") double blockingThreshold) {
     this.repository = repository;
     this.threshold = threshold;
     this.minNameLength = minNameLength;
+    this.blockingThreshold = blockingThreshold;
+  }
+
+  /**
+   * Tokens de todas as partes consultadas, para uma única busca de candidatos.
+   *
+   * <p>Mesma razão de {@code searchAll} existir: uma PJ com dez sócios faria dez idas ao banco, e
+   * a economia do índice viraria latência de rede.
+   */
+  private static java.util.Set<String> tokensOf(List<Screened> screened) {
+    return screened.stream()
+        .flatMap(s -> s.tokens().values().stream())
+        .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
   }
 
   @Override
@@ -81,7 +97,7 @@ public class FuzzyNameWatchlistProvider implements WatchlistProvider {
       return List.of();
     }
 
-    List<WatchlistRecord> candidates = repository.findNameEntries();
+    List<WatchlistRecord> candidates = repository.findNameCandidates(tokensOf(screened), blockingThreshold);
     List<WatchlistEntry> matches =
         candidates.stream()
             .flatMap(record -> matchesOf(record, screened))

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStateException;
 import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentOrigin;
@@ -241,6 +242,6 @@ class AssessmentServiceTest {
     when(repository.findById(a.id())).thenReturn(Optional.of(a));
 
     assertThatThrownBy(() -> service().decide(a.id(), "default", true, "x", "chave-teste", null))
-        .isInstanceOf(IllegalStateException.class);
+        .isInstanceOf(AssessmentStateException.class);
   }
 }

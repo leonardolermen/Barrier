@@ -59,6 +59,8 @@ class WebhookDeliveryServiceTest {
         signer,
         properties,
         transactionTemplate(),
+        new tools.jackson.databind.ObjectMapper(),
+        3,
         Duration.ofMinutes(2));
   }
 
@@ -83,6 +85,25 @@ class WebhookDeliveryServiceTest {
         });
   }
 
+  /**
+   * Grava e entrega, que é o caminho real desde que o listener parou de entregar inline.
+   *
+   * <p>Antes bastava {@code onEvent} — ele fazia o POST na própria thread. Agora {@code onEvent} só
+   * persiste, e quem entrega é o {@code retryDue()} pelo pool. Os testes que afirmam algo sobre a
+   * ENTREGA (assinatura, status, rotação de segredo) precisam das duas etapas; os que afirmam algo
+   * sobre a GRAVAÇÃO continuam usando só {@code onEvent}.
+   */
+  private void gravaEEntrega(WebhookDeliveryService service, EventEnvelope evento, String tenant) {
+    service.onEvent(evento, tenant);
+
+    ArgumentCaptor<Delivery> criada = ArgumentCaptor.forClass(Delivery.class);
+    verify(repository).save(criada.capture());
+    when(repository.claimDue(any(), org.mockito.ArgumentMatchers.anyInt(), any()))
+        .thenReturn(java.util.List.of(criada.getValue()));
+
+    service.retryDue();
+  }
+
   private EventEnvelope event() {
     return EventEnvelope.of("barrier.assessment.completed", "aid", 1, "{\"status\":\"APROVADO\"}");
   }
@@ -93,7 +114,7 @@ class WebhookDeliveryServiceTest {
     when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
     when(client.send(any(WebhookRequest.class))).thenReturn(WebhookSendResult.ok(200));
 
-    service("http://client/webhook").onEvent(event(), "default");
+    gravaEEntrega(service("http://client/webhook"), event(), "default");
 
     ArgumentCaptor<Delivery> saved = ArgumentCaptor.forClass(Delivery.class);
     verify(repository, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
@@ -107,7 +128,7 @@ class WebhookDeliveryServiceTest {
     when(client.send(any(WebhookRequest.class)))
         .thenReturn(WebhookSendResult.failure(500, "erro"));
 
-    service("http://client/webhook").onEvent(event(), "default");
+    gravaEEntrega(service("http://client/webhook"), event(), "default");
 
     ArgumentCaptor<Delivery> saved = ArgumentCaptor.forClass(Delivery.class);
     verify(repository, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
@@ -126,23 +147,49 @@ class WebhookDeliveryServiceTest {
   }
 
   /**
-   * Regressão: a entrega nasce com {@code next_attempt_at = created_at}, ou seja, já vencida. Como
-   * o listener grava a linha e só então faz o POST (até 10s), o scheduler — que roda a cada 5s —
-   * encontrava a mesma linha e postava em paralelo, dobrando a entrega numa instância só. Nascer
-   * reivindicada é o que fecha essa janela.
+   * A entrega nasce <b>livre</b>, e isto é a inversão de uma regra anterior — a mudança de premissa
+   * está registrada porque o motivo antigo era legítimo.
+   *
+   * <p><b>Antes:</b> nascia reivindicada. A entrega nasce com {@code next_attempt_at = created_at},
+   * já vencida; como o listener gravava a linha e <i>só então</i> fazia o POST (até 10s), o
+   * scheduler encontrava a mesma linha e postava em paralelo — entrega dobrada numa instância só.
+   * Nascer presa fechava essa janela.
+   *
+   * <p><b>Agora:</b> o listener não entrega mais (ver {@link #gravarNaoEntregaNaThreadDoListener}).
+   * Não há com quem competir — e nascer presa deixaria a entrega parada até o lease de 2 minutos
+   * vencer, transformando toda primeira entrega numa espera de minutos.
    */
   @Test
-  void entregaNasceReivindicadaParaOSchedulerNaoCompetirComOListener() {
-    Delivery nova = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}");
+  void entregaNasceLivreParaOSchedulerPoderPegaLa() {
+    Delivery nova =
+        Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}", "subject-1");
 
-    assertThat(nova.claimedAt()).isNotNull();
-    assertThat(nova.claimedAt()).isEqualTo(nova.createdAt());
+    assertThat(nova.claimedAt())
+        .as("nasceu reivindicada e ficaria parada ate o lease vencer")
+        .isNull();
+  }
+
+  /**
+   * O POST não pode rodar na thread do listener Kafka.
+   *
+   * <p>Um destino que aceita a conexão e demora segura o consumo da partição inteira: o parceiro
+   * lento atrasa <b>todos</b> que compartilham a partição, não só a si mesmo. O timeout mitiga, não
+   * resolve. Achado da auditoria (P2).
+   */
+  @Test
+  void gravarNaoEntregaNaThreadDoListener() {
+    when(repository.existsByEventId(any())).thenReturn(false);
+    when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    service("http://client/webhook").onEvent(event(), "default");
+
+    verify(client, org.mockito.Mockito.never()).send(any(WebhookRequest.class));
   }
 
   /** Falha libera a posse: quem governa a próxima tentativa é o backoff, não a lease. */
   @Test
   void falhaLiberaAPosse() {
-    Delivery d = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}");
+    Delivery d = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}", "subject-1");
 
     d.markFailed("erro", 5, java.time.Instant.now().plusSeconds(30));
 
@@ -153,7 +200,7 @@ class WebhookDeliveryServiceTest {
   /** O reprocessamento reivindica antes de postar — ler sem posse era o que duplicava a entrega. */
   @Test
   void retryDueReivindicaAsEntregasAntesDeTentar() {
-    Delivery pendente = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}");
+    Delivery pendente = Delivery.create(UUID.randomUUID(), "aid", "default", "http://c/w", "{}", "subject-1");
     when(repository.claimDue(any(), org.mockito.ArgumentMatchers.anyInt(), any()))
         .thenReturn(java.util.List.of(pendente));
     when(repository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -186,7 +233,7 @@ class WebhookDeliveryServiceTest {
     when(client.send(any(WebhookRequest.class))).thenReturn(WebhookSendResult.ok(200));
     WebhookEndpoint doTenant = WebhookEndpoint.register("acme", "https://acme.example/webhook");
 
-    service("https://destino-global.example/webhook", doTenant).onEvent(event(), "acme");
+    gravaEEntrega(service("https://destino-global.example/webhook", doTenant), event(), "acme");
 
     ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
     verify(client).send(enviado.capture());
@@ -219,7 +266,7 @@ class WebhookDeliveryServiceTest {
         WebhookEndpoint.register("acme", "https://acme.example/hook", "segredo-da-acme");
     EventEnvelope evento = event();
 
-    service("https://global.example/hook", acme).onEvent(evento, "acme");
+    gravaEEntrega(service("https://global.example/hook", acme), evento, "acme");
 
     ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
     verify(client).send(enviado.capture());
@@ -240,7 +287,7 @@ class WebhookDeliveryServiceTest {
             .rotateSecret(Duration.ofHours(1));
     EventEnvelope evento = event();
 
-    service("", rotacionado).onEvent(evento, "acme");
+    gravaEEntrega(service("", rotacionado), evento, "acme");
 
     ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
     verify(client).send(enviado.capture());
@@ -261,7 +308,7 @@ class WebhookDeliveryServiceTest {
         WebhookEndpoint.register("acme", "https://acme.example/hook", "segredo-antigo")
             .rotateSecret(Duration.ofSeconds(-1));
 
-    service("", expirado).onEvent(event(), "acme");
+    gravaEEntrega(service("", expirado), event(), "acme");
 
     ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
     verify(client).send(enviado.capture());

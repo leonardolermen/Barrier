@@ -44,6 +44,20 @@ spring:
         max.block.ms: 5000
         request.timeout.ms: 5000
         delivery.timeout.ms: 15000
+  task:
+    scheduling:
+      # Era 1 thread (default do Spring), e a risk-engine ja tinha corrigido o mesmo problema no
+      # proprio application.yml — este servico ficou de fora.
+      #
+      # Passou a doer quando a entrega virou paralela: retryDue() espera o lote inteiro (allOf) na
+      # thread do scheduler. Um lote de 100 com 3 workers sao ~34 rodadas; se os destinos penduram
+      # ate o read-timeout de 10s, sao ~7 MINUTOS com a unica thread ocupada. Quem divide essa
+      # thread e o DeliveryReconciliationJob (cron 0 */15), que o ADR-0017 nomeia dono da
+      # recuperacao do que foi para a DLT: o controle de recuperacao simplesmente perde execucoes,
+      # sem erro nenhum.
+      pool:
+        size: 3
+      thread-name-prefix: webhook-sched-
 
 server:
   port: ${SERVER_PORT:8082}
@@ -51,6 +65,9 @@ server:
   shutdown: graceful
 
 management:
+  server:
+    # Actuator em porta própria; ver a nota longa no application.yml da risk-engine.
+    port: ${MANAGEMENT_PORT:9091}
   endpoints:
     web:
       exposure:
@@ -89,7 +106,15 @@ barrier:
     secret-rotation-overlap: PT24H
     max-attempts: 5
     base-backoff: 30s
-    retry-delay-ms: 5000
+    # Teto de entregas simultaneas. Amarra dura: workers <= maximum-pool-size - 2 (folga para o
+    # listener e para os jobs). Com pool 5, o teto e 3. Subir sem subir o pool troca "entrega lenta"
+    # por "timeout ao obter conexao", e a mensagem de erro nao distingue os dois casos.
+    #
+    # A amarra e VERIFICADA na subida (WorkerPoolReadinessGuard), nao apenas documentada aqui.
+    workers: ${WEBHOOK_WORKERS:3}
+    # 1s e nao 5s: desde que o listener parou de entregar inline, este ciclo virou a latencia da
+    # PRIMEIRA tentativa, nao so a do retry. Com 5s, toda entrega esperaria ate 5 segundos.
+    retry-delay-ms: 1000
     consumer:
       # Retry do CONSUMO (não da entrega): falha transitória é retentada sem commitar o offset,
       # até no máximo retry-max-elapsed; depois o evento vai para a DLT e a reconciliação assume.

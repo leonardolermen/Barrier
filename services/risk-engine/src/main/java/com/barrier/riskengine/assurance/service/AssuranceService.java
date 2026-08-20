@@ -7,6 +7,7 @@ import com.barrier.riskengine.assurance.client.ExtractedDocumentFields;
 import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationProvider;
 import com.barrier.riskengine.assurance.client.interfaces.DocumentVerificationProvider;
 import com.barrier.commons.name.NameSimilarity;
+import com.barrier.riskengine.assurance.domain.AssuranceDisabledException;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
@@ -66,7 +67,7 @@ public class AssuranceService {
       SubjectService subjectService,
       FieldVerificationService fieldVerificationService,
       // Kill switch, mesmo padrão de barrier.rescreening.enabled: desligado, o endpoint recusa
-      // (409, IllegalStateException) e nenhum AssuranceCheck nasce — logo nenhuma reavaliação é
+      // (409, AssuranceDisabledException) e nenhum AssuranceCheck nasce — logo nenhuma reavaliação é
       // disparada, porque não há o que notificar. Nasce LIGADO: a etapa já está em uso.
       @Value("${barrier.assurance.enabled:true}") boolean enabled,
       // Mesmo mecanismo dos bureaus (BrasilApiBureauProvider/BigBoostBureauProvider): comparação
@@ -260,12 +261,12 @@ public class AssuranceService {
   /**
    * Kill switch de {@code barrier.assurance.enabled}. 409, não 500 nem 404: é uma recusa
    * deliberada de operação, o mesmo tratamento que {@code ProblemExceptionHandler} já dá a
-   * {@code IllegalStateException}. Roda antes de {@code requireConsent} — desligado, nem a
+   * {@link AssuranceDisabledException}. Roda antes de {@code requireConsent} — desligado, nem a
    * validação de consentimento importa.
    */
   private void requireEnabled() {
     if (!enabled) {
-      throw new IllegalStateException(
+      throw new AssuranceDisabledException(
           "verificação de documentoscopia/biometria está desabilitada"
               + " (barrier.assurance.enabled=false)");
     }

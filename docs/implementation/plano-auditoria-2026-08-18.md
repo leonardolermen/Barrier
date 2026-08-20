@@ -129,7 +129,12 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   coberto pelo filtro (o teste que faltava, não o caso que faltava). ✅ ambos.
   </details>
 
-- [ ] **Nenhum teste de camada web em `mesa` e `behavior`** 🔴
+- [x] **Nenhum teste de camada web em `mesa` e `behavior`** 🔴 — **fechado 2026-08-19**
+  `CaseApiIntegrationTest` (5) e `BehaviorEventApiIntegrationTest` (6) cobrem as três coisas que um
+  teste de domínio não alcança: **auth** (enumerando cada grupo de rota, porque foi um grupo
+  inteiro ficar fora da allowlist que criou o problema), **escopo de tenant** (caso ausente responde
+  igual para qualquer tenant — senão vira oráculo de id; idempotência do behavior é por tenant) e
+  **contrato de status** (202 com `duplicate`, 400 em fila inexistente, 200 com lista vazia).
   É por isso que o item acima passou. `CaseServiceTest`, `SlaClockTest` e
   `BehaviorEventServiceTest` cobrem o domínio com qualidade; a fronteira HTTP não tem nada.
   Não é lacuna de cobertura, é lacuna de **categoria** — e o custo dela foi duas entregas
@@ -141,7 +146,12 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   *Pronto quando:* cada controller tem teste de fronteira (auth, escopo de tenant, contrato de
   status), no padrão de `WebhookEndpointApiIntegrationTest`.
 
-- [ ] **`/actuator` sem autenticação** 🟠
+- [x] **`/actuator` sem autenticação** 🟠 — **fechado 2026-08-19**
+  Porta de gestão separada (9090/9091), ausente do `Service`. Porta em vez de filtro de propósito:
+  filtro dependeria de acertar o padrão de rota de novo, que é como `/v1/mesa` ficou aberto.
+  `ActuatorPortIsolationTest` afirma pela **porta pública** que os endpoints dão 404, que a de
+  gestão serve as probes, e que as duas são de fato distintas (senão o primeiro passaria por
+  acidente).
   `management.endpoints.web.exposure.include=health,info,metrics,prometheus` e **nenhum filtro
   cobre `/actuator`** (não há Spring Security no classpath). `/actuator/prometheus` entrega
   volume por tenant, taxa de aprovação/recusa e profundidade de fila: inteligência competitiva,
@@ -150,7 +160,10 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   *Pronto quando:* actuator em porta separada não exposta, ou atrás de auth; teste provando
   401/404 na porta pública.
 
-- [ ] **Não existe CI, não existe Dockerfile, não existe IaC** 🔴
+- [x] **Não existe CI, não existe Dockerfile, não existe IaC** 🔴 — **fechado 2026-08-19** (`d5bb9cc`)
+  CI em `.github/workflows/ci.yml` (verify com Testcontainers + build das imagens + scan de CVE),
+  `Dockerfile` multi-stage e manifests em `deploy/k8s/`. Ver
+  [plano-escala-horizontal.md](plano-escala-horizontal.md).
   `find -iname Dockerfile` retorna vazio; não há `.github/`. O `docker-compose.yml` sobe só
   Postgres e Kafka de dev. Consequências: a suíte de 684 testes é verde **por alegação** (nunca
   em pipeline); todo o desenho de lease/`SKIP LOCKED`/`@Version` existe para réplicas que
@@ -163,13 +176,33 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   *Pronto quando:* push roda `mvnw verify` com Testcontainers e falha o build; imagem publicada
   e subindo com `docker compose up`; scan de dependência ativo; badge no README.
 
-- [ ] **`JSONB` nas colunas de evidência** 🟠 — *item já aberto na Onda 1*
-  Ver [plano-remediacao-auditoria.md](plano-remediacao-auditoria.md). Sobe para P0 aqui porque
-  agora há um consumidor que estoura de verdade: PJ com QSA grande + múltiplos matches +
-  `evaluated_json` com 12 regras em `VARCHAR(4000)`. O que não cabe é **a evidência de
-  auditoria**, e o modo de falha é poison pill.
+- [x] **`JSONB` nas colunas de evidência** 🟠 — **já estava resolvido; item da auditoria estava desatualizado**
+  A **V026** já converteu `hits_json`, `results_json` e `partners_json` para JSONB (e `factors`
+  para TEXT), depois de um CNPJ com 41 sócios derrubar a avaliação inteira. A auditoria listou o
+  item como aberto sem conferir as migrations — vale como lembrete de que achado de auditoria
+  também precisa de verificação.
 
-- [ ] **`IllegalStateException → 409` genérico vaza mensagem interna** 🟢
+  **Mas a varredura encontrou o que a V026 não pegou:** `outbox.payload` e `deliveries.payload`
+  continuavam `VARCHAR(4000)`. Corrigido em V047/V007 — preventivo, não corretivo (os três
+  eventos de hoje têm forma fixa e campos curtos), porque o modo de falha ali é pior: a gravação
+  da outbox roda na **mesma transação** que conclui a avaliação, então payload grande não perde o
+  evento — **reverte a conclusão**, e a avaliação refaz as consultas pagas até
+  `FALHA_PROCESSAMENTO`. Basta alguém acrescentar os fatores explicáveis ao payload para o teto
+  voltar a morder.
+
+  ⚠️ **TEXT, não JSONB**, ao contrário da V026: `WebhookDeliveryService` calcula o HMAC sobre o
+  payload **lido do banco** e envia essa mesma string. JSONB normaliza (reordena chaves, remove
+  espaços), então o parceiro receberia bytes diferentes dos serializados pelo produtor. Fidelidade
+  de bytes é requisito nessa coluna; a consultabilidade que justificou JSONB na evidência não vale
+  o risco.
+
+- [x] **`IllegalStateException → 409` genérico vaza mensagem interna** 🟢 — **fechado 2026-08-19**
+  `AssessmentStateException` e `AssuranceDisabledException` no padrão do
+  `DocumentGateNotSatisfiedException`; o handler genérico saiu e esses casos viram 500 sem detalhe.
+  **O tipo da exceção passou a ser a decisão do que é público.** `ProblemExceptionHandlerTest` é
+  reflexivo e falha se qualquer handler voltar a tratar exceção genérica da plataforma — com
+  `IllegalArgumentException → 400` registrada como exceção consciente à regra, para não ser
+  "corrigida" depois por simetria.
   O handler devolve `e.getMessage()` ao chamador. Foi assim que a mensagem
   "Rota declara AuthenticatedTenant mas não está coberta pelo filtro" ficou pública. Mapear as
   causas legítimas (kill switch desligado etc.) em exceções próprias — o projeto já faz isso
@@ -181,7 +214,38 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
 
 ## 🟠 P1 — MVP (1–3 meses)
 
-- [ ] **`findNameEntries()` é `jpa.findAll()`: a watchlist inteira em heap, por avaliação** 🔴
+- [x] **`findNameEntries()` é `jpa.findAll()`: a watchlist inteira em heap, por avaliação** 🔴 — **fechado 2026-08-19** (branch `perf/screening-indexado`)
+  Blocking por trigrama (`pg_trgm`, operador `<%`, V048). **31× mais rápido** com 100 mil entradas:
+  360ms → 13ms, medido, não estimado. Pior caso (`JOSE SILVA`, os tokens mais comuns da base)
+  traz 11,6% da base em vez de 100%.
+
+  **O benchmark reprovou duas implementações minhas antes de aprovar a terceira**, e esse é o
+  registro que importa:
+
+  | Versão | Tempo | Plano do Postgres |
+  |---|---|---|
+  | `findAll()` original | 360ms | 100.000 linhas materializadas |
+  | `EXISTS (unnest(...))` | 939ms | seq scan + subconsulta por linha |
+  | predicados `OR` | 946ms | **seq scan** — o planner recusou o índice |
+  | `UNION` | **13ms** | bitmap index scan por ramo |
+
+  Com **um** token o `OR` virava `BitmapOr` sobre o GIN em 2,5ms; com **três**, o planner estimou
+  que três bitmap scans custam mais que varrer e escolheu `Seq Scan`, avaliando `<%` nas 100 mil
+  linhas três vezes (`Rows Removed by Filter: 100002`). **"Usa índice" não é propriedade do SQL, é
+  decisão do planner** — e muda com o número de predicados e o tamanho da tabela. `UNION` torna o
+  plano determinístico.
+
+  Também vale registrar uma hipótese **errada** que custou uma rodada: atribuí o custo a
+  dirty-checking de 100 mil entidades JPA deixadas pelo aquecimento; reordenei as medições e o
+  número não mudou. Só o `EXPLAIN ANALYZE` da consulta *exata* (com o mesmo número de tokens e o
+  mesmo limiar) deu a resposta — o EXPLAIN que eu tinha rodado antes usava 1 token e o limiar
+  default, e por isso mostrava um plano que a aplicação nunca executava.
+
+  Duas decisões de segurança no desenho: **normalização em Java, nunca em SQL** (duas
+  implementações divergem, e a divergência vira candidato não encontrado — falso negativo
+  silencioso); e **fail-open** — `name_normalized` nasce NULL e essas linhas entram sempre como
+  candidatas, então enquanto a coluna não estiver preenchida o comportamento é o antigo: mais
+  lento, nunca menos abrangente.
   `WatchlistEntryRepositoryImpl:119`. O `FuzzyNameWatchlistProvider` materializa **a tabela
   toda** e roda Jaro-Winkler token a token sobre ela, uma vez por avaliação (o `searchAll`
   batendo todas as partes de uma vez já economiza o que dava — o problema é o `findAll`). Em
@@ -196,7 +260,23 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   fonética) e o fuzzy roda só sobre eles; benchmark com **500k entradas reais** mostrando p99 e
   alocação estáveis; e o golden dataset abaixo provando que **o recall não caiu**.
 
-- [ ] **Golden dataset rotulado de screening + calibragem por recall** 🔴
+- [x] **Golden dataset rotulado de screening + calibragem por recall** 🔴 — **fechado 2026-08-19**
+  `golden-dataset.csv` (48 pares rotulados) + `ScreeningRecallTest` (curva) +
+  `BlockingRecallIntegrationTest` (o blocking não descarta nenhum par que o algoritmo casaria).
+  A curva mostra 0.90 numa região **plana** — recall 1.00 de 0.80 a 0.94 —, o que transforma
+  "0.90 porque pareceu razoável" em "0.90 porque a região é estável".
+
+  **O conjunto criticou a si mesmo:** a primeira versão dava precisão 1.00 até com limiar 0.80,
+  sinal de que os negativos eram fáceis demais e o eixo de falso positivo não era exercitado por
+  nada. Com negativos difíceis o teste quebrou e revelou o trade-off real — a 0.90 casam
+  `SILVA`×`SILVEIRA`, `PINTO`×`PINHO`, `CLAUDIA`×`CLAUDIO`, `ANDRADE`×`ANDRADA`. É a decisão
+  **certa**: 0.96 levaria a precisão a 1.00 e o recall a 0.92 — trocaria quatro revisões manuais
+  por um sancionado não encontrado.
+
+  ⚠️ **Limitação declarada no próprio CSV:** o conjunto é sintético e estrutural. Trava o
+  comportamento do algoritmo nos padrões conhecidos; **não** estima recall de produção. Casos reais
+  rotulados por analista, com a distribuição de verdade, seguem sendo trabalho próprio — e é isso
+  que fecharia a calibragem para um regulador.
   Item já aberto no plano de remediação, promovido aqui a pré-requisito do anterior. O limiar
   0.90 por token foi escolhido por raciocínio — bom raciocínio, registrado — e não por curva de
   recall/precisão. Sem conjunto rotulado, não há como provar que o índice do item acima não

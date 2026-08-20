@@ -94,6 +94,8 @@ class WebhookDeliveryIntegrationTest {
             "{\"status\":\"APROVADO\",\"tenantId\":\"default\"}");
 
     service.onEvent(envelope, "default");
+    // O listener so persiste desde que a entrega saiu da thread do Kafka; quem entrega e o pool.
+    service.retryDue();
 
     assertThat(receivedBody).contains("APROVADO");
     assertThat(receivedSignature).startsWith("sha256=");
@@ -120,6 +122,7 @@ class WebhookDeliveryIntegrationTest {
             "{\"status\":\"REPROVADO\",\"tenantId\":\"acme\"}");
 
     service.onEvent(envelope, "acme");
+    service.retryDue();
 
     assertThat(acmeBody).contains("REPROVADO");
     assertThat(receivedBody).isNull();

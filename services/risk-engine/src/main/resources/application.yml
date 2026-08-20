@@ -49,6 +49,20 @@ spring:
       thread-name-prefix: barrier-sched-
 
 management:
+  server:
+    # Actuator em porta PRÓPRIA, que o Service do Kubernetes não publica.
+    #
+    # Antes ele era servido na mesma porta da API de negócio, e nenhum filtro cobre /actuator (não
+    # há Spring Security no classpath; TenantAuthenticationFilter e AdminApiKeyFilter só olham
+    # /v1/). Ou seja: qualquer chamador anônimo lia /actuator/prometheus, que entrega volume por
+    # tenant, taxa de aprovação e recusa e profundidade de fila — inteligência competitiva sobre os
+    # parceiros, e sinal de fraude, porque um atacante observa em agregado se a tentativa dele
+    # passou.
+    #
+    # Porta separada em vez de filtro de propósito: filtro dependeria de acertar o padrão de rota,
+    # que é exatamente como /v1/mesa ficou aberto. Aqui a superfície some da porta pública por
+    # construção. Probes do kubelet e scrape do Prometheus falam com esta porta dentro do cluster.
+    port: ${MANAGEMENT_PORT:9090}
   endpoints:
     web:
       exposure:
@@ -108,6 +122,15 @@ barrier:
     # em dev o filtro fica inerte; em prod a aplicação não sobe sem ela (AdminApiKeyReadinessGuard).
     api-key: ${ADMIN_API_KEY:}
   assessment:
+    # Teto de avaliacoes simultaneas — e, portanto, de consultas PAGAS de bureau por vez.
+    # Amarra dura: workers <= maximum-pool-size - 2 (folga para ingestao e demais jobs). Com
+    # DB_POOL_SIZE=8, o teto e 6. Subir workers sem subir o pool troca "fila lenta" por "timeout
+    # ao obter conexao", e a mensagem de erro nao distingue os dois casos.
+    #
+    # A amarra e VERIFICADA na subida (WorkerPoolReadinessGuard): enquanto vivia so aqui, era
+    # comentario — ASSESSMENT_WORKERS=12 com DB_POOL_SIZE=8 subia normal e quebrava sob carga,
+    # com o sintoma apontando para o banco.
+    workers: ${ASSESSMENT_WORKERS:4}
     processor-delay-ms: 2000
     # Posse de uma avaliação reivindicada. Precisa ser maior que o pior caso de processamento
     # (cadeia de bureaus + screening); curta demais faz outra réplica reprocessar em paralelo.

@@ -32,8 +32,15 @@
         <archunit.version>1.5.0</archunit.version>
         <spotless.version>2.44.0</spotless.version>
         <testcontainers.version>1.21.4</testcontainers.version>
-        <!-- Testes de carga ficam fora do build; rode com -DexcludedGroups= -Dgroups=load -->
-        <excludedGroups>load</excludedGroups>
+        <!-- Fora do build padrão, pelo mesmo motivo: medem tempo/volume em vez de corretude, e
+             falham por ruído de máquina num runner compartilhado — o que ensina o time a
+             reexecutar o build em vez de ler o que ele diz.
+               load      — teste de carga
+               benchmark — medida de ordem de grandeza (o de screening sobe 100 mil entradas)
+             Os testes de RECALL do screening, que impedem a otimização de perder cobertura, não
+             têm tag e rodam sempre.
+             Rodar sob demanda:  ./mvnw test -DexcludedGroups= -Dgroups=benchmark -->
+        <excludedGroups>load,benchmark</excludedGroups>
     </properties>
 
     <dependencyManagement>
@@ -82,6 +89,7 @@
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
+
         </plugins>
 
         <pluginManagement>

@@ -12,12 +12,18 @@ import com.barrier.webhook.repository.DeliveryRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Entrega os resultados de avaliação ao endpoint do cliente.
@@ -38,6 +44,12 @@ public class WebhookDeliveryService {
   private final WebhookProperties properties;
   private final TransactionTemplate transactionTemplate;
   private final Duration lease;
+  private final ObjectMapper objectMapper;
+
+  /** Virtual threads: a tarefa fica bloqueada esperando o destino, nao uma thread de plataforma. */
+  private final ExecutorService entregas = Executors.newVirtualThreadPerTaskExecutor();
+
+  private final Semaphore permissoes;
 
   public WebhookDeliveryService(
       DeliveryRepository repository,
@@ -46,6 +58,8 @@ public class WebhookDeliveryService {
       HmacSigner signer,
       WebhookProperties properties,
       TransactionTemplate transactionTemplate,
+      ObjectMapper objectMapper,
+      @Value("${barrier.webhook.workers:3}") int workers,
       @Value("${barrier.webhook.lease:PT2M}") Duration lease) {
     this.repository = repository;
     this.endpoints = endpoints;
@@ -53,6 +67,8 @@ public class WebhookDeliveryService {
     this.signer = signer;
     this.properties = properties;
     this.transactionTemplate = transactionTemplate;
+    this.objectMapper = objectMapper;
+    this.permissoes = new Semaphore(workers);
     // Precisa ser maior que o pior caso de uma tentativa (connect + read timeout do cliente);
     // curta demais faz outro worker reenviar enquanto o POST original ainda está em voo.
     this.lease = lease;
@@ -85,12 +101,19 @@ public class WebhookDeliveryService {
                   envelope.assessmentId(),
                   tenantId,
                   targetUrl,
-                  envelope.payload()));
+                  envelope.payload(),
+                  partitionKeyDe(envelope.payload())));
     } catch (DataIntegrityViolationException e) {
       log.debug("Entrega concorrente para o evento {}; ignorando", envelope.eventId());
       return;
     }
-    attempt(delivery);
+    // A entrega NÃO acontece aqui, de propósito: este método roda na thread do listener Kafka, e um
+    // destino que aceita a conexão e demora seguraria o consumo daquela partição — o parceiro lento
+    // atrasaria todos que a compartilham, não só a si mesmo. O timeout mitiga, não resolve.
+    //
+    // Quem entrega é o retryDue(), pelo pool. A latência do parceiro deixa de existir no caminho do
+    // broker; o custo é a primeira tentativa esperar um ciclo do scheduler.
+    log.debug("Entrega {} registrada; sera enviada pelo pool", delivery.eventId());
   }
 
   /**
@@ -108,8 +131,52 @@ public class WebhookDeliveryService {
     if (due == null || due.isEmpty()) {
       return 0;
     }
-    due.forEach(this::attempt);
+    var tarefas =
+        due.stream()
+            .map(d -> CompletableFuture.runAsync(() -> comPermissao(() -> attempt(d)), entregas))
+            .toList();
+    // Espera o lote: sem isto o ciclo seguinte reivindicaria com o anterior ainda em voo, e a
+    // concorrência real deixaria de ser a que o teto declara.
+    CompletableFuture.allOf(tarefas.toArray(CompletableFuture[]::new)).join();
     return due.size();
+  }
+
+  /**
+   * O semáforo é o teto de entregas simultâneas — e, por consequência, o que protege o pool de
+   * conexões e o parceiro de receber uma rajada.
+   *
+   * <p>Virtual thread não cria conexão de banco nem paciência no destino: sem este limite, o lote
+   * inteiro (100) sairia de uma vez sobre um pool de 5 conexões. <b>O limite é a feature</b> —
+   * {@code newVirtualThreadPerTaskExecutor()} sozinho não tem nenhum.
+   */
+  private void comPermissao(Runnable tarefa) {
+    permissoes.acquireUninterruptibly();
+    try {
+      tarefa.run();
+    } finally {
+      permissoes.release();
+    }
+  }
+
+  /**
+   * Chave de ordenação a partir do payload.
+   *
+   * <p>Não sai do envelope: o {@code assessmentId} dele é o id do <b>agregado</b> do evento, e dois
+   * eventos sobre o mesmo cliente (a decisão e a mudança de nível de risco) têm agregados
+   * diferentes. Ordenar por ele não ordenaria nada.
+   *
+   * <p>Payload sem subject — ou ilegível — devolve {@code null}: <b>sem ordem exigida é melhor que
+   * entrega bloqueada</b>. Payload ilegível já tem tratamento próprio no consumo
+   * ({@code MalformedEventException} → DLT); não é aqui que ele deve falhar.
+   */
+  private String partitionKeyDe(String payload) {
+    try {
+      Map<String, Object> corpo = objectMapper.readValue(payload, Map.class);
+      Object subject = corpo.get("subjectId");
+      return subject == null ? null : subject.toString();
+    } catch (RuntimeException e) {
+      return null;
+    }
   }
 
   private void attempt(Delivery delivery) {

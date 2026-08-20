@@ -1,6 +1,8 @@
 package com.barrier.riskengine.screening.watchlist;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.screening.client.WatchlistEntry;
@@ -21,7 +23,7 @@ class FuzzyNameWatchlistProviderTest {
   @Mock WatchlistEntryRepository repository;
 
   private FuzzyNameWatchlistProvider provider() {
-    return new FuzzyNameWatchlistProvider(repository, 0.90, 6);
+    return new FuzzyNameWatchlistProvider(repository, 0.90, 6, 0.45);
   }
 
   private WatchlistQuery query(String name) {
@@ -34,7 +36,7 @@ class FuzzyNameWatchlistProviderTest {
 
   @Test
   void nomeQuaseIgualComAcentoEViraHit() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
 
     List<WatchlistEntry> hits = provider().search(query("Osama Bin Láden"));
 
@@ -45,14 +47,14 @@ class FuzzyNameWatchlistProviderTest {
 
   @Test
   void nomeDiferenteNaoCasa() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
 
     assertThat(provider().search(query("Maria da Silva"))).isEmpty();
   }
 
   @Test
   void apelidoIngeridoComoEntradaTambemCasa() {
-    when(repository.findNameEntries())
+    when(repository.findNameCandidates(any(), anyDouble()))
         .thenReturn(List.of(ofac("USAMA BIN LADIN"))); // aka grafado diferente
 
     assertThat(provider().search(query("Usama Bin Ladin"))).hasSize(1);
@@ -66,7 +68,7 @@ class FuzzyNameWatchlistProviderTest {
    */
   @Test
   void nomeNaOrdemInvertidaDaListaCasa() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("SILVA, JOSE ANTONIO")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("SILVA, JOSE ANTONIO")));
 
     assertThat(provider().search(query("Jose Antonio da Silva"))).hasSize(1);
   }
@@ -74,14 +76,14 @@ class FuzzyNameWatchlistProviderTest {
   /** O cadastro informa o nome completo; a lista publica só parte dele (ou o contrário). */
   @Test
   void casaEmQualquerDirecaoQuandoUmNomeTemMaisTokensQueOOutro() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("JOSE ANTONIO SILVA SANTOS")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("JOSE ANTONIO SILVA SANTOS")));
 
     assertThat(provider().search(query("Jose Antonio Silva"))).hasSize(1);
   }
 
   @Test
   void casaNomeDeListaMaisCurtoQueOCadastro() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("ANTONIO SANTOS")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("ANTONIO SANTOS")));
 
     assertThat(provider().search(query("Antonio Santos de Oliveira"))).hasSize(1);
   }
@@ -89,7 +91,7 @@ class FuzzyNameWatchlistProviderTest {
   /** Erro de digitação dentro de um token ainda casa; sobrenome diferente, não. */
   @Test
   void toleraErroDeDigitacaoMasSeparaSobrenomesDiferentes() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("ANTONIO CARLOS PEREIRA")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("ANTONIO CARLOS PEREIRA")));
 
     assertThat(provider().search(query("Antonio Carlos Pereria"))).hasSize(1);
     assertThat(provider().search(query("Antonio Carlos Machado"))).isEmpty();
@@ -101,7 +103,7 @@ class FuzzyNameWatchlistProviderTest {
    */
   @Test
   void primeiroNomeIgualNaoBastaParaCasar() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("CARLOS ROBERTO MENDES")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("CARLOS ROBERTO MENDES")));
 
     assertThat(provider().search(query("Carlos Eduardo Nunes"))).isEmpty();
   }
@@ -112,7 +114,7 @@ class FuzzyNameWatchlistProviderTest {
    */
   @Test
   void socioNaListaGeraApontamentoAtribuidoAoSocio() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("SILVA, JOSE ANTONIO")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("SILVA, JOSE ANTONIO")));
 
     List<WatchlistEntry> hits =
         provider()
@@ -132,7 +134,7 @@ class FuzzyNameWatchlistProviderTest {
    */
   @Test
   void carregaABaseUmaVezSoParaTodasAsPartes() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
 
     provider()
         .searchAll(
@@ -142,7 +144,15 @@ class FuzzyNameWatchlistProviderTest {
                 WatchlistQuery.of("CNPJ", ScreenedParty.socio("Maria Souza")),
                 WatchlistQuery.of("CNPJ", ScreenedParty.socio("Pedro Alves"))));
 
-    org.mockito.Mockito.verify(repository, org.mockito.Mockito.times(1)).findNameEntries();
+    // Uma única busca de candidatos para as quatro partes — e ela leva os tokens de TODAS.
+    // Com o blocking por índice a propriedade ficou mais importante, não menos: uma ida ao banco
+    // por sócio trocaria a memória economizada por latência de rede, N vezes por avaliação de PJ.
+    var tokens = org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
+    org.mockito.Mockito.verify(repository, org.mockito.Mockito.times(1))
+        .findNameCandidates(tokens.capture(), anyDouble());
+    assertThat(tokens.getValue())
+        .as("a busca precisa cobrir os tokens de todas as partes, senão um sócio fica sem candidato")
+        .contains("ACME", "JOAO", "SILVA", "MARIA", "SOUZA", "PEDRO", "ALVES");
   }
 
   @Test
@@ -161,7 +171,7 @@ class FuzzyNameWatchlistProviderTest {
    */
   @Test
   void cpfParcialDivergenteDescartaOCandidatoMesmoComNomeIdentico() {
-    when(repository.findNameEntries()).thenReturn(List.of(pep("JOAO DA SILVA", "111111")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(pep("JOAO DA SILVA", "111111")));
 
     // CPF consultado 529.982.247-25 -> centrais "982247", que não batem com "111111"
     List<WatchlistEntry> hits =
@@ -172,7 +182,7 @@ class FuzzyNameWatchlistProviderTest {
 
   @Test
   void cpfParcialCoincidenteConfirmaOMatchERegistraNaEvidencia() {
-    when(repository.findNameEntries()).thenReturn(List.of(pep("JOAO DA SILVA", "982247")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(pep("JOAO DA SILVA", "982247")));
 
     List<WatchlistEntry> hits =
         provider().search(new WatchlistQuery("CPF", "52998224725", "Joao da Silva"));
@@ -185,7 +195,7 @@ class FuzzyNameWatchlistProviderTest {
   /** Entrada com CPF parcial nunca é a mesma entidade que um CNPJ consultado. */
   @Test
   void consultaDeCnpjNaoCasaComEntradaDeCpfParcial() {
-    when(repository.findNameEntries()).thenReturn(List.of(pep("ACME COMERCIO", "982247")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(pep("ACME COMERCIO", "982247")));
 
     assertThat(provider().search(new WatchlistQuery("CNPJ", "11444777000161", "Acme Comercio")))
         .isEmpty();
@@ -194,7 +204,7 @@ class FuzzyNameWatchlistProviderTest {
   /** Entradas sem discriminador (OFAC) seguem decidindo só pelo nome, como antes. */
   @Test
   void entradaSemCpfParcialSegueDecidindoApenasPeloNome() {
-    when(repository.findNameEntries()).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
+    when(repository.findNameCandidates(any(), anyDouble())).thenReturn(List.of(ofac("OSAMA BIN LADEN")));
 
     assertThat(provider().search(new WatchlistQuery("CPF", "52998224725", "Osama Bin Laden")))
         .hasSize(1);

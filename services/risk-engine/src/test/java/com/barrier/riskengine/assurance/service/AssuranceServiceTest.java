@@ -13,6 +13,7 @@ import com.barrier.riskengine.assurance.client.DocumentSubmission;
 import com.barrier.riskengine.assurance.client.DocumentVerificationResult;
 import com.barrier.riskengine.assurance.client.interfaces.BiometricVerificationProvider;
 import com.barrier.riskengine.assurance.client.interfaces.DocumentVerificationProvider;
+import com.barrier.riskengine.assurance.domain.AssuranceDisabledException;
 import com.barrier.riskengine.assurance.domain.AssuranceCheck;
 import com.barrier.riskengine.assurance.domain.AssuranceConsent;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
@@ -135,7 +136,7 @@ class AssuranceServiceTest {
 
     assertThatThrownBy(
             () -> desabilitado.verifyDocument(SUBJECT, "tenant-1", submissao(), consentimento()))
-        .isInstanceOf(IllegalStateException.class)
+        .isInstanceOf(AssuranceDisabledException.class)
         .hasMessageContaining("desabilitada");
 
     verifyNoInteractions(documentProvider, repository, listener);
@@ -163,7 +164,7 @@ class AssuranceServiceTest {
                     "tenant-1",
                     new BiometricSubmission("selfie", "face", "hash"),
                     consentimento()))
-        .isInstanceOf(IllegalStateException.class)
+        .isInstanceOf(AssuranceDisabledException.class)
         .hasMessageContaining("desabilitada");
 
     verifyNoInteractions(biometricProvider, repository, listener);
@@ -278,7 +279,7 @@ class AssuranceServiceTest {
   /**
    * Sem nenhum {@code AssuranceCheck} de DOCUMENT para o par, a biometria recusa antes de acionar
    * o provider — que é chamada paga. {@code DocumentGateNotSatisfiedException}, não {@code
-   * IllegalStateException}: o parceiro precisa distinguir "falta documentoscopia" de "kill switch
+   * AssuranceDisabledException}: o parceiro precisa distinguir "falta documentoscopia" de "kill switch
    * desligado".
    */
   @Test

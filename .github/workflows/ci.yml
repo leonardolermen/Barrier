@@ -5,15 +5,18 @@ name: CI
 # alguém ter Docker de pé na própria máquina. Enquanto isso não existir, toda correção é aposta
 # sem rede.
 on:
+  # Só main + PR. Com `branches: ["**"]` no push, toda branch com PR aberto rodava DUAS vezes (uma
+  # pelo push, outra pelo pull_request), e as duas não se cancelavam porque o `github.ref` difere
+  # entre elas. Dobrar o custo de CI para verificar o mesmo commit é desperdício que cresce com o
+  # time.
   push:
-    branches: ["**"]
-  pull_request:
     branches: [main]
+  pull_request:
 
-# Push seguido de push na mesma branch cancela o build anterior: fila de CI que só cresce vira
-# CI que ninguém espera, e CI que ninguém espera não barra nada.
+# Push seguido de push no mesmo PR cancela o build anterior: fila de CI que só cresce vira CI que
+# ninguém espera, e CI que ninguém espera não barra nada.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -69,7 +72,7 @@ jobs:
       # achados da auditoria. Não falha o build por enquanto — primeiro é preciso ver o ruído de
       # base para calibrar a severidade que barra.
       - name: Trivy (dependências)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scanners: vuln

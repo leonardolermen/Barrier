@@ -19,7 +19,12 @@ spec:
           image: barrier/risk-engine:dev
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
+            # Porta de gestão: declarada para o kubelet e o Prometheus, e DELIBERADAMENTE ausente
+            # do Service abaixo — é isso que a mantém inalcançável de fora do cluster.
+            - name: management
+              containerPort: 9090
           env:
             - name: DB_URL
               value: jdbc:postgresql://postgres:5432/barrier
@@ -41,7 +46,7 @@ spec:
 
           # "Pode receber tráfego?" — falhou, sai do balanceador (não reinicia).
           readinessProbe:
-            httpGet: { path: /actuator/health/readiness, port: 8080 }
+            httpGet: { path: /actuator/health/readiness, port: management }
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 3
@@ -51,7 +56,7 @@ spec:
           # fora daqui é intencional — cobertura de lista caída reiniciaria os 5 pods em loop por
           # um problema que reiniciar não resolve (ver application.yml).
           livenessProbe:
-            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            httpGet: { path: /actuator/health/liveness, port: management }
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 3
@@ -59,7 +64,7 @@ spec:
           # Cobre a subida lenta (Flyway + importação inicial de watchlist) sem afrouxar a
           # liveness depois: enquanto esta passa, as outras não contam falha.
           startupProbe:
-            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            httpGet: { path: /actuator/health/liveness, port: management }
             periodSeconds: 5
             failureThreshold: 60
 ---

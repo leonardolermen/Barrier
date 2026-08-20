@@ -1,0 +1,85 @@
+# Conjunto rotulado de pares (nome consultado, nome na lista) para calibrar e travar o match por
+# nome do screening.
+#
+# POR QUE EXISTE: o limiar de 0.90 foi escolhido por raciocínio — bom raciocínio, registrado no
+# Javadoc do FuzzyNameWatchlistProvider — e nunca por curva de recall/precisão. Sem conjunto
+# rotulado não há como provar que uma mudança de performance (índice, blocking) não perdeu
+# ninguém, e "não perder ninguém" é a única coisa que importa num controle de sanções.
+#
+# LIMITAÇÃO, declarada de propósito: estes pares são SINTÉTICOS e estruturais. Cobrem os padrões
+# que quebram matching de nome brasileiro e de lista internacional (inversão SOBRENOME/Nome,
+# acento, dígrafo, erro de digitação, ruído societário, homônimo parcial). NÃO são amostra de
+# tráfego real, então NÃO estimam o recall de produção — estimam se o algoritmo continua tratando
+# cada padrão conhecido do jeito decidido. Substituir por casos reais rotulados por analista, com
+# a distribuição de verdade, é trabalho próprio e é o que fecharia o item de calibragem.
+#
+# COLUNAS: consultado;lista;esperado;categoria
+# esperado = MATCH (a lista deve apontar) | NO_MATCH (não deve)
+consultado;lista;esperado;categoria
+# --- inversão de ordem: OFAC/CSNU publicam "SOBRENOME, Nome" ---
+JOSE ANTONIO DA SILVA;SILVA, JOSE ANTONIO;MATCH;inversao
+MARIA CLARA SOUZA;SOUZA, MARIA CLARA;MATCH;inversao
+CARLOS EDUARDO PEREIRA LIMA;LIMA, CARLOS EDUARDO PEREIRA;MATCH;inversao
+ANA BEATRIZ GOMES;GOMES, ANA BEATRIZ;MATCH;inversao
+# --- acento e cedilha: o cadastro tem, a lista costuma não ter ---
+JOAO JOSE CONCEICAO;JOÃO JOSÉ CONCEIÇÃO;MATCH;acento
+LUIS INACIO SIMOES;LUÍS INÁCIO SIMÕES;MATCH;acento
+ANTONIO ASSUNCAO;ANTÔNIO ASSUNÇÃO;MATCH;acento
+# --- caixa e espaçamento ---
+roberto carlos nascimento;ROBERTO CARLOS NASCIMENTO;MATCH;caixa
+PAULO   HENRIQUE   ROCHA;PAULO HENRIQUE ROCHA;MATCH;espacamento
+# --- erro de digitação de um caractere ---
+JONATHAN OLIVEIRA;JONATAN OLIVEIRA;MATCH;typo
+CRISTINA MACHADO;CRISTIMA MACHADO;MATCH;typo
+FERNANDO CAVALCANTI;FERNANDO CAVALCANTE;MATCH;typo
+# --- conectivos são ruído e não podem decidir nada ---
+JOSE DE ALMEIDA SANTOS;JOSE ALMEIDA SANTOS;MATCH;conectivo
+MARIA DAS DORES BATISTA;MARIA DORES BATISTA;MATCH;conectivo
+# --- cobertura direcional: nome curto coberto por nome longo da lista ---
+RICARDO MENDONCA;RICARDO ALVES MENDONCA;MATCH;subconjunto
+PATRICIA FONSECA;PATRICIA HELENA FONSECA BRAGA;MATCH;subconjunto
+# --- e o inverso: lista curta, cadastro longo ---
+EDUARDO VIANA CASTRO;EDUARDO CASTRO;MATCH;subconjunto_inverso
+# --- PJ: forma societária e porte são ruído ---
+CONSTRUTORA HORIZONTE LTDA;CONSTRUTORA HORIZONTE;MATCH;pj_forma
+METALURGICA ATLAS S A;METALURGICA ATLAS;MATCH;pj_forma
+TRANSPORTES BOA VISTA EIRELI;TRANSPORTES BOA VISTA LTDA;MATCH;pj_forma
+COMERCIAL PANTANAL ME;COMERCIAL PANTANAL;MATCH;pj_forma
+# --- nomes estrangeiros das listas internacionais ---
+ABDUL RAHMAN HASSAN;HASSAN, ABDUL RAHMAN;MATCH;estrangeiro
+VLADIMIR SOKOLOV;SOKOLOV, VLADIMIR;MATCH;estrangeiro
+CHEN WEI MING;CHEN, WEI MING;MATCH;estrangeiro
+#
+# ================== NÃO DEVE CASAR ==================
+#
+# --- sobrenome em comum não identifica ninguém: é o falso positivo mais caro no Brasil ---
+JOSE SILVA;PEDRO SILVA;NO_MATCH;sobrenome_comum
+MARIA SANTOS;JOANA SANTOS;NO_MATCH;sobrenome_comum
+CARLOS OLIVEIRA;RENATO OLIVEIRA;NO_MATCH;sobrenome_comum
+ANA COSTA;LUCIA COSTA;NO_MATCH;sobrenome_comum
+# --- primeiro nome em comum, sobrenome diferente ---
+JOSE ANTONIO SILVA;JOSE ANTONIO PEREIRA;NO_MATCH;prenome_comum
+MARIA CLARA SOUZA;MARIA CLARA ANDRADE;NO_MATCH;prenome_comum
+# --- um token só nunca cobre um nome composto ---
+SILVA;JOAO PEREIRA DA SILVA;NO_MATCH;token_unico
+SANTOS;MARIA APARECIDA SANTOS;NO_MATCH;token_unico
+# --- pessoas sem relação ---
+FERNANDA RIBEIRO;MARCELO AZEVEDO;NO_MATCH;distinto
+GUSTAVO MOREIRA LEAL;PRISCILA CAMPOS DUARTE;NO_MATCH;distinto
+# --- PJ de ramo parecido, empresa diferente ---
+CONSTRUTORA HORIZONTE LTDA;CONSTRUTORA PLANALTO LTDA;NO_MATCH;pj_distinta
+TRANSPORTES BOA VISTA;TRANSPORTES BOA ESPERANCA;NO_MATCH;pj_distinta
+# --- só ruído societário em comum ---
+COMERCIAL PANTANAL LTDA;INDUSTRIAL ARAGUAIA LTDA;NO_MATCH;pj_so_ruido
+# --- nomes curtos parecidos, pessoas diferentes ---
+ANA LIMA;ANA LEAL;NO_MATCH;curto_parecido
+JOAO REIS;JOAO RUIZ;NO_MATCH;curto_parecido
+# --- NEGATIVOS DIFÍCEIS: um token difere por poucos caracteres ---
+# Sem estes, a precisão fica em 1.00 até com limiar 0.80 e o eixo de falso positivo não é
+# exercitado por nada — a curva pareceria dizer "qualquer limiar serve", que é falso.
+JOSE ANTONIO SILVA;JOSE ANTONIO SILVEIRA;NO_MATCH;dificil_sufixo
+MARCOS VINICIUS ALVES;MARCOS VINICIUS NEVES;NO_MATCH;dificil_troca
+RENATA CARDOSO PINTO;RENATA CARDOSO PINHO;NO_MATCH;dificil_sufixo
+CLAUDIA MARTINS;CLAUDIO MARTINS;NO_MATCH;dificil_genero
+PAULO SERGIO RAMOS;PAULO SERGIO RAMOS FILHO;MATCH;subconjunto
+CONSTRUTORA ANDRADE;CONSTRUTORA ANDRADA;NO_MATCH;dificil_pj
