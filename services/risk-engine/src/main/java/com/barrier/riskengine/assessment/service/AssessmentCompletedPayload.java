@@ -16,6 +16,7 @@ import java.time.Instant;
 public record AssessmentCompletedPayload(
     String assessmentId,
     String tenantId,
+    String subjectId,
     String status,
     String riskLevel,
     String decision,
@@ -27,6 +28,7 @@ public record AssessmentCompletedPayload(
     return new AssessmentCompletedPayload(
         a.id().asString(),
         a.tenantId(),
+        a.subjectId(),
         a.status().name(),
         a.riskLevel() == null ? null : a.riskLevel().name(),
         a.decision(),
