@@ -34,6 +34,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -89,6 +93,11 @@ public class AssessmentProcessor {
   private final AssessmentMetrics metrics;
   private final TransactionTemplate transactionTemplate;
   private final Duration lease;
+
+  /** Virtual threads: a tarefa bloqueada esperando o bureau nao segura thread de plataforma. */
+  private final ExecutorService trabalhadores = Executors.newVirtualThreadPerTaskExecutor();
+
+  private final Semaphore permissoes;
   private final int maxAttempts;
   private final Duration baseBackoff;
   private final boolean requireVerification;
@@ -106,6 +115,7 @@ public class AssessmentProcessor {
       AssessmentEventPublisher eventPublisher,
       AssessmentMetrics metrics,
       TransactionTemplate transactionTemplate,
+      @Value("${barrier.assessment.workers:4}") int workers,
       @Value("${barrier.assessment.lease:PT5M}") Duration lease,
       @Value("${barrier.assessment.max-attempts:5}") int maxAttempts,
       @Value("${barrier.assessment.base-backoff:PT30S}") Duration baseBackoff,
@@ -123,21 +133,58 @@ public class AssessmentProcessor {
     this.metrics = metrics;
     this.transactionTemplate = transactionTemplate;
     this.lease = lease;
+    this.permissoes = new Semaphore(workers);
     this.maxAttempts = maxAttempts;
     this.baseBackoff = baseBackoff;
     this.requireVerification = requireVerification;
   }
 
-  /** Executado periodicamente; também chamável diretamente (ex.: em testes). */
+  /**
+   * Executado periodicamente; também chamável diretamente (ex.: em testes).
+   *
+   * <p><b>O lote roda em paralelo, com teto.</b> Medido antes: ingestão a 148 req/s contra
+   * processamento a 6/s, e 94.222 avaliações presas em {@code EM_ANALISE} — reprodução do modo de
+   * falha do ADR-0015. A causa era este laço: {@code BATCH} de 50 processadas uma a uma, ~126ms
+   * cada, numa thread só.
+   *
+   * <p><b>Espera o lote ({@code allOf}) de propósito.</b> Sem isso o {@code fixedDelay} dispararia o
+   * próximo {@code claimPending} com o lote anterior ainda em voo, e a concorrência real deixaria de
+   * ser a que o teto declara — inaceitável quando a concorrência <b>é</b> o controle de custo.
+   */
   @Scheduled(fixedDelayString = "${barrier.assessment.processor-delay-ms:2000}")
   public int process() {
-    int processed = 0;
-    for (AssessmentId id : repository.claimPending(BATCH, lease)) {
-      if (processOne(id)) {
-        processed++;
-      }
+    List<AssessmentId> lote = repository.claimPending(BATCH, lease);
+    if (lote.isEmpty()) {
+      return 0;
     }
-    return processed;
+    List<CompletableFuture<Boolean>> tarefas =
+        lote.stream()
+            .map(id -> CompletableFuture.supplyAsync(() -> comPermissao(id), trabalhadores))
+            .toList();
+    CompletableFuture.allOf(tarefas.toArray(CompletableFuture[]::new)).join();
+    return (int) tarefas.stream().filter(CompletableFuture::join).count();
+  }
+
+  /**
+   * O semáforo é o teto de avaliações simultâneas — e, por consequência, o teto de consultas
+   * <b>pagas</b> de bureau por vez.
+   *
+   * <p>Virtual thread não cria conexão de banco nem cota de bureau: sem este limite, o lote inteiro
+   * (50) atacaria um pool de 8 conexões e a fatura do provedor ao mesmo tempo.
+   * {@code newVirtualThreadPerTaskExecutor()} sozinho não tem teto nenhum — <b>o limite é a
+   * feature</b>.
+   *
+   * <p>{@code processOne} não mudou: ele já faz {@code MDC.put} e {@code Correlation.run} por conta
+   * própria, e ambos agem na thread corrente — que agora é a virtual thread da tarefa. Não há nada a
+   * propagar de fora, porque nada é herdado de fora.
+   */
+  private boolean comPermissao(AssessmentId id) {
+    permissoes.acquireUninterruptibly();
+    try {
+      return processOne(id);
+    } finally {
+      permissoes.release();
+    }
   }
 
   /**
