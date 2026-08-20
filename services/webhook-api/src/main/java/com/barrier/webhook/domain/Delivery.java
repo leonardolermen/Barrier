@@ -52,10 +52,17 @@ public class Delivery {
     this.status = DeliveryStatus.PENDING;
     this.attempts = 0;
     this.nextAttemptAt = createdAt;
-    // Nasce reivindicada: quem cria é quem tenta a entrega em seguida. Sem isso, a linha já nascia
-    // vencida (next_attempt_at = created_at) e o scheduler a pegava enquanto o POST original ainda
-    // estava em andamento — entrega dobrada numa instância só. Ver migration V003.
-    this.claimedAt = createdAt;
+    // Nasce LIVRE, e isto inverte uma regra anterior.
+    //
+    // Antes: nascia reivindicada (claimedAt = createdAt) porque quem criava era quem tentava a
+    // entrega em seguida — a linha já nasce vencida (next_attempt_at = created_at), e o scheduler
+    // a pegava enquanto o POST original ainda estava em andamento, dobrando a entrega numa
+    // instância só (migration V003).
+    //
+    // Agora o listener não entrega mais: quem entrega é sempre o pool, pelo retryDue(). Não há com
+    // quem competir, e nascer presa deixaria toda PRIMEIRA entrega parada até o lease de 2 minutos
+    // vencer.
+    this.claimedAt = null;
     this.createdAt = createdAt;
   }
 

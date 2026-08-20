@@ -96,7 +96,13 @@ public class WebhookDeliveryService {
       log.debug("Entrega concorrente para o evento {}; ignorando", envelope.eventId());
       return;
     }
-    attempt(delivery);
+    // A entrega NÃO acontece aqui, de propósito: este método roda na thread do listener Kafka, e um
+    // destino que aceita a conexão e demora seguraria o consumo daquela partição — o parceiro lento
+    // atrasaria todos que a compartilham, não só a si mesmo. O timeout mitiga, não resolve.
+    //
+    // Quem entrega é o retryDue(), pelo pool. A latência do parceiro deixa de existir no caminho do
+    // broker; o custo é a primeira tentativa esperar um ciclo do scheduler.
+    log.debug("Entrega {} registrada; sera enviada pelo pool", delivery.eventId());
   }
 
   /**

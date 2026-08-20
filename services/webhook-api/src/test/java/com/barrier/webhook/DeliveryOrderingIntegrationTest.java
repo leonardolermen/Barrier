@@ -29,7 +29,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * <p>Precisa de Postgres real: a exclusão depende de a reivindicação e a consulta de "quem está em
  * voo" enxergarem o mesmo estado transacional.
  */
-@SpringBootTest
+@SpringBootTest(
+    // Scheduler desligado: com retry-delay de 1s ele reivindicaria as entregas ANTES do teste,
+    // e a falha apareceria como "a ordem nao funciona" em vez de "o teste tem corrida".
+    properties = "barrier.webhook.retry-delay-ms=3600000")
 @Testcontainers
 class DeliveryOrderingIntegrationTest {
 

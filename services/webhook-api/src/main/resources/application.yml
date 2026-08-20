@@ -92,7 +92,9 @@ barrier:
     secret-rotation-overlap: PT24H
     max-attempts: 5
     base-backoff: 30s
-    retry-delay-ms: 5000
+    # 1s e nao 5s: desde que o listener parou de entregar inline, este ciclo virou a latencia da
+    # PRIMEIRA tentativa, nao so a do retry. Com 5s, toda entrega esperaria ate 5 segundos.
+    retry-delay-ms: 1000
     consumer:
       # Retry do CONSUMO (não da entrega): falha transitória é retentada sem commitar o offset,
       # até no máximo retry-max-elapsed; depois o evento vai para a DLT e a reconciliação assume.
