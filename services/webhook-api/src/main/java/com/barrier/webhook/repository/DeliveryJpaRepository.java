@@ -37,6 +37,13 @@ interface DeliveryJpaRepository extends JpaRepository<DeliveryEntity, UUID> {
        WHERE d.status IN :statuses
          AND d.nextAttemptAt <= :now
          AND (d.claimedAt IS NULL OR d.claimedAt < :leaseCutoff)
+         AND (d.partitionKey IS NULL
+              OR NOT EXISTS (SELECT 1 FROM DeliveryEntity emVoo
+                              WHERE emVoo.partitionKey = d.partitionKey
+                                AND emVoo.id <> d.id
+                                AND emVoo.status IN :statuses
+                                AND emVoo.claimedAt IS NOT NULL
+                                AND emVoo.claimedAt >= :leaseCutoff))
        ORDER BY d.nextAttemptAt ASC
       """)
   List<DeliveryEntity> selectClaimable(

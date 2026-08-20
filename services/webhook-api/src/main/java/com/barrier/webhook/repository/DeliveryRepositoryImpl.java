@@ -4,7 +4,9 @@ import com.barrier.webhook.domain.Delivery;
 import com.barrier.webhook.domain.DeliveryStatus;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Repository;
@@ -41,7 +43,17 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
             now,
             now.minus(lease),
             Limit.of(limit));
-    claimable.forEach(entity -> entity.setClaimedAt(now));
-    return claimable.stream().map(DeliveryEntityMapper::toDomain).toList();
+    // SEGUNDA trava, e ela é indispensável: a query exclui chaves JÁ em voo, mas duas entregas
+    // recém-criadas do mesmo subject ainda não têm claimedAt — nenhuma bloqueia a outra, e as duas
+    // seriam elegíveis no mesmo lote. Sem esta linha a ordem quebraria dentro de um único ciclo,
+    // que é justamente o caso mais comum: os dois eventos do mesmo cliente chegam juntos.
+    Set<String> chavesNoLote = new HashSet<>();
+    List<DeliveryEntity> lote =
+        claimable.stream()
+            .filter(e -> e.getPartitionKey() == null || chavesNoLote.add(e.getPartitionKey()))
+            .toList();
+
+    lote.forEach(entity -> entity.setClaimedAt(now));
+    return lote.stream().map(DeliveryEntityMapper::toDomain).toList();
   }
 }
