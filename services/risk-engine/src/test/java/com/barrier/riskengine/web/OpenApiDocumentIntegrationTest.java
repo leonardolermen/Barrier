@@ -2,6 +2,8 @@ package com.barrier.riskengine.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -116,5 +118,22 @@ class OpenApiDocumentIntegrationTest {
 
     assertThat(parceiro).contains("securitySchemes");
     assertThat(parceiro).contains("bearerAuth");
+  }
+
+  /**
+   * Grava o spec em {@code target/}, de onde o CI o publica como artefato.
+   *
+   * <p>Gerado por TESTE e nao por plugin de build: assim o arquivo publicado e exatamente o que a
+   * aplicacao serve, e nao o que uma segunda ferramenta acha que ela serve. Duas fontes divergem, e
+   * a divergencia aqui e o parceiro integrando contra um contrato que nao existe.
+   */
+  @Test
+  void gravaOContratoParaPublicacao() throws Exception {
+    String parceiro = spec("parceiro");
+    Path destino = Path.of("target", "openapi-parceiro.json");
+    Files.writeString(destino, parceiro);
+
+    assertThat(destino).exists();
+    assertThat(Files.readString(destino)).contains("/v1/assessments");
   }
 }
