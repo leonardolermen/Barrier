@@ -767,6 +767,45 @@ então o "teto de consultas pagas de bureau" do Javadoc é 5× maior no cluster;
 só com **bureau simulado** — com bureau real o gargalo é o pool de conexões, não as threads.
 Remedir antes de considerar o ADR-0015 fechado.
 
+**Contrato público da API (posicionamento A, Fase 1).** springdoc 3.0.0 nos dois serviços — a
+linha 2.x é para Boot 3 e falha em runtime; a versão é fixada no `pom.xml` raiz porque o BOM do
+Boot 4 não a gerencia (mesma situação do `testcontainers-bom`). Na risk-engine há **dois grupos**, e
+a separação é de segurança e não de organização: `parceiro` (publicável, 18 rotas) e `admin`
+(`/v1/risk-rules`, `/v1/tenants/**`, `/v1/webhook-endpoints/**`), que **nunca** é publicado —
+esconder não protege (quem protege é o `AdminApiKeyFilter`), mas não há razão de dar o mapa da
+superfície administrativa de graça, mesmo raciocínio que tirou o `/actuator` da porta de negócio. A
+webhook-api não tem grupos porque **toda** rota dela é administrativa. UI desligada em `prod` nos
+dois (o artefato de produto é o *arquivo* do spec, não uma UI viva no host da API); o spec é gravado
+**por teste** e não por plugin de build, para o arquivo publicado ser exatamente o que a aplicação
+serve — duas ferramentas divergem, e a divergência aqui é o parceiro integrando contra um contrato
+que não existe. `OpenApiCoverageIntegrationTest` é irmão do `ApiRouteCoverageTest`: enumera os
+controllers pelo **bytecode** (não por lista escrita à mão), tem guard antivácuo e **quebra o
+build** quando rota de negócio nasce sem contrato — provado por mutação, não passa por acidente.
+⚠️ Dois defeitos que só apareceram **lendo o spec gerado**, ambos com teste: `AuthenticatedTenant`
+(injetado pelo `TenantArgumentResolver` a partir da credencial) era publicado como query parameter
+**obrigatório** chamado `tenant`, junto do formato interno de `Tenant` — contrato que descreve
+parâmetro inexistente é pior que contrato nenhum, porque o dev externo tenta, falha, e o único
+caminho de volta é falar com o time; corrigido com `SpringDocUtils.addRequestWrapperToIgnore`. E não
+havia esquema de autenticação declarado (`bearerAuth`). O teste de vazamento administrativo pegou a
+regressão de citar `POST /v1/tenants/{id}/api-keys` na descrição do esquema.
+
+**Assinatura de webhook carimbada no tempo (`t=<epoch>,v1=<hex>` sobre `<t>.<corpo cru>`).** Antes
+a assinatura cobria só o corpo, e um callback de KYC capturado era **replayável para sempre**; o
+`X-Barrier-Event-Id` permite dedup, mas delega ao cliente fazer certo. O instante vai **dentro** do
+que se assina: em header próprio, o atacante trocaria o carimbo por "agora" e o replay voltaria a
+passar — controle que parece existir e não verifica, o modo de falha recorrente deste projeto. O
+ponto entre instante e corpo evita a colisão `t=17`+`"00.x"` vs `t=1700`+`".x"` (tem teste). O
+instante é o da **tentativa**, não o da criação da entrega: congelá-lo faria toda retentativa
+posterior à tolerância chegar velha e ser recusada, e a máquina de retry queimaria as tentativas
+entregando o que o receptor foi instruído a rejeitar. Durante a rotação as duas assinaturas
+declaram o **mesmo `t`**, senão o receptor que ainda tem o segredo antigo calcularia sobre outro
+`t`. O overload `sign(body, secret)` foi **removido**, não mantido por conveniência — o tipo é a
+defesa, mesmo padrão do `SubjectProfileService` que não aceita só o `subjectId`. `v1=` deixa caminho
+para `v2=` ao lado, como o `X-Barrier-Signature-Previous` fez para rotação de segredo.
+`tools/webhook-receiver.py` (o exemplo que o parceiro copia) aplica tolerância de 5 min — sem a
+janela o carimbo é enfeite. Feito antes de haver parceiro integrado, porque depois é quebra de
+contrato.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
