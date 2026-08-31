@@ -1,3 +1,11 @@
+> **📦 ENCERRADO em 2026-08-31 — documento de arquivo, não é backlog.**
+> O backlog vivo é [docs/product/backlog.md](../../product/backlog.md). Os itens abertos daqui
+> migraram para lá; **quatro estavam marcados abertos e já estavam prontos** — ver a
+> [reconciliação](README.md#reconciliação--o-que-estava-marcado-errado). O valor preservado aqui é
+> o racional: por que a banda de score não reprova sozinha, por que `SOLICITAR_DOCUMENTO` não é
+> reprovação, por que o cadastro deixou de ser global. ⚠️ O `ENGINE_VERSION` citado no fim está
+> desatualizado (é `1.8.0`).
+
 # Plano de remediação — auditoria de KYC/PLD-FT
 
 Documento vivo. Origem: auditoria crítica de `main` (commit `1033555`, 64 achados).
@@ -54,7 +62,7 @@ Notas por dimensão (0–10):
 | KYC | 2,0 | 4,0 | Nome comparado; **PF ainda sem bureau** |
 | Antifraude | 1,0 | 1,0 | Intocado |
 | AML/Compliance | 2,5 | 4,0 | PEP existe; CSNU, CEIS e rescreening abertos |
-| Escalabilidade | 2,0 | 2,0 | Intocado. **Agora medido:** ingestão 292 req/s, processamento ~12,5/s (bureau simulado) — e sem cota nem isolamento por tenant ([ADR-0015](../adr/0015-ingestao-em-massa-faixa-separada.md)) |
+| Escalabilidade | 2,0 | 2,0 | Intocado. **Agora medido:** ingestão 292 req/s, processamento ~12,5/s (bureau simulado) — e sem cota nem isolamento por tenant ([ADR-0015](../../adr/0015-ingestao-em-massa-faixa-separada.md)) |
 | Resiliência | 3,5 | 6,5 | Fail-closed + poison pill e duplicação resolvidos |
 | Observabilidade | 2,0 | 2,5 | Só o health de cobertura |
 | Auditoria | 4,0 | 4,5 | Evidência mais rica; reprodutibilidade ainda não |
@@ -375,7 +383,7 @@ de outro tenant.
   **Sem PII em tag** — documento, nome e tenant ficam de fora, com teste que trava isso: métrica vai
   para um sistema sem o controle de acesso do banco e é retida indefinidamente.
   Log estruturado (ECS) no profile `prod`; padrão com correlação no console de dev.
-  Regras de alerta em [docs/observability/alerts.yml](../observability/alerts.yml).
+  Regras de alerta em [docs/observability/alerts.yml](../../observability/alerts.yml).
   *Verificado ao vivo:* `X-Correlation-Id` enviado pelo cliente aparece em todo o rastro assíncrono
   (bureau → screening → match fuzzy → decisão → publicação no Kafka), e as séries de negócio saem no
   `/actuator/prometheus`.
@@ -728,7 +736,7 @@ de outro tenant.
   Um `POST /decision` não é case management: sem fila, SLA, atribuição, anexos, histórico.
 
 - [ ] **Ingestão em massa não tem cota nem isolamento** 🔴 — ver
-  [ADR-0015](../adr/0015-ingestao-em-massa-faixa-separada.md)
+  [ADR-0015](../../adr/0015-ingestao-em-massa-faixa-separada.md)
   Medido em teste de carga (k6, ramp até 150 VUs): a ingestão aceita **292 req/s com 0% de erro**
   enquanto o processamento conclui **~12,5/s** (bureau simulado; ~3/s com bureau real). Em 5 min
   entraram 70.558 avaliações e saíram ~800 — **69.809 presas em `EM_ANALISE`**, ~92 min só para
@@ -782,12 +790,12 @@ de outro tenant.
 
 | Item | Bloqueio | Efeito hoje |
 |---|---|---|
-| Bureau real de CPF | Sem credenciais (BigBoost/Serpro). **Não existe API gratuita legítima** — o que se anuncia como tal é scraping com bypass de captcha ou base vazada | `CpfBureauReadinessGuard` impede prod; PF inviável. Dev usa o `FakeCpfBureauProvider` com cenários por prefixo ([bureau-simulado.md](bureau-simulado.md)); o mapeamento de `TaxIdStatus`/`HasObitIndication` já está implementado e testado contra o JSON documentado, então contratar é só ligar a flag |
+| Bureau real de CPF | Sem credenciais (BigBoost/Serpro). **Não existe API gratuita legítima** — o que se anuncia como tal é scraping com bypass de captcha ou base vazada | `CpfBureauReadinessGuard` impede prod; PF inviável. Dev usa o `FakeCpfBureauProvider` com cenários por prefixo ([bureau-simulado.md](../bureau-simulado.md)); o mapeamento de `TaxIdStatus`/`HasObitIndication` já está implementado e testado contra o JSON documentado, então contratar é só ligar a flag |
 | Validação do CSV de PEP | 403 do ambiente para o Portal da Transparência | Fonte escrita sem verificação |
 | Provedor KYB (UBO) | Contrato | KYB só de 1º grau |
 | Mídia negativa real | Contrato | `StubNegativeMediaProvider` com lista vazia |
 | Volumetria/SLA alvo | Decisão de produto | "Escalável" não é afirmação verificável sem meta. A capacidade atual já está medida (ingestão 292 req/s · processamento ~12,5/s simulado, ~3/s com bureau real) — falta o alvo, não o número |
-| Dimensionamento de workers e cap de bureau | Contrato BigBoost | Limite de concorrência, suporte a consulta **em lote** e preço por faixa de volume são desconhecidos. Se a API aceitar lote, a vazão muda mais que qualquer paralelismo. Até lá, default conservador e configurável ([ADR-0015](../adr/0015-ingestao-em-massa-faixa-separada.md)) |
+| Dimensionamento de workers e cap de bureau | Contrato BigBoost | Limite de concorrência, suporte a consulta **em lote** e preço por faixa de volume são desconhecidos. Se a API aceitar lote, a vazão muda mais que qualquer paralelismo. Até lá, default conservador e configurável ([ADR-0015](../../adr/0015-ingestao-em-massa-faixa-separada.md)) |
 
 **Caminho sugerido para CPF:** gov.br Login Único (OIDC) devolve CPF e nome já verificados
 (selo prata/ouro implica validação biométrica com o TSE) a custo baixo — exige credenciamento,

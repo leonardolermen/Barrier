@@ -348,7 +348,7 @@ Grava a trilha (`reviewed_by`, `review_reason`, `reviewed_at`, e a API key que d
 o evento**, para o parceiro receber o desfecho final pelo mesmo canal.
 
 > 📋 4-eyes (dois revisores distintos para PEP/mídia negativa) e os status `BLOQUEIO_TEMPORARIO` /
-> `ESCALADO_AML` seguem abertos — ver [plano de remediação](../implementation/plano-remediacao-auditoria.md).
+> `ESCALADO_AML` seguem abertos — ver o [backlog de produto](../product/backlog.md).
 
 ---
 
@@ -435,5 +435,5 @@ grita; uma avaliação por `(subject, tenant)` por importação.
 - [ADR-0016](../adr/0016-plataforma-completa-modelo-b.md) — plataforma completa: resultado, não acervo
 - [ADR-0012](../adr/0012-subject-registration-profile.md) — cadastro como agregado próprio
 - [ADR-0010](../adr/0010-watchlists-ingeridas.md) — watchlists ingeridas
-- [plano-remediacao-auditoria.md](../implementation/plano-remediacao-auditoria.md) — o que falta para produção
+- [backlog de produto](../product/backlog.md) — o que falta para produção, com critério de pronto
 - [event-flow.md](event-flow.md) · [domain-contexts.md](domain-contexts.md) · [compliance.md](compliance.md)

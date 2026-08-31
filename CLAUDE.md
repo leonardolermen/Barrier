@@ -5,24 +5,25 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
 
 ## Ao implementar código, siga SEMPRE
 
-- **O QUE VEM AGORA (leia primeiro):** [docs/implementation/plano-auditoria-2026-08-18.md](docs/implementation/plano-auditoria-2026-08-18.md)
-  — P0–P4 da auditoria externa de `e141669`. **Escopo novo está congelado até P0 e P1 fecharem.**
-  P0 hoje: `/v1/mesa/**` e `/v1/behavior-events` estão fora do filtro de auth (F7 e F8
-  inacessíveis), `/actuator` aberto, e não existe CI nem Dockerfile.
-- **O que falta para produção (itens abertos das ondas):** [docs/implementation/plano-remediacao-auditoria.md](docs/implementation/plano-remediacao-auditoria.md)
-  — plano vivo da auditoria de KYC/PLD-FT, com critérios de pronto. Consulte antes de propor
-  trabalho novo: o que está lá é o que reduz risco de verdade.
-- **Escala horizontal (em execução):** [docs/implementation/plano-escala-horizontal.md](docs/implementation/plano-escala-horizontal.md)
-  — 5 réplicas em k8s atrás de LB. As filas com `SKIP LOCKED` já são seguras; faltam container,
-  probes, partições de Kafka, lock nos 5 `@Scheduled` singleton e prova em `kind`.
+- **O QUE VEM AGORA (leia primeiro):** [docs/product/backlog.md](docs/product/backlog.md)
+  — **o único backlog vivo.** Antes havia quatro planos sobrepostos, e o custo foi medido: quatro
+  itens ficaram marcados como abertos meses depois de resolvidos, e a paralelização foi feita antes
+  da cota que o próprio plano exigia primeiro. Consulte a **sequência recomendada** antes de propor
+  trabalho novo. Em execução agora: **replay de decisão**.
+- **Posicionamento do produto:** [ADR-0020](docs/adr/0020-posicionamento-motor-de-decisao-api-first.md)
+  — motor de decisão **API-first**. O parceiro tem a jornada dele e compra decisão explicável e
+  trilha auditável; hosted page/SDK/UI da mesa são posicionamento B, depois. **Em A, a integração é
+  o produto** — contrato, guia e sandbox não são acessórios.
 - **Padrões de código:** [docs/implementation/coding-standards.md](docs/implementation/coding-standards.md)
-- **Plano da Risk Engine:** [docs/implementation/risk-engine-plan.md](docs/implementation/risk-engine-plan.md)
 - **Lições do BMP Origem:** [docs/implementation/licoes-do-origem.md](docs/implementation/licoes-do-origem.md)
   — estudo comparativo com a esteira de KYC que roda em produção na BMP (Origem/Mishmar/
   bureaus-manager/tzofe): o que importar, em que ordem, e **o que não copiar**.
-- **Fila de execução dessas lições:** [docs/implementation/fila-origem.md](docs/implementation/fila-origem.md)
-  — F1–F9 com escopo e critério de pronto. **Fila drenada:** todas entregues; fica como registro
-  do porquê de `mesa`/`riskstate`/`monitoring`/`behavior` existirem.
+- **Planos encerrados (arquivo):** [docs/implementation/archive/](docs/implementation/archive/README.md)
+  — remediação, auditoria externa, escala horizontal, fila-origem (drenada), plano da Risk Engine e
+  plano de produto. **Não são backlog e não são fonte de verdade sobre o estado atual** — guardam o
+  racional das recusas (por que não regra customizável, por que não schema registry, por que não
+  trocar a BrasilAPI) e as hipóteses reprovadas por medição. Item marcado `[ ]` lá pode já estar
+  pronto; a tabela de reconciliação no README do arquivo lista os que estavam.
 - **Decisões de arquitetura:** [docs/adr/](docs/adr/) (ADR-0009 define o corte atual)
 
 Existe a skill `barrier-implementation` com o checklist operacional — use-a antes de
@@ -674,7 +675,7 @@ documento nem nome, e é isso que permite mandá-lo a um serviço externo. **Nã
 sem routing key neste ambiente, o caminho até o PagerDuty real nunca foi exercitado — validar em
 homologação forçando um `backlog_analise` antes de virar plantão.
 
-**Escala horizontal — 5 réplicas em Kubernetes ([plano](docs/implementation/plano-escala-horizontal.md)).**
+**Escala horizontal — 5 réplicas em Kubernetes ([plano arquivado](docs/implementation/archive/plano-escala-horizontal.md)).**
 O mecanismo difícil já existia e nunca tinha sido exercitado: as quatro filas de trabalho usam
 `FOR UPDATE SKIP LOCKED` + lease, a API é stateless e o Flyway pega advisory lock. Faltava tudo em
 volta. Agora existem `Dockerfile` multi-stage, CI (`.github/workflows/ci.yml`), manifests em
@@ -808,7 +809,7 @@ contrato.
 
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
-1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
+1º grau, bureau real de CPF) — ver [docs/product/backlog.md](docs/product/backlog.md).
 
 Build validado: `./mvnw test` verde (627 testes na risk-engine + 53 na webhook-api + 27 no
 commons — 707 no total, inclui integração com Testcontainers). **Precisa de Docker rodando** —

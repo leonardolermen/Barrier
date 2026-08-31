@@ -71,7 +71,8 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
     `POST /v1/tenants/{tenantId}/api-keys`, protegido por `X-Admin-Key`
   - endpoints administrativos (`/v1/risk-rules`, `/v1/tenants/*/risk-config`, `/v1/tenants/*/api-keys`)
     exigem **`X-Admin-Key`**
-  - contrato completo e exemplos: [collection Postman](docs/api/README.md) (ainda sem OpenAPI/springdoc — Fase 5)
+  - contrato: **OpenAPI** em `/v3/api-docs/parceiro` (a superfície administrativa não é publicada);
+    exemplos na [collection Postman](docs/api/README.md)
 - Webhook API: <http://localhost:8082/actuator/health> (consome `assessment.completed` → callback assinado)
   - `PUT`/`GET`/`DELETE /v1/webhook-endpoints/{tenantId}` e `POST .../rotate-secret`, protegidos por `X-Admin-Key`
 - Kafka UI: <http://localhost:8081>
@@ -84,18 +85,20 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 - [Fluxo de eventos e saga](docs/architecture/event-flow.md)
 - [Requisitos regulatórios](docs/architecture/compliance.md)
 - [Padrões de código e design patterns](docs/implementation/coding-standards.md)
-- [Plano de implementação e progresso](docs/implementation/risk-engine-plan.md)
+- [**Backlog de produto**](docs/product/backlog.md) — **o único backlog vivo**: o que falta, em que ordem, com critério de pronto
 - [Bureau simulado de CPF (cenários de teste)](docs/implementation/bureau-simulado.md)
-- [**Plano de remediação da auditoria**](docs/implementation/plano-remediacao-auditoria.md) — o que falta para produção, com critérios de pronto
+- [Lições do BMP Origem](docs/implementation/licoes-do-origem.md)
 - [Diagramas](docs/diagrams/README.md)
 - [Registros de decisão (ADRs)](docs/adr/README.md)
+- [Planos encerrados (arquivo)](docs/implementation/archive/README.md) — racional das recusas e hipóteses reprovadas por medição; **não é backlog**
 
 ## Status
 
-🏗️ **Fluxo ponta a ponta funcionando** (build verde, 443 testes). Fases 0–8 da
-Risk Engine concluídas + Webhook API + monitoramento contínuo. **Ainda não pode ir para
-produção** — falta cifragem em repouso, controle de vazão na entrega de webhook, UBO e contract
-tests, tudo rastreado no [plano de remediação](docs/implementation/plano-remediacao-auditoria.md).
+🏗️ **Fluxo ponta a ponta funcionando**, com CI, container e 5 réplicas provadas em `kind`.
+Fases 0–8 da Risk Engine concluídas + Webhook API + monitoramento contínuo + contrato OpenAPI
+público. **Ainda não pode ir para produção** — falta cota por tenant, criptografia em repouso,
+retenção, fonte de QSA para o KYB e as quatro integrações que nunca foram exercitadas ao vivo.
+Tudo rastreado, com critério de pronto, no [backlog de produto](docs/product/backlog.md).
 
 Para o fluxo completo com payloads de cada etapa, e o que está ligado vs. só escrito, ver
 [kyc-flow.md](docs/architecture/kyc-flow.md).
@@ -128,15 +131,17 @@ Para o fluxo completo com payloads de cada etapa, e o que está ligado vs. só e
 
 - **Fase 8** — motor de risco ampliado: mídia negativa, consistência telefone×endereço
   (DDD×UF), histórico interno do subject e KYB de 1º grau (QSA da BrasilAPI). Sinais restantes
-  da fila (GeoIP, reuso de device/email, VoIP, email descartável, score de crédito externo) em
-  [risk-engine-plan.md](docs/implementation/risk-engine-plan.md#fase-8--motor-de-risco-ampliado-fila-de-prs-em-andamento).
+  da fila (GeoIP, reuso de device/email, VoIP, email descartável, score de crédito externo) estão
+  escritos em três branches **nunca integradas** — ver
+  [backlog](docs/product/backlog.md#trabalho-órfão--três-branches-nunca-integradas).
 - **Segurança/integridade** — autenticação por API key com tenant derivado da credencial
   (`X-Client-Id` não é mais lido), gate de admin, PII mascarada em log, reivindicação exclusiva
   por lease no processamento, transação por avaliação e estado de falha explícito.
 
-**Próximo (por onda, no [plano de remediação](docs/implementation/plano-remediacao-auditoria.md)):**
-Onda 1 fecha a integridade da decisão; Onda 2 é compliance de verdade (COAF/SISCOAF, retenção de
-10 anos, criptografia em repouso, UBO além do 1º grau, rescreening periódico); Onda 3 é escala e
-antifraude — incluindo o monitoramento transacional contínuo pós-onboarding (PIX em rajada,
-layering), a maior mudança estrutural da fila, já que o motor hoje só roda no onboarding.
-Hardening pendente da Fase 5: OpenAPI/springdoc.
+**Próximo (ver [backlog de produto](docs/product/backlog.md#sequência-recomendada)):**
+replay de decisão e política versionada com vigência e autoria — os dados já são gravados e
+`config_history` não tem nenhum caminho de leitura; depois cota e rate limit por tenant (vencido: a
+paralelização foi feita antes dele), listagem paginada, guia público e sandbox exposto. Criptografia
+em repouso e retenção vêm logo atrás, e são o que bloqueia o questionário de segurança de qualquer
+comprador. Posicionamento vigente em
+[ADR-0020](docs/adr/0020-posicionamento-motor-de-decisao-api-first.md).

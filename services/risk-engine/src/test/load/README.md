@@ -1,7 +1,7 @@
 # Teste de carga — risk-engine
 
 Arnês de carga em [k6](https://k6.io). Roda à mão; **ainda não está no CI** (ver item "Chaos e
-carga" no [plano de remediação](../../../../../docs/implementation/plano-remediacao-auditoria.md)).
+carga" no [backlog de produto](../../../../../docs/product/backlog.md)).
 
 O que ele mede e por que existe está na
 [ADR-0015](../../../../../docs/adr/0015-ingestao-em-massa-faixa-separada.md).

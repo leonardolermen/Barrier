@@ -1,3 +1,9 @@
+> **📦 ENCERRADO em 2026-08-31 — documento de arquivo, não é backlog.**
+> O backlog vivo é [docs/product/backlog.md](../../product/backlog.md). **P0 inteiro fechado**;
+> P1–P4 migraram. Preservado aqui: as notas por dimensão, o padrão encontrado ("o desenho está
+> acima da média; a operação do que foi construído está abaixo"), as duas recusas com critério
+> (regra customizável pelo parceiro; "trocar a BrasilAPI") e a lista do que **não** mudar.
+
 # Plano de auditoria externa — 2026-08-18
 
 Documento vivo. Origem: auditoria técnica, arquitetural e de produto de
@@ -393,7 +399,7 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
 
 - [ ] **Redesenhar `arquitetura-atual.svg`** 🟢
   Desenha 4 módulos de 15 e cita no rodapé módulos que nunca existiram. Ver
-  [docs/diagrams/README.md](../diagrams/README.md), já marcado como desatualizado.
+  [docs/diagrams/README.md](../../diagrams/README.md), já marcado como desatualizado.
 
 ---
 

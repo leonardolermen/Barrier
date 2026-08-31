@@ -1,3 +1,8 @@
+> **📦 ENCERRADO em 2026-08-31 — documento de arquivo, não é backlog.**
+> A **decisão de posicionamento** virou
+> [ADR-0020](../../adr/0020-posicionamento-motor-de-decisao-api-first.md); as **fases de execução**
+> viraram a espinha de [docs/product/backlog.md](../../product/backlog.md), o backlog vivo.
+
 # Plano de produto — motor de decisão API-first (posicionamento A)
 
 Documento vivo. Decisão de produto tomada em 2026-08-22, depois da auditoria de
@@ -65,9 +70,9 @@ Nada aqui é engenharia, e tudo aqui bloqueia o resto.
   *Pronto quando:* CNPJ emitido, conta PJ aberta, contador contratado.
 
 - [ ] **Resolver a contradição sobre o bureau de CPF**
-  [ADR-0014](../adr/0014-bureau-cpf-bigboost.md) escolheu a BigBoost porque seria self-service sem
+  [ADR-0014](../../adr/0014-bureau-cpf-bigboost.md) escolheu a BigBoost porque seria self-service sem
   CNPJ (R$0,04/consulta) e fecha com *"a confirmar com o time comercial deles"* — nunca confirmado.
-  [bureau-simulado.md](bureau-simulado.md) afirma o oposto: *"não existe bureau real de CPF
+  [bureau-simulado.md](../bureau-simulado.md) afirma o oposto: *"não existe bureau real de CPF
   contratável sem CNPJ"*. **A decisão de arquitetura do bureau de PF está apoiada num "a
   confirmar", e o outro documento já supõe o contrário.**
   *Pronto quando:* resposta por escrito do comercial arquivada em `docs/`, e **um dos dois
@@ -107,7 +112,7 @@ Nada aqui é engenharia, e tudo aqui bloqueia o resto.
 - [ ] **Sandbox — que já existe e ninguém sabe**
   O `FakeCpfBureauProvider` atende qualquer CPF válido e usa o prefixo `999` + dígito seletor para
   escolher o cenário (falecido, suspensa, nula, indisponível). **Isso é um sandbox completo**, com
-  tabela documentada em [bureau-simulado.md](bureau-simulado.md). Falta expor como produto:
+  tabela documentada em [bureau-simulado.md](../bureau-simulado.md). Falta expor como produto:
   ambiente público, credencial de teste self-service, e a tabela de cenários na doc externa.
   *Pronto quando:* um terceiro obtém credencial de sandbox sem falar com ninguém e reproduz os seis
   desfechos de identidade.
@@ -115,7 +120,7 @@ Nada aqui é engenharia, e tudo aqui bloqueia o resto.
 - [ ] **Guia de integração público**
   Quickstart de intake → webhook; **como verificar o HMAC** e o que fazer com
   `X-Barrier-Signature-Previous` durante a rotação; semântica de `Idempotency-Key`; catálogo de
-  reason codes; versão externa do [event-catalog.md](../architecture/event-catalog.md).
+  reason codes; versão externa do [event-catalog.md](../../architecture/event-catalog.md).
   *Pronto quando:* um dev externo integra intake + webhook lendo só a doc pública, sem contato — e
   isso foi **observado com uma pessoa real**, não presumido.
 

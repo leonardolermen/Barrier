@@ -11,7 +11,13 @@ O primeiro diagrama reflete o que existe hoje; os dois seguintes são a visão-a
 autocontidos (cores embutidas) e renderizam direto no GitHub e na IDE.
 
 > **⚠️ `arquitetura-atual.svg` está desatualizado.** Desenha os 4 módulos originais
-> (assessment/identity/screening/risk) e cita no rodapé módulos que **nunca existiram**
-> (geoip/device/credit/history). Os 15 módulos reais estão em
+> (assessment/identity/screening/risk) de 16. Os módulos reais estão em
 > [domain-contexts.md](../architecture/domain-contexts.md) — **essa é a fonte de verdade**.
-> Redesenhar o SVG é item P2 do [plano de auditoria](../implementation/plano-auditoria-2026-08-18.md).
+> Redesenhar o SVG é item do [backlog de produto](../product/backlog.md#5--operação-e-prova-de-escala).
+>
+> **Correção (2026-08-31):** este aviso dizia que o rodapé citava módulos que *"nunca existiram"*
+> (`geoip`/`device`/`credit`/`history`). Não é o caso — eles existem, nas branches
+> `feat/network-signals`, `feat/phone-email-signals` e `feat/history-credit-signals`, que nunca
+> foram integradas. O diagrama foi desenhado a partir de trabalho que não entrou, o que é um
+> problema diferente e está registrado no
+> [backlog](../product/backlog.md#trabalho-órfão--três-branches-nunca-integradas).

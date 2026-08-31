@@ -15,8 +15,8 @@ importar, o que não vale, e por quê.
 
 **Regra de leitura:** cada item aponta o gap concreto no Barrier (com arquivo/linha quando
 existe) e o mecanismo do lado de lá. Onde o item já está no
-[plano de remediação](plano-remediacao-auditoria.md) ou no
-[plano da Risk Engine](risk-engine-plan.md), o cruzamento está marcado — isto aqui não abre
+[plano de remediação](archive/plano-remediacao-auditoria.md) ou no
+[plano da Risk Engine](archive/risk-engine-plan.md), o cruzamento está marcado — isto aqui não abre
 frente nova, prioriza a que já existe.
 
 ---
@@ -40,7 +40,7 @@ frente nova, prioriza a que já existe.
 ## Prioridade 1 — Custo de bureau sem controle
 
 **Gap.** `IdentityService.verify` sai para o bureau em **toda** avaliação. Não há reuso de
-consulta recente. O [plano de remediação](plano-remediacao-auditoria.md) já mede a
+consulta recente. O [plano de remediação](archive/plano-remediacao-auditoria.md) já mede a
 exposição: R$0,04/consulta na BigBoost, 500 mil documentos = **R$20 mil** disparados por um
 laço sobre o `POST` que ninguém aprovou. E o `RescreeningService` multiplica isso — uma
 importação de watchlist que casa 400 subjects em 3 tenants cria 1.200 avaliações, cada uma
@@ -234,7 +234,7 @@ auditável do mesmo jeito que uma `RiskRule` versionada. **A recomendação é n
 motor de decisão por isso. O que vale importar é o **modelo de ingestão**: partição por
 documento, um consumer-group por consumidor, evento como fato imutável. É a fundação do
 monitoramento comportamental (item 7 da Fase 8 do
-[risk-engine-plan](risk-engine-plan.md)), e o Origem já provou que funciona.
+[risk-engine-plan](archive/risk-engine-plan.md)), e o Origem já provou que funciona.
 
 ---
 
@@ -320,6 +320,6 @@ não por valor comercial.
 | 8 | Ingestão de evento comportamental (P7) | alto | monitoramento pós-onboarding |
 | 9 | Catálogo de eventos + registry (P8) | — | só no gatilho descrito em P8 |
 
-**Todos os nove itens foram entregues** — ver [fila-origem.md](fila-origem.md) (F1–F9) para o
+**Todos os nove itens foram entregues** — ver [fila-origem.md](archive/fila-origem.md) (F1–F9) para o
 escopo e o critério de pronto de cada um. O que vem agora está em
-[plano-auditoria-2026-08-18.md](plano-auditoria-2026-08-18.md).
+[plano-auditoria-2026-08-18.md](archive/plano-auditoria-2026-08-18.md).

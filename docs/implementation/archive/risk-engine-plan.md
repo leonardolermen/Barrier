@@ -1,8 +1,13 @@
+> **📦 ENCERRADO em 2026-08-31 — documento de arquivo, não é backlog.**
+> Fases 0–4 concluídas. A Fase 5 (hardening) e a Fase 6 (compliance Bacen) migraram para
+> [docs/product/backlog.md](../../product/backlog.md), que é o backlog vivo. Preservado aqui: o
+> desenho original do contrato externo e do modelo de dados, e a ordem em que as fases foram feitas.
+
 # Plano de implementação — Risk Engine API
 
 Plano faseado para construir a **Risk Engine API** (ver
-[ADR-0009](../adr/0009-risk-engine-modular-monolith-first.md)) seguindo os
-[padrões de código](coding-standards.md). Cada fase é entregável, testável e mergeável
+[ADR-0009](../../adr/0009-risk-engine-modular-monolith-first.md)) seguindo os
+[padrões de código](../coding-standards.md). Cada fase é entregável, testável e mergeável
 sozinha.
 
 ## Progresso
@@ -22,7 +27,7 @@ sozinha.
 Detalhe do que ficou diferente do plano original: o motor de risco (Fase 4) adotou o contrato
 padronizado `RiskResult` (score/severidade/motivo/evidências/recomendação), escala **0–1000**
 com nível **CRITICAL** adicional e **versionamento do motor** (`engine_version`). Estado atual
-completo em [CLAUDE.md](../../CLAUDE.md).
+completo em [CLAUDE.md](../../../CLAUDE.md).
 
 ## Estrutura do repositório (monorepo Maven — ADR-0008)
 
@@ -182,17 +187,17 @@ arquitetura: dados de cadastro exigidos pela CMN 4.753 (hoje só documento/nome/
 guardados) e o risco de subir em produção com a watchlist só no CSV seed.
 
 - **`SubjectProfile`** (novo agregado 1:1 com `Subject`, ver
-  [ADR-0012](../adr/0012-subject-registration-profile.md)): cadastro progressivo via
+  [ADR-0012](../../adr/0012-subject-registration-profile.md)): cadastro progressivo via
   `PUT /v1/subjects/{document}/profile`; dados objetivos de PJ do bureau (`CompanyProfile`)
   passam a ser persistidos em vez de descartados; `RegistrationCompleteness` é o checklist
   mínimo por tipo de documento (PF/PJ).
 - **Gate de completude:** `AssessmentProcessor` rebaixa a recomendação de `APROVADO` para
   `EM_REVISAO` quando o cadastro está incompleto, reaproveitando o workflow humano existente.
 - **`WatchlistReadinessGuard`** (ver
-  [ADR-0013](../adr/0013-watchlist-fontes-producao.md)): falha a subida se o profile `prod`
+  [ADR-0013](../../adr/0013-watchlist-fontes-producao.md)): falha a subida se o profile `prod`
   estiver ativo e só a watchlist `SEED` estiver disponível; `application-prod.yml` habilita
   CGU/OFAC por padrão nesse profile.
-- **`BigBoostBureauProvider`** (ver [ADR-0014](../adr/0014-bureau-cpf-bigboost.md)): bureau real
+- **`BigBoostBureauProvider`** (ver [ADR-0014](../../adr/0014-bureau-cpf-bigboost.md)): bureau real
   de CPF (dataset `basic_data` da BigBoost/BigDataCorp), desligado por padrão
   (`barrier.identity.bigboost.enabled=false`) — dev/testes continuam no `StubBureauProvider`;
   habilitar é só configuração (flag + `AccessToken`/`TokenId`), sem CNPJ necessário para
@@ -210,7 +215,7 @@ startup.
 - **Criptografia em repouso / KMS** — documento e cadastro hoje ficam em texto plano no banco.
 - **UBO além do 1º grau** — `CorporateStructureRiskRule` só navega o QSA direto; falta
   navegação da árvore societária até a pessoa física final. Restrições de custo obrigatórias
-  antes de escrever o código: [ADR-0018](../adr/0018-custo-de-navegacao-ubo.md).
+  antes de escrever o código: [ADR-0018](../../adr/0018-custo-de-navegacao-ubo.md).
 - **Bureau real de CPF via Serpro** — `BigBoostBureauProvider` (ADR-0014) já cobre esse gap sem
   depender de CNPJ; `SerproBureauProvider` continua como esqueleto para quando a empresa estiver
   formalizada e o convênio oficial (Receita Federal) fizer sentido como alternativa/fallback.

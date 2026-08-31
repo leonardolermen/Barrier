@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 25 · Spring Boot 4.0 · springdoc-openapi 3.0.0 · JUnit 5 · ArchUnit · AssertJ · Testcontainers
 
-**Spec:** [docs/implementation/plano-produto-api-first.md](../../implementation/plano-produto-api-first.md) — Fase 1, item "OpenAPI gerado, versionado e publicado"
+**Spec:** [docs/implementation/plano-produto-api-first.md](../../implementation/archive/plano-produto-api-first.md) — Fase 1, item "OpenAPI gerado, versionado e publicado"
 
 ## Global Constraints
 
