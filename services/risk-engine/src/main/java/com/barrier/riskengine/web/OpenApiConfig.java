@@ -1,7 +1,12 @@
 package com.barrier.riskengine.web;
 
+import com.barrier.riskengine.tenant.domain.AuthenticatedTenant;
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springdoc.core.utils.SpringDocUtils;
 import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,6 +29,15 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class OpenApiConfig {
+
+  static {
+    // AuthenticatedTenant e injetado pelo TenantArgumentResolver a partir da credencial: o parceiro
+    // NUNCA o envia. Sem isto o springdoc o introspecta como argumento de controller e publica
+    // "tenant" como query parameter obrigatorio, junto do formato interno de Tenant. Contrato que
+    // descreve parametro inexistente e pior que contrato nenhum — o dev externo tenta, falha, e o
+    // unico caminho de volta e falar com o time.
+    SpringDocUtils.getConfig().addRequestWrapperToIgnore(AuthenticatedTenant.class);
+  }
 
   @Bean
   public GroupedOpenApi contratoDoParceiro() {
@@ -52,6 +66,21 @@ public class OpenApiConfig {
                 .description(
                     "Avaliacao de risco com fatores explicaveis e trilha auditavel. "
                         + "Toda rota exige credencial de tenant; o desfecho chega por webhook "
-                        + "assinado com HMAC."));
+                        + "assinado com HMAC."))
+        // Como autenticar E parte do contrato: sem o esquema declarado, o dev externo bate na
+        // primeira parede com 401 e sem explicacao.
+        .components(
+            new Components()
+                .addSecuritySchemes(
+                    "bearerAuth",
+                    new SecurityScheme()
+                        .type(SecurityScheme.Type.HTTP)
+                        .scheme("bearer")
+                        .description(
+                            // Sem citar a rota que a emite: ela e administrativa e nao pertence
+                            // ao contrato publicado.
+                            "Credencial do tenant, fornecida pela operacao do Barrier."
+                                + " Formato: Authorization: Bearer brr_<keyId>_<secret>.")))
+        .addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
   }
 }

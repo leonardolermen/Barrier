@@ -79,4 +79,42 @@ class OpenApiDocumentIntegrationTest {
   void oGrupoAdministrativoExisteSeparado() {
     assertThat(spec("admin")).contains("/v1/risk-rules");
   }
+
+  /**
+   * O contrato nao pode MENTIR sobre como se chama a API.
+   *
+   * <p>{@code AuthenticatedTenant} e injetado por {@code TenantArgumentResolver} a partir da
+   * credencial — o parceiro nunca o envia. Sem instruir o springdoc a ignora-lo, ele o introspecta
+   * como argumento de controller e publica {@code tenant} como query parameter <b>obrigatorio</b>,
+   * junto do formato interno de {@code Tenant} e do nome da chave. Um contrato que descreve um
+   * parametro inexistente e pior que contrato nenhum: o dev externo tenta manda-lo, nao funciona, e
+   * o unico caminho de volta e falar com o time — exatamente o que este trabalho existe para
+   * eliminar.
+   */
+  @Test
+  void oContratoNaoPedeParametroQueOParceiroNaoEnvia() {
+    String parceiro = spec("parceiro");
+
+    assertThat(parceiro)
+        .as("tenant e resolvido da credencial, nao e parametro de requisicao")
+        .doesNotContain("\"name\":\"tenant\"");
+    assertThat(parceiro)
+        .as("formato interno do tenant vazando nos schemas do contrato publico")
+        .doesNotContain("AuthenticatedTenant");
+  }
+
+  /**
+   * Como autenticar faz parte do contrato.
+   *
+   * <p>Toda rota de negocio exige {@code Authorization: Bearer brr_...}; um spec que documenta os
+   * campos mas nao o esquema de autenticacao deixa o dev externo na primeira parede, com 401 e sem
+   * explicacao.
+   */
+  @Test
+  void oContratoDeclaraComoAutenticar() {
+    String parceiro = spec("parceiro");
+
+    assertThat(parceiro).contains("securitySchemes");
+    assertThat(parceiro).contains("bearerAuth");
+  }
 }
