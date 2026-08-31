@@ -75,7 +75,11 @@
             <version>0.1.0-SNAPSHOT</version>
         </dependency>
 
-        <!-- docs de API (springdoc 3.x) entram na Fase 5 -->
+        <!-- contrato publico da API -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
 
         <!-- testes -->
         <dependency>
