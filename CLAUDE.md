@@ -807,12 +807,72 @@ para `v2=` ao lado, como o `X-Barrier-Signature-Previous` fez para rotação de 
 janela o carimbo é enfeite. Feito antes de haver parceiro integrado, porque depois é quebra de
 contrato.
 
+**Replay de decisão (`POST /v1/assessments/{id}/replay`, módulo `replay`).** A trilha era o ativo mais
+forte do projeto e estava **gravada e ilegível**: `evaluated_json` com regra suprimida e parâmetro
+efetivo, `identity_check_id`/`screening_result_id` exatos (V028), `sources_json` com a versão de cada
+lista, `config_history` (V033) — tudo escrito, nada lido. **Nenhuma migration nova:** o item inteiro
+existia como dado e faltava como capacidade.
+
+⚠️ **O plano prometia "reproduz o desfecho histórico bit a bit", e isso não é alcançável** — dizer
+que era seria o modo de falha recorrente do projeto (controle que parece existir e não verifica).
+Dois motivos: **regra é código, não dado** (a decisão de `1.4.0` veio de código que não está mais no
+binário, e regra versionada carregável em runtime é recusa já registrada duas vezes); e **o
+`RiskContext` não é totalmente reconstruível** — `CompanyProfile` é transiente e nunca persistido,
+`SubjectProfile` é mutável e sem histórico. Replayar com o cadastro de hoje produziria diferença
+pelo motivo errado, apresentada como mudança de motor.
+
+O que se entrega no lugar são duas afirmações verdadeiras. **`AS_DECIDED`** não reexecuta nada: monta
+o dossiê do gravado e **reconfere a aritmética**, recalculando soma/banda/recomendação a partir dos
+resultados persistidos e comparando com `risk_scores` — pega adulteração e coluna corrompida, e não
+depende de reconstruir insumo nenhum (por isso `TRAIL_INCONSISTENT` **precede** qualquer outro
+veredito). **`CURRENT_ENGINE`** roda as regras de hoje sobre a **evidência gravada** e faz o diff
+regra a regra.
+
+**A lacuna é apurada, não presumida** — é o que mantém `SAME_DECISION` alcançável em vez de todo
+replay sair "degradado": `subject_profiles` não tem histórico mas tem `updated_at`, então cadastro
+intocado desde a decisão **não** é lacuna; `company` só é lacuna em PJ (em CPF era nulo na decisão
+também); assurance só quando existe alguma verificação (`biometricAttempts` é `COUNT` sobre janela
+que termina *agora*). ⚠️ `SubjectProfileService.findDeclared` nasceu aqui: `find` devolve
+`SubjectProfile.blank`, que tem `updatedAt = agora`, e sem separar ausência de alteração todo subject
+sem cadastro sairia com "cadastro mudou depois da decisão" — lacuna inventada.
+
+**`RiskRule.requires()` não tem default, e é essa a defesa.** Cada regra declara quais campos do
+`RiskContext` lê (`ContextInput`); regra cujo insumo não foi reconstruído vira `NOT_REPLAYABLE` e
+**não publica** o resultado da execução degradada — porque rodar sobre insumo ausente devolve "não
+disparou", indistinguível de "rodou e o cliente estava limpo", a mesma ambiguidade que a V028 gastou
+uma migration para eliminar. O compilador obriga a declarar; `RiskRuleContextDeclarationTest` obriga
+a declarar **certo**, comparando por bytecode as chamadas a acessores de `RiskContext` com as
+constantes referenciadas dentro de `requires()` — sem lista escrita à mão, **provado por mutação**.
+
+**Duas extrações que a entrega forçou, e que valem por si.** `ScoreAggregation` tira soma/banda/
+recomendação de dentro do `RiskScoringService`: uma reconferência com cópia própria da regra de
+agregação não conferiria nada — as duas divergiriam e a divergência apareceria como "a trilha está
+íntegra" (mesmo raciocínio do `ReassessmentPolicy.menorIntervalo()`). E `score()` virou
+`evaluate()` + `save()`: o replay chama só `evaluate`, e daí sai de graça que ele não grava
+`risk_score`, não dispara `AssessmentCompletedListener`, não toca `subject_risk_state` e não escreve
+na outbox — **não ter como**, em vez de lembrar de não chamar. Que ele não gasta consulta paga de
+bureau é garantido por ArchUnit (`replay_nao_alcanca_integracao_externa`): o módulo não depende de
+nenhum pacote `client`, então não tem como chamar o que não enxerga.
+
+Escopado por tenant como o resto de `/v1/assessments` (404, nunca 403 — 403 confirmaria o id); grupo
+`parceiro` do OpenAPI, porque o fiscal audita a instituição contratante e é ela que precisa
+responder. `DecisionNotReplayableException` → 409 para avaliação sem decisão do motor. A resposta não
+carrega documento nem nome: só código de regra, pontuação, versão de motor e de lista — é o que
+permite que um dossiê de auditoria circule.
+
+**Fica aberto, e é o próximo item do backlog:** `config_history` continua sem leitura as-of, então o
+dossiê traz o parâmetro efetivo de cada regra (que já vem do `evaluated_json`) mas ainda não a
+**autoria** da política vigente. Replay responde *o quê*; política versionada responde *quem*.
+E o snapshot que fecharia a lacuna de `company`/`profile` **não** foi feito de propósito: versionar
+cadastro multiplica PII sob retenção de 10 anos, e a decisão registrada é resolver isso junto com
+criptografia em repouso, não antes.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver [docs/product/backlog.md](docs/product/backlog.md).
 
-Build validado: `./mvnw test` verde (627 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 707 no total, inclui integração com Testcontainers). **Precisa de Docker rodando** —
+Build validado 2026-08-31: `./mvnw test` verde (692 testes na risk-engine + 69 na webhook-api + 32
+no commons — **793 no total**, 0 falhas, inclui integração com Testcontainers). **Precisa de Docker rodando** —
 sem ele os testes de integração erram com `Can't get Docker image` e a suíte fica verde só na
 aparência. Se o Docker Desktop travar em `initializing Inference manager`, o motivo são sockets
 órfãos indeletáveis no diretório `Docker/run` do AppData local: renomeie o diretório (apagar não

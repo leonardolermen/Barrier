@@ -3,7 +3,9 @@ package com.barrier.riskengine.risk.rule;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import java.util.Set;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.screening.domain.enums.MatchBasis;
 import com.barrier.riskengine.screening.domain.enums.MatchType;
@@ -80,5 +82,10 @@ public class SanctionRiskRule implements RiskRule {
   @Override
   public String code() {
     return "SANCTION";
+  }
+
+  @Override
+  public Set<ContextInput> requires() {
+    return Set.of(ContextInput.SCREENING);
   }
 }

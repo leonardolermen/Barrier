@@ -5,7 +5,9 @@ import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import java.util.Set;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -75,5 +77,12 @@ public class CorporateStructureCoverageRiskRule implements RiskRule {
   @Override
   public String code() {
     return RULE_CODE;
+  }
+
+  @Override
+  // IDENTITY entra porque a evidência cita o bureau que atendeu (IdentityCheck.provider()),
+  // para o analista distinguir limite de fonte de empresa sem sócio.
+  public Set<ContextInput> requires() {
+    return Set.of(ContextInput.COMPANY, ContextInput.IDENTITY);
   }
 }

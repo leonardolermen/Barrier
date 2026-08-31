@@ -3,6 +3,7 @@ package com.barrier.riskengine.risk.rule;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.tenant.config.service.TenantRiskConfigService;
@@ -89,5 +90,10 @@ public class SensitiveCnaeRiskRule implements RiskRule {
         cnaeCodes.stream().sorted().collect(java.util.stream.Collectors.joining(",")),
         "score",
         String.valueOf(tenantConfig.getInt(context.tenantId(), RULE_CODE, "score", defaultScore)));
+  }
+
+  @Override
+  public Set<ContextInput> requires() {
+    return Set.of(ContextInput.COMPANY);
   }
 }

@@ -1,7 +1,9 @@
 package com.barrier.riskengine.risk.rule.interfaces;
 
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import java.util.Set;
 
 /**
  * Regra de risco (Strategy). Cada regra avalia o contexto e devolve um {@link RiskResult}
@@ -23,6 +25,21 @@ public interface RiskRule {
    * mas pertence à família {@code IDENTITY}).
    */
   String code();
+
+  /**
+   * Quais campos do {@link RiskContext} esta regra lê.
+   *
+   * <p><b>Não tem default, e isso é a defesa.</b> O replay de decisão reexecuta as regras de hoje
+   * sobre a evidência gravada, e nem todo insumo é reconstruível ({@link ContextInput}). Uma regra
+   * que rodasse sobre um insumo ausente devolveria "não disparou", que o replay reportaria como <i>o
+   * motor mudou de opinião</i> — atribuindo a uma mudança de regra o que é falta de dado. Com a
+   * declaração, essa regra é reportada como {@code NOT_REPLAYABLE}, e a diferença fica visível em
+   * vez de silenciosa.
+   *
+   * <p>Regra que não lê o contexto devolve {@code Set.of()} — {@code ScreeningCoverageRiskRule} é o
+   * caso: ela decide sobre o estado da importação de listas, não sobre o cliente.
+   */
+  Set<ContextInput> requires();
 
   /**
    * Parâmetros que <b>esta avaliação</b> usou nesta regra, já resolvidos (override do tenant ou

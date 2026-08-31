@@ -6,6 +6,7 @@ import com.barrier.riskengine.assessment.domain.exceptions.InvalidDocumentExcept
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentStateException;
 import com.barrier.riskengine.assurance.domain.AssuranceDisabledException;
 import com.barrier.riskengine.assurance.domain.DocumentGateNotSatisfiedException;
+import com.barrier.riskengine.replay.domain.DecisionNotReplayableException;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -55,7 +56,11 @@ class ProblemExceptionHandler {
    * viram 500 sem detalhe, que é o correto para erro de programação — ver
    * {@code ProblemExceptionHandlerTest}.
    */
-  @ExceptionHandler({AssessmentStateException.class, AssuranceDisabledException.class})
+  @ExceptionHandler({
+    AssessmentStateException.class,
+    AssuranceDisabledException.class,
+    DecisionNotReplayableException.class
+  })
   ProblemDetail handleConflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }

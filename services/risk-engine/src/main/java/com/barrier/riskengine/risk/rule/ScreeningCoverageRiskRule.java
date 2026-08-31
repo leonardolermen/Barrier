@@ -3,6 +3,7 @@ package com.barrier.riskengine.risk.rule;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.screening.client.interfaces.NegativeMediaProvider;
@@ -106,5 +107,12 @@ public class ScreeningCoverageRiskRule implements RiskRule {
   @Override
   public String code() {
     return RULE_CODE;
+  }
+
+  @Override
+  // Vazio de propósito: esta regra decide sobre o estado da importação de listas
+  // (WatchlistImportStatus), não sobre nenhum campo do contexto do cliente.
+  public Set<ContextInput> requires() {
+    return Set.of();
   }
 }

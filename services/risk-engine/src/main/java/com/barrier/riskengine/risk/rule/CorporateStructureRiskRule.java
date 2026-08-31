@@ -6,7 +6,9 @@ import com.barrier.riskengine.risk.domain.model.RiskResult;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import java.util.Set;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import org.springframework.stereotype.Component;
 
@@ -74,5 +76,10 @@ public class CorporateStructureRiskRule implements RiskRule {
   @Override
   public String code() {
     return "CORPORATE_STRUCTURE";
+  }
+
+  @Override
+  public Set<ContextInput> requires() {
+    return Set.of(ContextInput.COMPANY);
   }
 }

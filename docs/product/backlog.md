@@ -41,7 +41,7 @@ Herdada dos planos anteriores e mantida porque funcionou:
 | Motor de risco e trilha | **Forte.** 16 regras (Strategy), registry com vigência, `evaluated_json` com regras suprimidas e parâmetro efetivo, `config_history`. A auditoria externa classificou a trilha como melhor que a de fornecedores estabelecidos |
 | Pipeline e escala | **Provado em parte.** CI, Dockerfile, 5 réplicas em `kind`, `SingletonJobLock`, 3 tópicos × 6 partições, processamento e entrega paralelos com teto. Faltam as verificações de disjunção sob carga e a remedição com bureau real |
 | Contrato público | **Recém-aberto.** OpenAPI nos dois serviços com grupo administrativo fora, assinatura de webhook carimbada no tempo. Falta tudo o que vem depois do contrato: guia, sandbox exposto, paginação, histórico de entrega |
-| Auditabilidade como produto | **Habilitada pelos dados, ausente como capacidade.** `config_history` (V033) não tem **nenhum** caminho de leitura: dois `INSERT` e um `SELECT` num teste |
+| Auditabilidade como produto | **Replay entregue** (`POST /v1/assessments/{id}/replay`, dois modos, sem migration). Falta a **autoria**: `config_history` (V033) continua sem nenhuma leitura as-of |
 | KYC de PF | **Bloqueado por fornecedor.** Bureau real implementado e desligado; documentoscopia e biometria devolvem `UNAVAILABLE` em `prod` |
 | KYB de PJ | **Não automatiza.** `basic_data` da BigBoost não traz QSA, e `CorporateStructureCoverageRiskRule` é fail-closed de propósito — toda PJ atendida pelo bureau real vai a revisão manual |
 | Antifraude | **Inexistente.** `behavior_events` é tabela: zero regras leem o acervo |
@@ -56,14 +56,14 @@ estão marcadas.
 
 | # | Item | Grupo | Por que aqui |
 |---|---|---|---|
-| 1 | **Replay de decisão** | [2](#2--decisão-auditável--o-diferencial) | Os dados já estão gravados e ninguém os lê. É o primeiro pedido de um fiscal e a única capacidade que não é commodity |
-| 2 | **Política versionada com vigência e autoria** | [2](#2--decisão-auditável--o-diferencial) | Replay responde *o quê*; sem autoria não responde *quem*. Os dois se reforçam e compartilham a leitura de `config_history` |
-| 3 | **Cota e rate limit por tenant** | [3](#3--confiança--o-comprador-consegue-assinar) | Vencido: a paralelização foi feita antes dele. Fecha DoS, noisy neighbor e fatura de bureau de uma vez. **Bloqueia** o re-KYC periódico e a ingestão em massa |
-| 4 | **Listagem paginada com cursor** | [1](#1--integração--um-dev-externo-integra-sozinho) | Barato, e sem isso o parceiro que perdeu um webhook não tem como reconciliar |
-| 5 | **Guia público + sandbox exposto** | [1](#1--integração--um-dev-externo-integra-sozinho) | Em posicionamento A, a integração **é** o produto |
-| 6 | **Criptografia em repouso + retenção** | [3](#3--confiança--o-comprador-consegue-assinar) | Bloqueia o questionário de segurança de qualquer comprador sério — antes de bloquear qualquer norma |
-| 7 | **Identidade de operador + 4-eyes** | [2](#2--decisão-auditável--o-diferencial) | Depende de 2 |
-| 8 | **Fonte de QSA contratada** | [4](#4--cobertura-de-kyckyb) | É o teto do KYB. Comercial, não técnico |
+| ~~1~~ | ~~**Replay de decisão**~~ ✅ **fechado 2026-08-31** | [2](#2--decisão-auditável--o-diferencial) | Os dados já estavam gravados e ninguém os lia. Fechado sem migration |
+| **1** | **Política versionada com vigência e autoria** | [2](#2--decisão-auditável--o-diferencial) | **Agora é o próximo.** O replay já entrega o parâmetro efetivo de cada regra; falta a autoria. `config_history` (V033) segue sem nenhuma leitura as-of |
+| 2 | **Cota e rate limit por tenant** | [3](#3--confiança--o-comprador-consegue-assinar) | Vencido: a paralelização foi feita antes dele. Fecha DoS, noisy neighbor e fatura de bureau de uma vez. **Bloqueia** o re-KYC periódico e a ingestão em massa |
+| 3 | **Listagem paginada com cursor** | [1](#1--integração--um-dev-externo-integra-sozinho) | Barato, e sem isso o parceiro que perdeu um webhook não tem como reconciliar |
+| 4 | **Guia público + sandbox exposto** | [1](#1--integração--um-dev-externo-integra-sozinho) | Em posicionamento A, a integração **é** o produto |
+| 5 | **Criptografia em repouso + retenção** | [3](#3--confiança--o-comprador-consegue-assinar) | Bloqueia o questionário de segurança de qualquer comprador sério — antes de bloquear qualquer norma |
+| 6 | **Identidade de operador + 4-eyes** | [2](#2--decisão-auditável--o-diferencial) | Depende de 2 |
+| 7 | **Fonte de QSA contratada** | [4](#4--cobertura-de-kyckyb) | É o teto do KYB. Comercial, não técnico |
 
 ---
 
@@ -166,30 +166,31 @@ Em posicionamento A, **esta seção é o produto**, não a documentação dele.
 
 O ativo mais forte do projeto está **gravado e ilegível**. Esta seção transforma trilha em produto.
 
-- [ ] **Replay de decisão** 🔴 ← **em execução**
-  `evaluated_json` (com regras suprimidas e parâmetro efetivo), `config_history` (V033), snapshot de
-  versão de lista, `identity_check_id`/`screening_result_id` exatos e `ENGINE_VERSION` **já são
-  gravados**. Os dados estão lá; a capacidade, não.
+- [x] **Replay de decisão** 🔴 — **fechado 2026-08-31**
+  `POST /v1/assessments/{id}/replay`, módulo `replay`, **sem migration nenhuma**: o item inteiro
+  existia como dado (`evaluated_json`, `identity_check_id`/`screening_result_id` da V028,
+  `sources_json`, `ENGINE_VERSION`) e faltava como capacidade.
 
-  ⚠️ **O plano anterior prometia *"reproduz o desfecho histórico bit a bit"*, e isso não é
-  alcançável como escrito** — registrar isso importa mais que o item:
-  - **Regra é código, não dado.** Uma decisão de `barrier-risk-rules/1.4.0` foi produzida por código
-    que não existe mais no binário. Reproduzir a lógica da época exigiria regra versionada carregável
-    em runtime — a recusa já registrada duas vezes (F8, e "por que não regras customizáveis").
-  - **O `RiskContext` não é totalmente reconstruível.** `identity` e `screening` sim (V028);
-    `company` (`CompanyProfile`) é **transiente e nunca persistido**; `profile` (`SubjectProfile`) é
-    **mutável e sem histórico**; `assurance.attempts` é um `COUNT` com janela relativa a *agora*.
-    Replayar com o cadastro de hoje produziria diferença pelo motivo errado, apresentada como
-    mudança de motor — pior que não ter replay.
+  ⚠️ **O critério original prometia "bit a bit" e foi corrigido**, porque não é alcançável: regra é
+  código, não dado, e o `RiskContext` não é totalmente reconstruível. Afirmar o contrário seria o
+  modo de falha que este backlog usa como régua — controle que parece existir e não verifica. As
+  duas afirmações verdadeiras entregues no lugar:
+  - **`AS_DECIDED`** — dossiê do gravado + **reconferência da aritmética** contra `risk_scores`.
+    `TRAIL_INCONSISTENT` precede qualquer outro veredito: é o único que não depende de reconstruir
+    insumo nenhum.
+  - **`CURRENT_ENGINE`** — regras de hoje sobre a evidência gravada, diff regra a regra, **sem
+    nenhuma consulta paga** (garantido por ArchUnit: o módulo não depende de nenhum pacote `client`).
 
-  *Pronto quando:* dois modos, e a honestidade de cada um provada por teste —
-  **`AS_DECIDED`** monta o dossiê do que está gravado, inclusive a configuração vigente naquele
-  instante, e **reconfere a aritmética** contra `risk_scores` (resultado adulterado tem que acusar
-  `MISMATCH`, senão a reconferência é enfeite); **`CURRENT_ENGINE`** roda as regras de hoje sobre a
-  **evidência gravada**, sem nenhuma consulta paga (provado com provider que lança se chamado),
-  declara em `reconstruction.gaps` todo insumo irrecuperável, e reporta regra sem insumo como
-  `NOT_REPLAYABLE` — **nunca** como "passou". Mais: replay não grava `risk_score` novo, não dispara
-  listener, não publica na outbox.
+  A lacuna é **apurada, não presumida** — `subject_profiles` não tem histórico mas tem `updated_at`,
+  então cadastro intocado desde a decisão não é lacuna, e `SAME_DECISION` continua alcançável.
+  `RiskRule.requires()` (sem default, o compilador obriga) faz regra sem insumo virar
+  `NOT_REPLAYABLE` em vez de "passou"; `RiskRuleContextDeclarationTest` compara declaração e uso
+  real por bytecode, **provado por mutação**.
+
+  *Verificado:* 26 testes novos — reconferência acusa score/recomendação adulterados, banda que não
+  reprova sozinha continua valendo na reconferência, regra desligada no registry vira
+  `OUTCOME_CHANGED`, insumo ausente não publica resultado, replay não cria linha em `risk_scores`,
+  404 para tenant alheio, 409 sem decisão, 401 sem credencial.
 
 - [ ] **Política versionada com vigência e autoria** 🔴
   A plataforma não responde *"qual política estava vigente quando este cliente foi aprovado, e quem
@@ -207,9 +208,20 @@ O ativo mais forte do projeto está **gravado e ilegível**. Esta seção transf
   *Pronto quando:* decisão de EDD carrega identidade de pessoa; PEP e mídia negativa exigem dois
   revisores distintos; a admin key global deixa de existir.
 
+- [ ] **Snapshot do contexto da decisão** 🟡 — *derivado do replay*
+  `CURRENT_ENGINE` fica permanentemente degradado para PJ (o `CompanyProfile` com QSA/CNAE é
+  transiente) e para cadastro alterado depois da decisão. Fechar isso é gravar o contexto no momento
+  da decisão.
+  ⚠️ **Deliberadamente não feito junto com o replay:** versionar cadastro multiplica dado pessoal sob
+  retenção de 10 anos e criptografia em repouso, e a decisão já registrada no projeto é resolver isso
+  **junto** com aquele item, não antes. Por isso este item vem **depois** de "Criptografia em repouso"
+  e "Retenção", não antes.
+  *Pronto quando:* replay de PJ reporta zero lacunas, e o snapshot está sob a mesma política de
+  retenção e cifragem do resto da PII.
+
 - [ ] **Shadow mode / simulação de regra contra histórico** 🟠
   Hoje **toda mudança de regra é aposta**: não há como rodar uma regra nova sobre o histórico e ver
-  o impacto antes de ligar. Com replay pronto, é o passo seguinte natural — e é a resposta ao
+  o impacto antes de ligar. Com o replay pronto (fechado), é o passo seguinte natural — e é a resposta ao
   no-code rule builder da Alloy **sem** sacrificar o `ENGINE_VERSION`.
   *Pronto quando:* uma versão candidata do motor roda sobre uma janela do histórico e produz o diff
   de desfechos por regra, sem tocar em `risk_scores`.

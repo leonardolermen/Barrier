@@ -96,7 +96,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 
 🏗️ **Fluxo ponta a ponta funcionando**, com CI, container e 5 réplicas provadas em `kind`.
 Fases 0–8 da Risk Engine concluídas + Webhook API + monitoramento contínuo + contrato OpenAPI
-público. **Ainda não pode ir para produção** — falta cota por tenant, criptografia em repouso,
+público + replay de decisão (793 testes verdes). **Ainda não pode ir para produção** — falta cota por tenant, criptografia em repouso,
 retenção, fonte de QSA para o KYB e as quatro integrações que nunca foram exercitadas ao vivo.
 Tudo rastreado, com critério de pronto, no [backlog de produto](docs/product/backlog.md).
 

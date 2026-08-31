@@ -3,7 +3,9 @@ package com.barrier.riskengine.risk.rule;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import java.util.Set;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.tenant.config.service.TenantRiskConfigService;
 import java.time.Clock;
@@ -81,5 +83,10 @@ public class NewCompanyRiskRule implements RiskRule {
         String.valueOf(tenantConfig.getInt(context.tenantId(), RULE_CODE, "months", defaultMonths)),
         "score",
         String.valueOf(tenantConfig.getInt(context.tenantId(), RULE_CODE, "score", defaultScore)));
+  }
+
+  @Override
+  public Set<ContextInput> requires() {
+    return Set.of(ContextInput.COMPANY);
   }
 }

@@ -101,4 +101,21 @@ public class LayeredArchitectureTest {
           .should()
           .dependOnClassesThat()
           .haveSimpleName("TenantRiskConfigService");
+
+  /**
+   * O replay de decisão não pode alcançar integração externa.
+   *
+   * <p>A propriedade que ele vende é <b>reexecutar sem gastar consulta paga de bureau</b>. Provar
+   * isso em runtime exigiria um provider que explode se chamado, e um teste desses passa por
+   * caminho não exercitado; aqui a garantia é estrutural — o módulo não tem como chamar o que não
+   * consegue enxergar. A evidência vem do banco pelos ids que a V028 gravou.
+   */
+  @ArchTest
+  static final ArchRule replay_nao_alcanca_integracao_externa =
+      com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses()
+          .that()
+          .resideInAPackage("com.barrier.riskengine.replay..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("..client..");
 }
