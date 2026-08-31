@@ -18,6 +18,7 @@ import com.barrier.webhook.domain.WebhookEndpoint;
 import com.barrier.webhook.repository.DeliveryRepository;
 import com.barrier.webhook.repository.WebhookEndpointRepository;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -271,8 +272,8 @@ class WebhookDeliveryServiceTest {
     ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
     verify(client).send(enviado.capture());
     assertThat(enviado.getValue().signature())
-        .isEqualTo(signer.sign(evento.payload(), "segredo-da-acme"))
-        .isNotEqualTo(signer.sign(evento.payload(), "secret"));
+        .isEqualTo(reassina(enviado.getValue().signature(), evento.payload(), "segredo-da-acme"))
+        .isNotEqualTo(reassina(enviado.getValue().signature(), evento.payload(), "secret"));
     assertThat(enviado.getValue().previousSignature()).isNull();
   }
 
@@ -291,11 +292,15 @@ class WebhookDeliveryServiceTest {
 
     ArgumentCaptor<WebhookRequest> enviado = ArgumentCaptor.forClass(WebhookRequest.class);
     verify(client).send(enviado.capture());
-    assertThat(enviado.getValue().previousSignature())
-        .isEqualTo(signer.sign(evento.payload(), "segredo-antigo"));
-    assertThat(enviado.getValue().signature())
-        .isEqualTo(signer.sign(evento.payload(), rotacionado.secret()))
-        .isNotEqualTo(enviado.getValue().previousSignature());
+    String atual = enviado.getValue().signature();
+    String anterior = enviado.getValue().previousSignature();
+    assertThat(anterior).isEqualTo(reassina(atual, evento.payload(), "segredo-antigo"));
+    assertThat(atual)
+        .isEqualTo(reassina(atual, evento.payload(), rotacionado.secret()))
+        .isNotEqualTo(anterior);
+    // As duas assinaturas declaram o MESMO instante: com instantes diferentes, o receptor que
+    // ainda tem o segredo antigo calcularia sobre outro t e a rotacao pararia de proteger.
+    assertThat(instante(anterior)).isEqualTo(instante(atual));
   }
 
   /** Vencida a janela, o segredo antigo para de ser aceito — senão a rotação não protege de nada. */
@@ -323,5 +328,20 @@ class WebhookDeliveryServiceTest {
     service("").onEvent(event(), null);
 
     verify(client, never()).send(any());
+  }
+
+  /**
+   * Reassina o corpo usando o instante que a entrega declarou.
+   *
+   * <p>A assinatura passou a cobrir {@code <t>.<corpo>}, entao o esperado nao pode mais ser
+   * calculado sem saber o {@code t} — recalcula-lo com "agora" daria falso negativo a cada segundo
+   * que virasse durante o teste.
+   */
+  private String reassina(String assinaturaEnviada, String payload, String segredo) {
+    return signer.sign(payload, segredo, Instant.ofEpochSecond(instante(assinaturaEnviada)));
+  }
+
+  private static long instante(String assinatura) {
+    return Long.parseLong(assinatura.substring("t=".length(), assinatura.indexOf(',')));
   }
 }

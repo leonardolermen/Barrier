@@ -88,13 +88,21 @@ Nada aqui é engenharia, e tudo aqui bloqueia o resto.
 
 **Em A, o produto é a integração.** Esta fase é o produto, não a documentação dele.
 
-- [ ] **OpenAPI gerado, versionado e publicado**
+- [x] **OpenAPI gerado, versionado e publicado** — **fechado 2026-08-31** (`d36a310`, `c655775`, `77b3707`)
+  springdoc 3.0.0 nos dois servicos; grupos `parceiro`/`admin` na risk-engine (18 rotas publicadas,
+  nenhuma administrativa); `OpenApiCoverageIntegrationTest` enumera os controllers pelo bytecode e
+  quebra o build quando rota de negocio nasce sem contrato, **provado por mutacao**; spec gravado
+  por teste e publicado como artefato do CI. Dois defeitos achados lendo o spec gerado, ambos com
+  teste: `AuthenticatedTenant` era publicado como query parameter obrigatorio (contrato pedindo
+  parametro que o parceiro nunca envia), e nao havia esquema de autenticacao declarado.
+  <details><summary>texto original</summary>
   Hoje existe só um comentário no `pom.xml` dizendo "Fase 5".
   ⚠️ springdoc 2.x é para Boot 3; Boot 4 exige a linha 3.x — confirmar que resolve **antes** de
   planejar em cima.
   *Pronto quando:* `/v3/api-docs` cobre os dois serviços **e** um teste reflexivo falha se algum
   `@RequestMapping` de `/v1` não estiver documentado — no padrão do `ApiRouteCoverageTest`, que já
   existe e resolveu exatamente esta classe de esquecimento.
+  </details>
 
 - [ ] **Sandbox — que já existe e ninguém sabe**
   O `FakeCpfBureauProvider` atende qualquer CPF válido e usa o prefixo `999` + dígito seletor para

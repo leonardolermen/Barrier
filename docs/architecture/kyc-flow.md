@@ -389,9 +389,16 @@ A Webhook API consome, resolve o endpoint **do tenant do evento** e entrega assi
 ```http
 POST https://parceiro.exemplo.com/webhooks/barrier
 X-Barrier-Event-Id: 6c1f...
-X-Barrier-Signature: sha256=...
-X-Barrier-Signature-Previous: sha256=...   (só durante janela de rotação de segredo)
+X-Barrier-Signature: t=1700000000,v1=<hex>
+X-Barrier-Signature-Previous: t=1700000000,v1=<hex>   (só durante janela de rotação de segredo)
 ```
+
+A assinatura cobre `<t>.<corpo cru>`, não só o corpo: o instante viaja **dentro** do que é
+assinado, senão o atacante trocaria o carimbo do que capturou por "agora" e o replay voltaria a
+passar. O receptor recusa o que estiver fora da tolerância (5 min é o padrão; ver
+`tools/webhook-receiver.py`). O `t` é o da **tentativa**, não o da criação da entrega — congelá-lo
+faria toda retentativa posterior à janela chegar velha e ser recusada. As duas assinaturas da
+janela de rotação declaram o mesmo `t`.
 
 Idempotência por `eventId`, retry com backoff, DLT para payload ilegível e um job de reconciliação
 que relê o tópico e cria entrega para toda decisão sem uma.

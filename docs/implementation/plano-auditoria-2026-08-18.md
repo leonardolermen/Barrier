@@ -293,7 +293,8 @@ verificar ao vivo — some com o item de integrações não verificadas do P1.
   *Pronto quando:* cota por tenant no intake **e** no lote de processamento; teste provando que
   tenant em bulk não atrasa o p99 do tenant vizinho.
 
-- [ ] **Ninguém consegue integrar sem falar com o time** 🟠
+- [ ] **Ninguém consegue integrar sem falar com o time** 🟠 — *parcial: OpenAPI fechado em
+  2026-08-31 (`77b3707`); faltam guia publico, sandbox exposto, SDK e catalogo de reason codes*
   Sem OpenAPI (só um comentário no pom dizendo "Fase 5"), sem SDK, sem sandbox, sem changelog
   de API, sem catálogo público de reason codes, sem doc de como verificar o HMAC nem o que fazer
   com `X-Barrier-Signature-Previous`. O que existe é uma collection do Postman e docs internas
@@ -465,7 +466,7 @@ Classificação e correção; os 🔴/🟠 estruturais já estão em P0/P1.
 |---|---|---|
 | 🟡 | **Enumeration/IDOR parcial** em `/v1/subjects/{document}`: o escopo por vínculo está certo (404 sem vínculo), mas **o vínculo nasce de um `POST`** — um tenant que suspeite de um CPF cria avaliação para obter vínculo. Mitigado no cadastro (V024), não no fluxo. Sem rate limit, sondar é questão de custo. | Cota (P1) + revisar se `POST` deve criar vínculo sem intenção declarada |
 | 🟡 | **SSRF residual no webhook**: URL validada só por esquema e host local. `https://169.254.169.254/…` e `https://10.0.0.5/` passam — POST autenticado para metadata do cloud ou rede interna. Gated por admin (reduz para MEDIUM, não elimina). | Negar faixas privadas/link-local **após resolução DNS**, e re-resolver no envio (rebinding) |
-| 🟡 | **HMAC sem timestamp**: `sha256=HMAC(body)` — payload capturado é replayável para sempre contra o cliente. O `X-Barrier-Event-Id` permite dedup, mas delega ao cliente fazer certo. | `t=` assinado + tolerância, padrão Stripe; documentar na doc pública (P1) |
+| ✅ | ~~**HMAC sem timestamp**~~ — **fechado 2026-08-31**: `t=<epoch>,v1=<hex>` sobre `<t>.<corpo>`, receptor de referência recusando fora da tolerância de 5 min. Feito agora porque depois do primeiro parceiro integrado seria quebra de contrato. |
 | 🟡 | **Sem scan de dependência** num stack de vanguarda (Java 25 + Boot 4.0). | Entra com o CI (P0) |
 
 **Preservar deliberadamente** (a auditoria destacou como bem feito, para não se perder numa
