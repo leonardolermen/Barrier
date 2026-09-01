@@ -16,7 +16,7 @@ e o `CLAUDE.md` apontam para cá.
 | Mapeamento  | Mappers escritos à mão (`XyzEntityMapper`/`XyzDtoMapper`, classes `final` com métodos estáticos) — MapStruct está no `pom.xml` mas ainda sem uso real |
 | Testes      | JUnit 5, Mockito, AssertJ, Testcontainers, ArchUnit |
 | Boilerplate | Lombok **só em entidade JPA**, para acessores — ver regra abaixo     |
-| API docs    | Nenhuma ainda — springdoc-openapi previsto para a Fase 5 (ver [risk-engine-plan.md](risk-engine-plan.md)) |
+| API docs    | Nenhuma ainda — springdoc-openapi previsto para a Fase 5 (ver [risk-engine-plan.md](archive/risk-engine-plan.md)) |
 | Observ.     | Micrometer + logs estruturados (JSON)               |
 
 ## Regra de camadas (clássica)

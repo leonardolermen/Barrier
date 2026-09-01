@@ -38,6 +38,16 @@ jobs:
       - name: mvnw verify
         run: ./mvnw -B verify
 
+      - name: Publicar contrato OpenAPI
+        # Spec que so existe em runtime nao serve para integrar: o parceiro precisa do arquivo
+        # antes de ter acesso ao ambiente.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: services/*/target/openapi-*.json
+          if-no-files-found: error
+
       - name: Publicar relatório de testes
         if: always()
         uses: actions/upload-artifact@v4

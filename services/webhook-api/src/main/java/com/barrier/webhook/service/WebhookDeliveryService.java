@@ -183,9 +183,14 @@ public class WebhookDeliveryService {
     // Segredo do tenant, resolvido a cada tentativa: uma rotação entre a primeira tentativa e o
     // retry assina com o que vale agora, sem carregar o segredo antigo na linha da entrega.
     SigningMaterial material = endpoints.resolveSigningMaterial(delivery.tenantId());
-    String signature = signer.sign(delivery.payload(), material.secret());
+    // Instante da TENTATIVA, e o mesmo para as duas assinaturas: durante a rotacao o receptor
+    // compara a que ele consegue calcular, e dois instantes diferentes fariam uma delas nao bater.
+    Instant assinadoEm = Instant.now();
+    String signature = signer.sign(delivery.payload(), material.secret(), assinadoEm);
     String previousSignature =
-        material.hasPrevious() ? signer.sign(delivery.payload(), material.previousSecret()) : null;
+        material.hasPrevious()
+            ? signer.sign(delivery.payload(), material.previousSecret(), assinadoEm)
+            : null;
     WebhookSendResult result =
         client.send(
             new WebhookRequest(

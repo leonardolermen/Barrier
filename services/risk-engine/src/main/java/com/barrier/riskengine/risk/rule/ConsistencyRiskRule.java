@@ -2,7 +2,9 @@ package com.barrier.riskengine.risk.rule;
 
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import java.util.Set;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import java.util.List;
@@ -47,5 +49,10 @@ public class ConsistencyRiskRule implements RiskRule {
   @Override
   public String code() {
     return "PHONE_ADDRESS_MISMATCH";
+  }
+
+  @Override
+  public Set<ContextInput> requires() {
+    return Set.of(ContextInput.PROFILE);
   }
 }

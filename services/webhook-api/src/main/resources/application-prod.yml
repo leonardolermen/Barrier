@@ -1,0 +1,4 @@
+springdoc:
+  # Mesmo raciocinio da risk-engine: spec sim, UI viva no host da API nao.
+  swagger-ui:
+    enabled: false

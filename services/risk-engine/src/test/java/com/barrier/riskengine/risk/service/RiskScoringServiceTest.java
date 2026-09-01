@@ -284,6 +284,11 @@ class RiskScoringServiceTest {
       }
 
       @Override
+      public java.util.Set<com.barrier.riskengine.risk.rule.context.ContextInput> requires() {
+        return java.util.Set.of();
+      }
+
+      @Override
       public String code() {
         return "PARAMETRIZADA";
       }
@@ -313,6 +318,11 @@ class RiskScoringServiceTest {
             "fatores de atenção acumulados",
             List.of("teste"),
             null);
+      }
+
+      @Override
+      public java.util.Set<com.barrier.riskengine.risk.rule.context.ContextInput> requires() {
+        return java.util.Set.of();
       }
 
       @Override

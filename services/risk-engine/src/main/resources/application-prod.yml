@@ -36,3 +36,10 @@ barrier:
     # que o time aprende a ignorar antes de precisar dele.
     alerts:
       enabled: true
+
+springdoc:
+  # UI desligada em prod, spec ligado. O artefato de produto e o ARQUIVO do spec, publicado no site
+  # de documentacao; uma UI viva no host da API e superficie extra servindo o mesmo conteudo, no
+  # mesmo raciocinio que tirou o /actuator da porta de negocio.
+  swagger-ui:
+    enabled: false

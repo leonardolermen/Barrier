@@ -152,7 +152,7 @@ passou a exigir verificação nos campos que essas fontes sustentam.
 > definidos e nunca usados, e `FieldVerificationService.challenge` recusa `ADDRESS` explicitamente.
 > Cadastro plausível e inventado ainda satisfaz o gate **para o campo endereço** especificamente —
 > o furo original está fechado para telefone, e-mail e nascimento, não para todo campo verificável.
-> Por isso `docs/implementation/plano-remediacao-auditoria.md` mantém o item "Verificar dados, não
+> Por isso o [backlog de produto](../product/backlog.md) mantém o item "Verificar dados, não
 > só presença" **aberto**: o plano de remediação está certo, este ADR estava otimista.
 
 **3. O bloqueio por consentimento passa a estar atendido.**

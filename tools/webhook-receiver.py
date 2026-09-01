@@ -36,13 +36,35 @@ SIGNATURE_HEADER = "X-Barrier-Signature"
 PREVIOUS_SIGNATURE_HEADER = "X-Barrier-Signature-Previous"
 EVENT_ID_HEADER = "X-Barrier-Event-Id"
 
+# Tolerância de relógio para o `t=` da assinatura. Cinco minutos é o padrão de mercado: folgado
+# o bastante para relógio de servidor desalinhado, curto o bastante para a janela de replay ser
+# minutos e não a eternidade.
+TOLERANCE_SECONDS = int(os.environ.get("BARRIER_WEBHOOK_TOLERANCE", "300"))
+
 GREEN, RED, YELLOW, DIM, RESET = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 
 
-def expected_signature(body: bytes, secret: str) -> str:
-    """Mesmo esquema do `HmacSigner`: HMAC-SHA256 do corpo cru, prefixado por `sha256=`."""
-    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    return f"sha256={digest}"
+def parse_signature(header: str) -> tuple[int, str] | None:
+    """Quebra `t=<epoch>,v1=<hex>`. Formato desconhecido devolve None — nunca "aceita mesmo assim"."""
+    instante, assinatura = None, None
+    for parte in header.split(","):
+        chave, _, valor = parte.strip().partition("=")
+        if chave == "t":
+            instante = valor
+        elif chave == "v1":
+            assinatura = valor
+    if instante is None or assinatura is None:
+        return None
+    try:
+        return int(instante), assinatura
+    except ValueError:
+        return None
+
+
+def expected_hex(body: bytes, secret: str, instante: int) -> str:
+    """Mesmo esquema do `HmacSigner`: HMAC-SHA256 sobre `<t>.<corpo cru>`."""
+    assinado = str(instante).encode("ascii") + b"." + body
+    return hmac.new(secret.encode("utf-8"), assinado, hashlib.sha256).hexdigest()
 
 
 def verify(body: bytes, received: str | None, previous: str | None) -> tuple[str, str]:
@@ -52,13 +74,30 @@ def verify(body: bytes, received: str | None, previous: str | None) -> tuple[str
     if not received:
         return f"AUSENTE (sem header {SIGNATURE_HEADER})", RED
 
-    expected = expected_signature(body, SECRET)
+    partes = parse_signature(received)
+    if partes is None:
+        return f"INVÁLIDA — {SIGNATURE_HEADER} fora do formato t=<epoch>,v1=<hex>", RED
+    instante, _ = partes
+
+    # A janela é o ponto do `t=`: sem ela o instante é enfeite e a entrega continua replayável
+    # para sempre. O instante está DENTRO do que se assina, então trocá-lo invalida a assinatura —
+    # é isso que impede o atacante de simplesmente atualizar o carimbo do que capturou.
+    idade = abs(int(datetime.now(tz=timezone.utc).timestamp()) - instante)
+    if idade > TOLERANCE_SECONDS:
+        return f"RECUSADA — {idade}s de idade, acima da tolerância de {TOLERANCE_SECONDS}s", RED
+
+    esperado = expected_hex(body, SECRET, instante)
     # compare_digest e não `==`: comparação de assinatura vaza informação por tempo, e um
     # receptor de exemplo que ensina o jeito errado é pior que nenhum exemplo.
-    if hmac.compare_digest(expected, received):
+    _, recebida = partes
+    if hmac.compare_digest(esperado, recebida):
         return "VÁLIDA", GREEN
-    if previous and hmac.compare_digest(expected, previous):
-        return "VÁLIDA (segredo anterior — janela de rotação)", GREEN
+    if previous:
+        anteriores = parse_signature(previous)
+        # Durante a rotação o receptor ainda tem o segredo antigo: o que ele consegue calcular
+        # bate com o header da assinatura anterior, não com a principal.
+        if anteriores and hmac.compare_digest(esperado, anteriores[1]):
+            return "VÁLIDA (segredo anterior — janela de rotação)", GREEN
     return "INVÁLIDA — o corpo não bate com o segredo configurado", RED
 
 

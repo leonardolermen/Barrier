@@ -1,3 +1,8 @@
+> **📦 FILA DRENADA — documento de arquivo, não é backlog.**
+> F1–F9 todas entregues. Fica como o registro do porquê de `mesa`, `riskstate`, `monitoring` e
+> `behavior` existirem, e do critério escrito para quando um schema registry passa a valer a pena.
+> O backlog vivo é [docs/product/backlog.md](../../product/backlog.md).
+
 # Fila de implementação — lições do BMP Origem
 
 > **🏁 FILA DRENADA (2026-08-18).** F1–F9 todas entregues. Este documento fica como
@@ -11,7 +16,7 @@
 > Os planos bite-sized por item entregue foram removidos — a decisão e o racional de cada um
 > estão no `CLAUDE.md` e nos ADRs, que são lidos a cada sessão.
 
-**Spec:** [licoes-do-origem.md](licoes-do-origem.md) (P1–P9 e "o que **não** copiar")
+**Spec:** [licoes-do-origem.md](../licoes-do-origem.md) (P1–P9 e "o que **não** copiar")
 **Cruzamentos:** [plano-remediacao-auditoria.md](plano-remediacao-auditoria.md) ·
 [risk-engine-plan.md](risk-engine-plan.md)
 **Status na abertura da fila (2026-08-14):** P1 entregue (PR #19, V040, `feat/identity-reuse`).
@@ -50,15 +55,15 @@ uma página e precisa existir *antes* de qualquer linha de UBO.
 
 | # | Item | Spec | Tipo | Esforço | Depende de |
 |---|---|---|---|---|---|
-| F1 | ✅ ADR de ownership de recovery ([0017](../adr/0017-ownership-de-recovery.md)) | P9 | ADR | ~1 página | — |
-| F2 | ✅ Restrições de custo no ADR de UBO ([0018](../adr/0018-custo-de-navegacao-ubo.md)) | P6 | ADR | ~1 página | — |
+| F1 | ✅ ADR de ownership de recovery ([0017](../../adr/0017-ownership-de-recovery.md)) | P9 | ADR | ~1 página | — |
+| F2 | ✅ Restrições de custo no ADR de UBO ([0018](../../adr/0018-custo-de-navegacao-ubo.md)) | P6 | ADR | ~1 página | — |
 | F3 | ✅ Projeção `subject_risk_state` (módulo `riskstate`) | P2 | código | médio | — |
 | F4 | ✅ Webhook de mudança de nível de risco | P2 | código | médio | F3 |
 | F5 | ✅ Alertas com baseline móvel (módulo `monitoring`) | P3 | código | médio | F3 (parcial) |
-| F6 | ✅ Política de reavaliação + trilha ([ADR-0019](../adr/0019-politica-de-reavaliacao.md)) | P4 | código | médio | F3 |
+| F6 | ✅ Política de reavaliação + trilha ([ADR-0019](../../adr/0019-politica-de-reavaliacao.md)) | P4 | código | médio | F3 |
 | F7 | ✅ Mesa: fila nomeada, ações manuais e SLA pausável (módulo `mesa`) | P5 | código | alto | F6 |
 | F8 | ✅ Ingestão de evento comportamental (módulo `behavior`) | P7 | código | alto | F4 |
-| F9 | ✅ Catálogo de eventos ([event-catalog](../architecture/event-catalog.md)); registry adiado com critério | P8 | doc + infra | — | disparado pelo F8 |
+| F9 | ✅ Catálogo de eventos ([event-catalog](../../architecture/event-catalog.md)); registry adiado com critério | P8 | doc + infra | — | disparado pelo F8 |
 
 **Fechamento das lacunas apontadas na revisão da fila (2026-08-16):** o job diário de reavaliação
 periódica (o gatilho que faltava para `PERIODIC`) e o `PagerDutyAlertNotifier` (sem o qual o F5

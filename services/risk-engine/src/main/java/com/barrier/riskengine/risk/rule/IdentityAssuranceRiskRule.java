@@ -6,6 +6,7 @@ import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.rule.context.AssuranceSummary;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import java.util.ArrayList;
@@ -141,5 +142,10 @@ public class IdentityAssuranceRiskRule implements RiskRule {
   @Override
   public String code() {
     return RULE_CODE;
+  }
+
+  @Override
+  public Set<ContextInput> requires() {
+    return Set.of(ContextInput.ASSURANCE);
   }
 }

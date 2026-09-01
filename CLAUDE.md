@@ -5,24 +5,25 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
 
 ## Ao implementar código, siga SEMPRE
 
-- **O QUE VEM AGORA (leia primeiro):** [docs/implementation/plano-auditoria-2026-08-18.md](docs/implementation/plano-auditoria-2026-08-18.md)
-  — P0–P4 da auditoria externa de `e141669`. **Escopo novo está congelado até P0 e P1 fecharem.**
-  P0 hoje: `/v1/mesa/**` e `/v1/behavior-events` estão fora do filtro de auth (F7 e F8
-  inacessíveis), `/actuator` aberto, e não existe CI nem Dockerfile.
-- **O que falta para produção (itens abertos das ondas):** [docs/implementation/plano-remediacao-auditoria.md](docs/implementation/plano-remediacao-auditoria.md)
-  — plano vivo da auditoria de KYC/PLD-FT, com critérios de pronto. Consulte antes de propor
-  trabalho novo: o que está lá é o que reduz risco de verdade.
-- **Escala horizontal (em execução):** [docs/implementation/plano-escala-horizontal.md](docs/implementation/plano-escala-horizontal.md)
-  — 5 réplicas em k8s atrás de LB. As filas com `SKIP LOCKED` já são seguras; faltam container,
-  probes, partições de Kafka, lock nos 5 `@Scheduled` singleton e prova em `kind`.
+- **O QUE VEM AGORA (leia primeiro):** [docs/product/backlog.md](docs/product/backlog.md)
+  — **o único backlog vivo.** Antes havia quatro planos sobrepostos, e o custo foi medido: quatro
+  itens ficaram marcados como abertos meses depois de resolvidos, e a paralelização foi feita antes
+  da cota que o próprio plano exigia primeiro. Consulte a **sequência recomendada** antes de propor
+  trabalho novo. Em execução agora: **replay de decisão**.
+- **Posicionamento do produto:** [ADR-0020](docs/adr/0020-posicionamento-motor-de-decisao-api-first.md)
+  — motor de decisão **API-first**. O parceiro tem a jornada dele e compra decisão explicável e
+  trilha auditável; hosted page/SDK/UI da mesa são posicionamento B, depois. **Em A, a integração é
+  o produto** — contrato, guia e sandbox não são acessórios.
 - **Padrões de código:** [docs/implementation/coding-standards.md](docs/implementation/coding-standards.md)
-- **Plano da Risk Engine:** [docs/implementation/risk-engine-plan.md](docs/implementation/risk-engine-plan.md)
 - **Lições do BMP Origem:** [docs/implementation/licoes-do-origem.md](docs/implementation/licoes-do-origem.md)
   — estudo comparativo com a esteira de KYC que roda em produção na BMP (Origem/Mishmar/
   bureaus-manager/tzofe): o que importar, em que ordem, e **o que não copiar**.
-- **Fila de execução dessas lições:** [docs/implementation/fila-origem.md](docs/implementation/fila-origem.md)
-  — F1–F9 com escopo e critério de pronto. **Fila drenada:** todas entregues; fica como registro
-  do porquê de `mesa`/`riskstate`/`monitoring`/`behavior` existirem.
+- **Planos encerrados (arquivo):** [docs/implementation/archive/](docs/implementation/archive/README.md)
+  — remediação, auditoria externa, escala horizontal, fila-origem (drenada), plano da Risk Engine e
+  plano de produto. **Não são backlog e não são fonte de verdade sobre o estado atual** — guardam o
+  racional das recusas (por que não regra customizável, por que não schema registry, por que não
+  trocar a BrasilAPI) e as hipóteses reprovadas por medição. Item marcado `[ ]` lá pode já estar
+  pronto; a tabela de reconciliação no README do arquivo lista os que estavam.
 - **Decisões de arquitetura:** [docs/adr/](docs/adr/) (ADR-0009 define o corte atual)
 
 Existe a skill `barrier-implementation` com o checklist operacional — use-a antes de
@@ -674,7 +675,7 @@ documento nem nome, e é isso que permite mandá-lo a um serviço externo. **Nã
 sem routing key neste ambiente, o caminho até o PagerDuty real nunca foi exercitado — validar em
 homologação forçando um `backlog_analise` antes de virar plantão.
 
-**Escala horizontal — 5 réplicas em Kubernetes ([plano](docs/implementation/plano-escala-horizontal.md)).**
+**Escala horizontal — 5 réplicas em Kubernetes ([plano arquivado](docs/implementation/archive/plano-escala-horizontal.md)).**
 O mecanismo difícil já existia e nunca tinha sido exercitado: as quatro filas de trabalho usam
 `FOR UPDATE SKIP LOCKED` + lease, a API é stateless e o Flyway pega advisory lock. Faltava tudo em
 volta. Agora existem `Dockerfile` multi-stage, CI (`.github/workflows/ci.yml`), manifests em
@@ -767,12 +768,111 @@ então o "teto de consultas pagas de bureau" do Javadoc é 5× maior no cluster;
 só com **bureau simulado** — com bureau real o gargalo é o pool de conexões, não as threads.
 Remedir antes de considerar o ADR-0015 fechado.
 
+**Contrato público da API (posicionamento A, Fase 1).** springdoc 3.0.0 nos dois serviços — a
+linha 2.x é para Boot 3 e falha em runtime; a versão é fixada no `pom.xml` raiz porque o BOM do
+Boot 4 não a gerencia (mesma situação do `testcontainers-bom`). Na risk-engine há **dois grupos**, e
+a separação é de segurança e não de organização: `parceiro` (publicável, 18 rotas) e `admin`
+(`/v1/risk-rules`, `/v1/tenants/**`, `/v1/webhook-endpoints/**`), que **nunca** é publicado —
+esconder não protege (quem protege é o `AdminApiKeyFilter`), mas não há razão de dar o mapa da
+superfície administrativa de graça, mesmo raciocínio que tirou o `/actuator` da porta de negócio. A
+webhook-api não tem grupos porque **toda** rota dela é administrativa. UI desligada em `prod` nos
+dois (o artefato de produto é o *arquivo* do spec, não uma UI viva no host da API); o spec é gravado
+**por teste** e não por plugin de build, para o arquivo publicado ser exatamente o que a aplicação
+serve — duas ferramentas divergem, e a divergência aqui é o parceiro integrando contra um contrato
+que não existe. `OpenApiCoverageIntegrationTest` é irmão do `ApiRouteCoverageTest`: enumera os
+controllers pelo **bytecode** (não por lista escrita à mão), tem guard antivácuo e **quebra o
+build** quando rota de negócio nasce sem contrato — provado por mutação, não passa por acidente.
+⚠️ Dois defeitos que só apareceram **lendo o spec gerado**, ambos com teste: `AuthenticatedTenant`
+(injetado pelo `TenantArgumentResolver` a partir da credencial) era publicado como query parameter
+**obrigatório** chamado `tenant`, junto do formato interno de `Tenant` — contrato que descreve
+parâmetro inexistente é pior que contrato nenhum, porque o dev externo tenta, falha, e o único
+caminho de volta é falar com o time; corrigido com `SpringDocUtils.addRequestWrapperToIgnore`. E não
+havia esquema de autenticação declarado (`bearerAuth`). O teste de vazamento administrativo pegou a
+regressão de citar `POST /v1/tenants/{id}/api-keys` na descrição do esquema.
+
+**Assinatura de webhook carimbada no tempo (`t=<epoch>,v1=<hex>` sobre `<t>.<corpo cru>`).** Antes
+a assinatura cobria só o corpo, e um callback de KYC capturado era **replayável para sempre**; o
+`X-Barrier-Event-Id` permite dedup, mas delega ao cliente fazer certo. O instante vai **dentro** do
+que se assina: em header próprio, o atacante trocaria o carimbo por "agora" e o replay voltaria a
+passar — controle que parece existir e não verifica, o modo de falha recorrente deste projeto. O
+ponto entre instante e corpo evita a colisão `t=17`+`"00.x"` vs `t=1700`+`".x"` (tem teste). O
+instante é o da **tentativa**, não o da criação da entrega: congelá-lo faria toda retentativa
+posterior à tolerância chegar velha e ser recusada, e a máquina de retry queimaria as tentativas
+entregando o que o receptor foi instruído a rejeitar. Durante a rotação as duas assinaturas
+declaram o **mesmo `t`**, senão o receptor que ainda tem o segredo antigo calcularia sobre outro
+`t`. O overload `sign(body, secret)` foi **removido**, não mantido por conveniência — o tipo é a
+defesa, mesmo padrão do `SubjectProfileService` que não aceita só o `subjectId`. `v1=` deixa caminho
+para `v2=` ao lado, como o `X-Barrier-Signature-Previous` fez para rotação de segredo.
+`tools/webhook-receiver.py` (o exemplo que o parceiro copia) aplica tolerância de 5 min — sem a
+janela o carimbo é enfeite. Feito antes de haver parceiro integrado, porque depois é quebra de
+contrato.
+
+**Replay de decisão (`POST /v1/assessments/{id}/replay`, módulo `replay`).** A trilha era o ativo mais
+forte do projeto e estava **gravada e ilegível**: `evaluated_json` com regra suprimida e parâmetro
+efetivo, `identity_check_id`/`screening_result_id` exatos (V028), `sources_json` com a versão de cada
+lista, `config_history` (V033) — tudo escrito, nada lido. **Nenhuma migration nova:** o item inteiro
+existia como dado e faltava como capacidade.
+
+⚠️ **O plano prometia "reproduz o desfecho histórico bit a bit", e isso não é alcançável** — dizer
+que era seria o modo de falha recorrente do projeto (controle que parece existir e não verifica).
+Dois motivos: **regra é código, não dado** (a decisão de `1.4.0` veio de código que não está mais no
+binário, e regra versionada carregável em runtime é recusa já registrada duas vezes); e **o
+`RiskContext` não é totalmente reconstruível** — `CompanyProfile` é transiente e nunca persistido,
+`SubjectProfile` é mutável e sem histórico. Replayar com o cadastro de hoje produziria diferença
+pelo motivo errado, apresentada como mudança de motor.
+
+O que se entrega no lugar são duas afirmações verdadeiras. **`AS_DECIDED`** não reexecuta nada: monta
+o dossiê do gravado e **reconfere a aritmética**, recalculando soma/banda/recomendação a partir dos
+resultados persistidos e comparando com `risk_scores` — pega adulteração e coluna corrompida, e não
+depende de reconstruir insumo nenhum (por isso `TRAIL_INCONSISTENT` **precede** qualquer outro
+veredito). **`CURRENT_ENGINE`** roda as regras de hoje sobre a **evidência gravada** e faz o diff
+regra a regra.
+
+**A lacuna é apurada, não presumida** — é o que mantém `SAME_DECISION` alcançável em vez de todo
+replay sair "degradado": `subject_profiles` não tem histórico mas tem `updated_at`, então cadastro
+intocado desde a decisão **não** é lacuna; `company` só é lacuna em PJ (em CPF era nulo na decisão
+também); assurance só quando existe alguma verificação (`biometricAttempts` é `COUNT` sobre janela
+que termina *agora*). ⚠️ `SubjectProfileService.findDeclared` nasceu aqui: `find` devolve
+`SubjectProfile.blank`, que tem `updatedAt = agora`, e sem separar ausência de alteração todo subject
+sem cadastro sairia com "cadastro mudou depois da decisão" — lacuna inventada.
+
+**`RiskRule.requires()` não tem default, e é essa a defesa.** Cada regra declara quais campos do
+`RiskContext` lê (`ContextInput`); regra cujo insumo não foi reconstruído vira `NOT_REPLAYABLE` e
+**não publica** o resultado da execução degradada — porque rodar sobre insumo ausente devolve "não
+disparou", indistinguível de "rodou e o cliente estava limpo", a mesma ambiguidade que a V028 gastou
+uma migration para eliminar. O compilador obriga a declarar; `RiskRuleContextDeclarationTest` obriga
+a declarar **certo**, comparando por bytecode as chamadas a acessores de `RiskContext` com as
+constantes referenciadas dentro de `requires()` — sem lista escrita à mão, **provado por mutação**.
+
+**Duas extrações que a entrega forçou, e que valem por si.** `ScoreAggregation` tira soma/banda/
+recomendação de dentro do `RiskScoringService`: uma reconferência com cópia própria da regra de
+agregação não conferiria nada — as duas divergiriam e a divergência apareceria como "a trilha está
+íntegra" (mesmo raciocínio do `ReassessmentPolicy.menorIntervalo()`). E `score()` virou
+`evaluate()` + `save()`: o replay chama só `evaluate`, e daí sai de graça que ele não grava
+`risk_score`, não dispara `AssessmentCompletedListener`, não toca `subject_risk_state` e não escreve
+na outbox — **não ter como**, em vez de lembrar de não chamar. Que ele não gasta consulta paga de
+bureau é garantido por ArchUnit (`replay_nao_alcanca_integracao_externa`): o módulo não depende de
+nenhum pacote `client`, então não tem como chamar o que não enxerga.
+
+Escopado por tenant como o resto de `/v1/assessments` (404, nunca 403 — 403 confirmaria o id); grupo
+`parceiro` do OpenAPI, porque o fiscal audita a instituição contratante e é ela que precisa
+responder. `DecisionNotReplayableException` → 409 para avaliação sem decisão do motor. A resposta não
+carrega documento nem nome: só código de regra, pontuação, versão de motor e de lista — é o que
+permite que um dossiê de auditoria circule.
+
+**Fica aberto, e é o próximo item do backlog:** `config_history` continua sem leitura as-of, então o
+dossiê traz o parâmetro efetivo de cada regra (que já vem do `evaluated_json`) mas ainda não a
+**autoria** da política vigente. Replay responde *o quê*; política versionada responde *quem*.
+E o snapshot que fecharia a lacuna de `company`/`profile` **não** foi feito de propósito: versionar
+cadastro multiplica PII sob retenção de 10 anos, e a decisão registrada é resolver isso junto com
+criptografia em repouso, não antes.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
-1º grau, bureau real de CPF) — ver `docs/implementation/risk-engine-plan.md`.
+1º grau, bureau real de CPF) — ver [docs/product/backlog.md](docs/product/backlog.md).
 
-Build validado: `./mvnw test` verde (627 testes na risk-engine + 53 na webhook-api + 27 no
-commons — 707 no total, inclui integração com Testcontainers). **Precisa de Docker rodando** —
+Build validado 2026-08-31: `./mvnw test` verde (692 testes na risk-engine + 69 na webhook-api + 32
+no commons — **793 no total**, 0 falhas, inclui integração com Testcontainers). **Precisa de Docker rodando** —
 sem ele os testes de integração erram com `Can't get Docker image` e a suíte fica verde só na
 aparência. Se o Docker Desktop travar em `initializing Inference manager`, o motivo são sockets
 órfãos indeletáveis no diretório `Docker/run` do AppData local: renomeie o diretório (apagar não

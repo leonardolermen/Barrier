@@ -4,7 +4,7 @@ Objetivo: provar que o Barrier roda em **5 réplicas atrás de um balanceador** 
 sobe. Subir é fácil; o que precisa de prova é que cinco processos concorrentes processam cada
 avaliação **exatamente uma vez**.
 
-Ver o plano em [../docs/implementation/plano-escala-horizontal.md](../docs/implementation/plano-escala-horizontal.md).
+Ver o plano em [../docs/implementation/archive/plano-escala-horizontal.md](../docs/implementation/archive/plano-escala-horizontal.md) (arquivado; o que resta está no [backlog](../docs/product/backlog.md)).
 
 ## Por que kind e não o Kubernetes do Docker Desktop
 

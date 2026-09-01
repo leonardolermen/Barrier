@@ -1,3 +1,9 @@
+> **📦 ENCERRADO em 2026-08-31 — documento de arquivo, não é backlog.**
+> O backlog vivo é [docs/product/backlog.md](../../product/backlog.md). 16 de 19 fechados; as três
+> verificações que faltam migraram. Preservado aqui: por que HPA por CPU está errado neste
+> pipeline, por que `minReplicas` não é 0, e as três vezes em que estado do cluster estava na
+> memória de uma instância **com comentário explicando que estava certo**.
+
 # Escala horizontal — 5 réplicas em Kubernetes atrás de load balancer
 
 > **Para quem executa:** passos com checkbox são a unidade de trabalho. TDD onde couber: teste
@@ -67,7 +73,7 @@ durante requisição em voo devolve resposta em vez de conexão cortada.
       e com uma partição **um pod consome e os outros quatro ficam ociosos**. A webhook-api não
       escala hoje, independente de quantos pods subam.
 - [x] `concurrency` explícita no `@KafkaListener` (hoje ausente = 1 thread por pod).
-- [ ] Documentar a conta no [event-catalog.md](../architecture/event-catalog.md): partições ≥
+- [ ] Documentar a conta no [event-catalog.md](../../architecture/event-catalog.md): partições ≥
       réplicas, e o efeito na ordem — a ordem é garantida **por chave de partição**
       (`assessmentId`, `subjectId`), nunca global. Aumentar partição depois redistribui chaves; o
       catálogo é o lugar onde isso fica registrado antes de alguém descobrir em produção.

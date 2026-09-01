@@ -4,6 +4,7 @@ import com.barrier.riskengine.subject.profile.domain.RegistrationCompleteness;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfilePatch;
 import com.barrier.riskengine.subject.profile.repository.interfaces.SubjectProfileRepository;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -109,8 +110,22 @@ public class SubjectProfileService {
   /** Cadastro declarado por este tenant; em branco se ainda não houver nenhum dado preenchido. */
   @Transactional(readOnly = true)
   public SubjectProfile find(UUID subjectId, String tenantId) {
-    return repository
-        .findBySubjectIdAndTenantId(subjectId, tenantId)
+    return findDeclared(subjectId, tenantId)
         .orElseGet(() -> SubjectProfile.blank(subjectId, tenantId));
+  }
+
+  /**
+   * O cadastro <b>como está no banco</b>, sem substituir ausência por um em branco.
+   *
+   * <p>Existe porque {@link #find} apaga uma distinção que o replay de decisão precisa fazer:
+   * {@code SubjectProfile.blank} nasce com {@code updatedAt = agora}, então um cadastro inexistente
+   * é indistinguível de um alterado neste instante — e o replay leria "o cadastro mudou depois da
+   * decisão" para todo subject que nunca teve cadastro nenhum.
+   *
+   * <p>Continua exigindo o par {@code (subjectId, tenantId)}: o dossiê é do tenant que o declarou
+   * (V024), e nenhuma assinatura deste service aceita só o {@code subjectId}.
+   */
+  public Optional<SubjectProfile> findDeclared(UUID subjectId, String tenantId) {
+    return repository.findBySubjectIdAndTenantId(subjectId, tenantId);
   }
 }

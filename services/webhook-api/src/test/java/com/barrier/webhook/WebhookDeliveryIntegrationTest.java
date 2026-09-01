@@ -10,6 +10,8 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import com.barrier.webhook.client.HmacSigner;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -98,7 +100,16 @@ class WebhookDeliveryIntegrationTest {
     service.retryDue();
 
     assertThat(receivedBody).contains("APROVADO");
-    assertThat(receivedSignature).startsWith("sha256=");
+    // Verificacao ponta a ponta no lugar de conferir o prefixo: o que importa e que o receptor
+    // consiga recalcular a assinatura sobre <t>.<corpo>, e que o t chegue fresco — assertiva de
+    // formato passaria verde com uma assinatura que nao fecha.
+    assertThat(receivedSignature).matches("t=\\d+,v1=[0-9a-f]{64}");
+    long t = Long.parseLong(receivedSignature.substring(2, receivedSignature.indexOf(',')));
+    assertThat(Math.abs(Instant.now().getEpochSecond() - t))
+        .as("carimbo fora da tolerancia que o receptor aplicaria")
+        .isLessThan(300);
+    assertThat(receivedSignature)
+        .isEqualTo(new HmacSigner().sign(receivedBody, "test-secret", Instant.ofEpochSecond(t)));
     assertThat(receivedEventId).isEqualTo(envelope.eventId().toString());
     assertThat(repository.existsByEventId(envelope.eventId())).isTrue();
   }

@@ -4,6 +4,8 @@ import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 import com.barrier.riskengine.screening.repository.interfaces.ScreeningResultJpaRepository;
 import com.barrier.riskengine.screening.repository.interfaces.ScreeningResultRepository;
@@ -44,6 +46,11 @@ class ScreeningResultRepositoryImpl implements ScreeningResultRepository {
   @Override
   public List<ScreeningResult> findByAssessmentId(String assessmentId) {
     return jpa.findByAssessmentId(assessmentId).stream().map(this::toDomain).toList();
+  }
+
+  @Override
+  public Optional<ScreeningResult> findById(UUID id) {
+    return jpa.findById(id).map(this::toDomain);
   }
 
   private ScreeningResult toDomain(ScreeningResultEntity e) {

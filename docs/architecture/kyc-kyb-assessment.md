@@ -3,7 +3,7 @@
 - **Data:** 2026-08-13
 - **Escopo:** o fluxo de ponta a ponta, não o código. Complementa
   [compliance.md](compliance.md) (obrigações) e
-  [plano-remediacao-auditoria.md](../implementation/plano-remediacao-auditoria.md) (o que falta
+  [backlog de produto](../product/backlog.md) (o que falta
   para produção).
 
 **Por que existe:** o KYC evoluiu muito mais que o KYB, e a diferença não estava registrada em

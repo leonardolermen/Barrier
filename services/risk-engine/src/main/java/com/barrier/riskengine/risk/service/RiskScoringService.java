@@ -1,21 +1,18 @@
 package com.barrier.riskengine.risk.service;
 
-import com.barrier.riskengine.risk.domain.enums.RiskLevel;
-import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.EvaluatedRule;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
 import com.barrier.riskengine.risk.domain.model.RuleOutcome;
+import com.barrier.riskengine.risk.domain.model.ScoreAggregation;
 import com.barrier.riskengine.risk.registry.domain.RegulatoryRiskRules;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import com.barrier.riskengine.risk.repository.interfaces.RiskScoreRepository;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import java.util.List;
-import java.util.Objects;
 
-import com.barrier.riskengine.screening.domain.enums.MatchBasis;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,7 +24,7 @@ import org.springframework.stereotype.Service;
  *
  * <p>Bandas: ≤199 BAIXO · ≤499 MEDIO · ≤799 ALTO · &gt;799 CRITICO. A banda agrava a decisão por
  * acúmulo <b>até a revisão humana</b>; a reprovação automática exige uma regra que a peça
- * nominalmente (ver {@link #bandRecommendation}). Regras podem forçar overrides acima da banda
+ * nominalmente (ver {@link ScoreAggregation#bandRecommendation}). Regras podem forçar overrides acima da banda
  * (sanção por documento → REJECT; PEP → REVIEW).
  *
  * <p>Uma regra só é executada se {@link RiskRuleRegistryService#isActive(String)} disser que
@@ -79,7 +76,6 @@ public class RiskScoringService {
   // 1.2.0: IDENTITY_UNAVAILABLE passou a forçar REVIEW (era fail-open para APPROVE) e SANCTION
   // separou match por documento (REJECT) de match por nome (REVIEW).
   static final String ENGINE_VERSION = "barrier-risk-rules/1.8.0";
-  private static final int MAX_SCORE = 1000;
 
   private final List<RiskRule> rules;
   private final RiskScoreRepository repository;
@@ -94,7 +90,25 @@ public class RiskScoringService {
     this.registryService = registryService;
   }
 
+  /**
+   * Avalia e <b>persiste</b> a decisão. É o caminho do pipeline.
+   *
+   * <p>Separado de {@link #evaluate} de propósito: o replay de decisão precisa reexecutar as regras
+   * sem gravar nada, e a garantia de que ele não polui a trilha vem de <b>não ter como</b> — não de
+   * lembrar de não chamar o save. Pelo mesmo caminho ele também não dispara {@code
+   * AssessmentCompletedListener}, não atualiza {@code subject_risk_state} e não escreve na outbox.
+   */
   public RiskDecision score(RiskContext context) {
+    RiskDecision decision = evaluate(context);
+    repository.save(RiskScore.from(context, decision));
+    return decision;
+  }
+
+  /**
+   * Executa as regras ativas e agrega, <b>sem efeito colateral algum</b>. Nada é persistido, nada é
+   * publicado.
+   */
+  public RiskDecision evaluate(RiskContext context) {
     // Toda regra do motor entra na trilha, com o que aconteceu com ela. Guardar só as que
     // dispararam tornava indistinguíveis "rodou e passou", "estava desligada" e "a lista estava
     // vazia" — três leituras da mesma ausência, e só uma é aceitável.
@@ -123,19 +137,14 @@ public class RiskScoringService {
             .map(EvaluatedRule::result)
             .toList();
 
-    int total = Math.min(MAX_SCORE, triggered.stream().mapToInt(RiskResult::score).sum());
-    RiskLevel level = band(total);
-
-    RiskRecommendation recommendation =
-        triggered.stream()
-            .map(RiskResult::recommendation)
-            .filter(Objects::nonNull)
-            .reduce(bandRecommendation(level), RiskRecommendation::strongest);
-
-    RiskDecision decision =
-        new RiskDecision(level, recommendation, total, triggered, evaluated, ENGINE_VERSION);
-    repository.save(RiskScore.from(context, decision));
-    return decision;
+    ScoreAggregation agregado = ScoreAggregation.of(triggered);
+    return new RiskDecision(
+        agregado.level(),
+        agregado.recommendation(),
+        agregado.totalScore(),
+        triggered,
+        evaluated,
+        ENGINE_VERSION);
   }
 
   /**
@@ -158,49 +167,5 @@ public class RiskScoringService {
       log.debug("Regra {} suprimida pelo registry (desabilitada ou fora de vigência)", rule.code());
     }
     return active;
-  }
-
-  private static RiskLevel band(int score) {
-    if (score <= 199) {
-      return RiskLevel.LOW;
-    }
-    if (score <= 499) {
-      return RiskLevel.MEDIUM;
-    }
-    return score <= 799 ? RiskLevel.HIGH : RiskLevel.CRITICAL;
-  }
-
-  /**
-   * O que a <b>banda</b> recomenda sozinha — e o teto disso é {@code REVIEW}, mesmo em CRITICAL.
-   *
-   * <p>A banda entra no {@code reduce} como valor inicial e disputa o {@code strongest} de igual
-   * para igual com as regras, então antes ela podia agravar a decisão acima de tudo que qualquer
-   * regra pediu. O efeito observado em produção-simulada: {@code PEP} (+300, pede REVIEW) somado a
-   * {@code SANCTION_NAME_MATCH} (+500, pede REVIEW) dá 800, cruza o limiar de 799 por um ponto,
-   * cai em CRITICAL e vira <b>reprovação automática</b>. Duas regras exigindo julgamento humano
-   * produziam, somadas, uma recusa sem humano nenhum.
-   *
-   * <p>Isso anulava as duas decisões mais deliberadas do motor: {@link
-   * MatchBasis} existe para que match por nome não reprove
-   * homônimo sem revisão, e PEP não é impedimento de relacionamento — é gatilho de diligência
-   * reforçada (Circular BCB 3.978). Pior: {@code SCREENING_COVERAGE} (+300) também pede REVIEW e
-   * também é somável, então um cliente podia ser reprovado em definitivo em parte porque <i>a nossa
-   * importação de watchlist</i> falhou.
-   *
-   * <p>Somar sinais para agravar {@code APPROVE → REVIEW} é o cerne da abordagem baseada em risco e
-   * continua valendo. O que não vale é somar incertezas até virar certeza: ambiguidade acumulada
-   * segue sendo ambiguidade, e reprovação é terminal — não tem recurso no sistema.
-   *
-   * <p>Nada de reprovação legítima se perde: as únicas regras que pedem REJECT hoje
-   * ({@code IDENTITY_NOT_FOUND}, 900; {@code SANCTION_HIT} por documento, 1000) já ultrapassam 799
-   * sozinhas. A banda CRITICAL nunca foi o que descobre uma recusa correta — só acrescentava as
-   * incorretas. O nível de risco continua sendo reportado como CRITICAL: o que muda é o que se faz
-   * com ele.
-   */
-  private static RiskRecommendation bandRecommendation(RiskLevel level) {
-    return switch (level) {
-      case LOW, MEDIUM -> RiskRecommendation.APPROVE;
-      case HIGH, CRITICAL -> RiskRecommendation.REVIEW;
-    };
   }
 }

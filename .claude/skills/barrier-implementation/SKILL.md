@@ -15,7 +15,7 @@ Aplique isto SEMPRE que escrever ou revisar código de implementação no reposi
 ## Antes de escrever código
 
 1. Leia os padrões completos em [docs/implementation/coding-standards.md](../../../docs/implementation/coding-standards.md).
-2. Se estiver na Risk Engine, siga o plano faseado em [docs/implementation/risk-engine-plan.md](../../../docs/implementation/risk-engine-plan.md).
+2. Confira a sequência e o critério de pronto no backlog vivo: [docs/product/backlog.md](../../../docs/product/backlog.md).
 3. Confirme em qual fase/PR a mudança se encaixa; não misture fases num PR.
 
 ## Regras de camada (não violar — há ArchUnit)

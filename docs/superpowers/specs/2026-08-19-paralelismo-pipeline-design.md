@@ -1,7 +1,7 @@
 # Paralelismo do pipeline: processamento de avaliações e entrega de webhook
 
 - **Data:** 2026-08-19
-- **Origem:** item P2 do [plano-auditoria-2026-08-18.md](../../implementation/plano-auditoria-2026-08-18.md)
+- **Origem:** item P2 do [plano-auditoria-2026-08-18.md](../../implementation/archive/plano-auditoria-2026-08-18.md)
   ("Paralelizar os três loops sequenciais"), confirmado por medição própria.
 
 ## O problema, medido

@@ -62,6 +62,15 @@
                 <artifactId>mapstruct-processor</artifactId>
                 <version>${mapstruct.version}</version>
             </dependency>
+            <!--
+                springdoc NAO e gerenciado pelo BOM do Boot 4 (mesma situacao do testcontainers-bom).
+                A linha 3.x e a que suporta Boot 4; a 2.x e para Boot 3 e falha em runtime.
+            -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>3.0.0</version>
+            </dependency>
             <dependency>
                 <groupId>com.tngtech.archunit</groupId>
                 <artifactId>archunit-junit5</artifactId>

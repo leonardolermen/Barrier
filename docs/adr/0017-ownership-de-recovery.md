@@ -129,4 +129,4 @@ provider voltou), nunca um job novo varrendo avaliações concluídas.
 [v025]: ../../services/risk-engine/src/main/resources/db/migration/V025__outbox_claim.sql
 [origem]: ../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/adr-bureau-recovery-ownership.md
 [licoes]: ../implementation/licoes-do-origem.md
-[fila]: ../implementation/fila-origem.md
+[fila]: ../implementation/archive/fila-origem.md

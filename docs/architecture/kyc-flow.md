@@ -348,7 +348,7 @@ Grava a trilha (`reviewed_by`, `review_reason`, `reviewed_at`, e a API key que d
 o evento**, para o parceiro receber o desfecho final pelo mesmo canal.
 
 > 📋 4-eyes (dois revisores distintos para PEP/mídia negativa) e os status `BLOQUEIO_TEMPORARIO` /
-> `ESCALADO_AML` seguem abertos — ver [plano de remediação](../implementation/plano-remediacao-auditoria.md).
+> `ESCALADO_AML` seguem abertos — ver o [backlog de produto](../product/backlog.md).
 
 ---
 
@@ -389,9 +389,16 @@ A Webhook API consome, resolve o endpoint **do tenant do evento** e entrega assi
 ```http
 POST https://parceiro.exemplo.com/webhooks/barrier
 X-Barrier-Event-Id: 6c1f...
-X-Barrier-Signature: sha256=...
-X-Barrier-Signature-Previous: sha256=...   (só durante janela de rotação de segredo)
+X-Barrier-Signature: t=1700000000,v1=<hex>
+X-Barrier-Signature-Previous: t=1700000000,v1=<hex>   (só durante janela de rotação de segredo)
 ```
+
+A assinatura cobre `<t>.<corpo cru>`, não só o corpo: o instante viaja **dentro** do que é
+assinado, senão o atacante trocaria o carimbo do que capturou por "agora" e o replay voltaria a
+passar. O receptor recusa o que estiver fora da tolerância (5 min é o padrão; ver
+`tools/webhook-receiver.py`). O `t` é o da **tentativa**, não o da criação da entrega — congelá-lo
+faria toda retentativa posterior à janela chegar velha e ser recusada. As duas assinaturas da
+janela de rotação declaram o mesmo `t`.
 
 Idempotência por `eventId`, retry com backoff, DLT para payload ilegível e um job de reconciliação
 que relê o tópico e cria entrega para toda decisão sem uma.
@@ -428,5 +435,5 @@ grita; uma avaliação por `(subject, tenant)` por importação.
 - [ADR-0016](../adr/0016-plataforma-completa-modelo-b.md) — plataforma completa: resultado, não acervo
 - [ADR-0012](../adr/0012-subject-registration-profile.md) — cadastro como agregado próprio
 - [ADR-0010](../adr/0010-watchlists-ingeridas.md) — watchlists ingeridas
-- [plano-remediacao-auditoria.md](../implementation/plano-remediacao-auditoria.md) — o que falta para produção
+- [backlog de produto](../product/backlog.md) — o que falta para produção, com critério de pronto
 - [event-flow.md](event-flow.md) · [domain-contexts.md](domain-contexts.md) · [compliance.md](compliance.md)
