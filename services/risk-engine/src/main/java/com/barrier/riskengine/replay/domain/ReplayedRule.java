@@ -23,6 +23,7 @@ import java.util.Set;
  * @param comparison o veredito desta regra
  * @param missingInputs insumos declarados por ela que não foram reconstruídos — vazio exceto em
  *     {@link RuleComparison#NOT_REPLAYABLE}, e é o que diz <b>por que</b> ela não pôde ser reexecutada
+ * @param policy a política que vigia sobre a regra no instante da decisão, com autoria
  */
 public record ReplayedRule(
     String ruleCode,
@@ -34,7 +35,8 @@ public record ReplayedRule(
     Integer replayedScore,
     String replayedReason,
     RuleComparison comparison,
-    Set<ContextInput> missingInputs) {
+    Set<ContextInput> missingInputs,
+    RulePolicy policy) {
 
   public ReplayedRule {
     recordedParameters = recordedParameters == null ? Map.of() : Map.copyOf(recordedParameters);

@@ -3,6 +3,9 @@ package com.barrier.riskengine.replay.service;
 import com.barrier.riskengine.assessment.domain.assessment.Assessment;
 import com.barrier.riskengine.assessment.domain.assessment.AssessmentId;
 import com.barrier.riskengine.assessment.service.AssessmentService;
+import com.barrier.riskengine.policy.ParamAuthorship;
+import com.barrier.riskengine.policy.PolicyProvenance;
+import com.barrier.riskengine.policy.RegistryPolicyState;
 import com.barrier.riskengine.replay.domain.ArithmeticCheck;
 import com.barrier.riskengine.replay.domain.DecisionNotReplayableException;
 import com.barrier.riskengine.replay.domain.DecisionReplay;
@@ -14,6 +17,7 @@ import com.barrier.riskengine.replay.domain.ReplayVerdict;
 import com.barrier.riskengine.replay.domain.ReplayedDecision;
 import com.barrier.riskengine.replay.domain.ReplayedRule;
 import com.barrier.riskengine.replay.domain.RuleComparison;
+import com.barrier.riskengine.replay.domain.RulePolicy;
 import com.barrier.riskengine.risk.domain.model.EvaluatedRule;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
@@ -22,9 +26,12 @@ import com.barrier.riskengine.risk.domain.model.RuleOutcome;
 import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.risk.service.RiskScoreQueryService;
+import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import com.barrier.riskengine.risk.service.RiskScoringService;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.screening.service.ScreeningQueryService;
+import com.barrier.riskengine.tenant.config.service.TenantRiskConfigAdminService;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -72,6 +79,8 @@ public class DecisionReplayService {
   private final ScreeningQueryService screenings;
   private final ReplayContextRebuilder rebuilder;
   private final RiskScoringService scoringService;
+  private final RiskRuleRegistryService registryService;
+  private final TenantRiskConfigAdminService configService;
   private final Map<String, Set<ContextInput>> requisitosPorRegra;
 
   public DecisionReplayService(
@@ -80,12 +89,16 @@ public class DecisionReplayService {
       ScreeningQueryService screenings,
       ReplayContextRebuilder rebuilder,
       RiskScoringService scoringService,
+      RiskRuleRegistryService registryService,
+      TenantRiskConfigAdminService configService,
       List<RiskRule> rules) {
     this.assessments = assessments;
     this.riskScores = riskScores;
     this.screenings = screenings;
     this.rebuilder = rebuilder;
     this.scoringService = scoringService;
+    this.registryService = registryService;
+    this.configService = configService;
     // Um mapa código → insumos declarados. É o que permite marcar uma regra como NOT_REPLAYABLE em
     // vez de reportar o "não disparou" que ela devolveria rodando sobre insumo ausente.
     this.requisitosPorRegra =
@@ -116,8 +129,22 @@ public class DecisionReplayService {
                   + "como provar que as demais rodaram e passaram"));
     }
 
+    Map<String, RulePolicy> politicas =
+        politicas(gravadas.keySet(), assessment.tenantId(), gravadas, score.scoredAt());
+    if (politicas.values().stream().anyMatch(DecisionReplayService::autoriaDesconhecida)) {
+      gaps.add(
+          ReconstructionGap.trail(
+              GapKind.POLICY_AUTHORSHIP_UNKNOWN,
+              "Ao menos uma regra só tem alterações de política posteriores a esta decisão; a "
+                  + "V033 grava o estado novo de cada mudança, não o anterior, então a autoria da "
+                  + "política de então não existe em lugar nenhum"));
+    }
+
     if (mode == ReplayMode.AS_DECIDED) {
-      List<ReplayedRule> rules = gravadas.values().stream().map(DecisionReplayService::comoGravada).toList();
+      List<ReplayedRule> rules =
+          gravadas.values().stream()
+              .map(g -> comoGravada(g, politicas.get(g.ruleCode())))
+              .toList();
       return new DecisionReplay(
           id.asString(), mode, veredito(arithmetic, gaps, rules, mode), recorded, null,
           arithmetic, rules, gaps);
@@ -129,7 +156,7 @@ public class DecisionReplayService {
 
     boolean trilhaCompleta = !score.evaluated().isEmpty();
     List<ReplayedRule> rules =
-        compara(gravadas, atual.evaluated(), rebuilt.unreliable(), trilhaCompleta);
+        compara(gravadas, atual.evaluated(), rebuilt.unreliable(), trilhaCompleta, politicas);
 
     ReplayedDecision replayed =
         new ReplayedDecision(
@@ -179,7 +206,40 @@ public class DecisionReplayService {
                 LinkedHashMap::new));
   }
 
-  private static ReplayedRule comoGravada(EvaluatedRule gravada) {
+  /**
+   * A política vigente sobre cada regra no instante da decisão.
+   *
+   * <p>Uma a duas consultas por regra. É endpoint de auditoria, não caminho quente: agrupar isso num
+   * único {@code IN} economizaria round-trips que ninguém está contando, ao custo de embaralhar a
+   * regra de proveniência — que é a parte difícil e a que precisa ficar legível.
+   */
+  private Map<String, RulePolicy> politicas(
+      Set<String> codigos, String tenantId, Map<String, EvaluatedRule> gravadas, Instant decididaEm) {
+    Map<String, RulePolicy> saida = new LinkedHashMap<>();
+    for (String codigo : codigos) {
+      RegistryPolicyState registry = registryService.stateAsOf(codigo, decididaEm).orElse(null);
+      EvaluatedRule gravada = gravadas.get(codigo);
+      Map<String, String> parametros = gravada == null ? Map.of() : gravada.parameters();
+      List<ParamAuthorship> autoria =
+          parametros.entrySet().stream()
+              .map(
+                  e ->
+                      configService.authorshipAsOf(
+                          tenantId, codigo, e.getKey(), e.getValue(), decididaEm))
+              .toList();
+      saida.put(codigo, new RulePolicy(registry, autoria));
+    }
+    return saida;
+  }
+
+  /** Registry não apurável, ou algum parâmetro cuja origem se perdeu antes do primeiro registro. */
+  private static boolean autoriaDesconhecida(RulePolicy politica) {
+    return politica.registry() == null
+        || politica.parameters().stream()
+            .anyMatch(p -> p.provenance() == PolicyProvenance.UNKNOWN_BEFORE_HISTORY);
+  }
+
+  private static ReplayedRule comoGravada(EvaluatedRule gravada, RulePolicy politica) {
     RiskResult r = gravada.result();
     return new ReplayedRule(
         gravada.ruleCode(),
@@ -191,14 +251,16 @@ public class DecisionReplayService {
         null,
         null,
         RuleComparison.NOT_COMPARED,
-        Set.of());
+        Set.of(),
+        politica == null ? RulePolicy.desconhecida() : politica);
   }
 
   private List<ReplayedRule> compara(
       Map<String, EvaluatedRule> gravadas,
       List<EvaluatedRule> atuais,
       Set<ContextInput> naoConfiaveis,
-      boolean trilhaCompleta) {
+      boolean trilhaCompleta,
+      Map<String, RulePolicy> politicas) {
 
     Map<String, EvaluatedRule> porCodigoAtual =
         atuais.stream()
@@ -255,7 +317,8 @@ public class DecisionReplayService {
               publicaAtual && ra != null ? ra.score() : null,
               publicaAtual && ra != null ? ra.reason() : null,
               comparacao,
-              faltando));
+              faltando,
+              politicas.getOrDefault(codigo, RulePolicy.desconhecida())));
     }
     return List.copyOf(saida);
   }
@@ -272,8 +335,10 @@ public class DecisionReplayService {
     if (!arithmetic.consistent()) {
       return ReplayVerdict.TRAIL_INCONSISTENT;
     }
+    // Só lacuna que impede afirmar o desfecho degrada — a de autoria da política não impede.
     boolean degradado =
-        !gaps.isEmpty() || rules.stream().anyMatch(rule -> !rule.replayable());
+        gaps.stream().anyMatch(gap -> gap.kind().affectsDecision())
+            || rules.stream().anyMatch(rule -> !rule.replayable());
     if (degradado) {
       return ReplayVerdict.DEGRADED;
     }

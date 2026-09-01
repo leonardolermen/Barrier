@@ -41,7 +41,7 @@ Herdada dos planos anteriores e mantida porque funcionou:
 | Motor de risco e trilha | **Forte.** 16 regras (Strategy), registry com vigência, `evaluated_json` com regras suprimidas e parâmetro efetivo, `config_history`. A auditoria externa classificou a trilha como melhor que a de fornecedores estabelecidos |
 | Pipeline e escala | **Provado em parte.** CI, Dockerfile, 5 réplicas em `kind`, `SingletonJobLock`, 3 tópicos × 6 partições, processamento e entrega paralelos com teto. Faltam as verificações de disjunção sob carga e a remedição com bureau real |
 | Contrato público | **Recém-aberto.** OpenAPI nos dois serviços com grupo administrativo fora, assinatura de webhook carimbada no tempo. Falta tudo o que vem depois do contrato: guia, sandbox exposto, paginação, histórico de entrega |
-| Auditabilidade como produto | **Replay entregue** (`POST /v1/assessments/{id}/replay`, dois modos, sem migration). Falta a **autoria**: `config_history` (V033) continua sem nenhuma leitura as-of |
+| Auditabilidade como produto | **A parte mais forte.** Replay em dois modos + política versionada com vigência e autoria, ambos sem migration nova. Falta a autoria de **pessoa** (hoje `reviewed_by` é texto livre) e o shadow mode |
 | KYC de PF | **Bloqueado por fornecedor.** Bureau real implementado e desligado; documentoscopia e biometria devolvem `UNAVAILABLE` em `prod` |
 | KYB de PJ | **Não automatiza.** `basic_data` da BigBoost não traz QSA, e `CorporateStructureCoverageRiskRule` é fail-closed de propósito — toda PJ atendida pelo bureau real vai a revisão manual |
 | Antifraude | **Inexistente.** `behavior_events` é tabela: zero regras leem o acervo |
@@ -57,13 +57,13 @@ estão marcadas.
 | # | Item | Grupo | Por que aqui |
 |---|---|---|---|
 | ~~1~~ | ~~**Replay de decisão**~~ ✅ **fechado 2026-08-31** | [2](#2--decisão-auditável--o-diferencial) | Os dados já estavam gravados e ninguém os lia. Fechado sem migration |
-| **1** | **Política versionada com vigência e autoria** | [2](#2--decisão-auditável--o-diferencial) | **Agora é o próximo.** O replay já entrega o parâmetro efetivo de cada regra; falta a autoria. `config_history` (V033) segue sem nenhuma leitura as-of |
-| 2 | **Cota e rate limit por tenant** | [3](#3--confiança--o-comprador-consegue-assinar) | Vencido: a paralelização foi feita antes dele. Fecha DoS, noisy neighbor e fatura de bureau de uma vez. **Bloqueia** o re-KYC periódico e a ingestão em massa |
-| 3 | **Listagem paginada com cursor** | [1](#1--integração--um-dev-externo-integra-sozinho) | Barato, e sem isso o parceiro que perdeu um webhook não tem como reconciliar |
-| 4 | **Guia público + sandbox exposto** | [1](#1--integração--um-dev-externo-integra-sozinho) | Em posicionamento A, a integração **é** o produto |
-| 5 | **Criptografia em repouso + retenção** | [3](#3--confiança--o-comprador-consegue-assinar) | Bloqueia o questionário de segurança de qualquer comprador sério — antes de bloquear qualquer norma |
-| 6 | **Identidade de operador + 4-eyes** | [2](#2--decisão-auditável--o-diferencial) | Depende de 2 |
-| 7 | **Fonte de QSA contratada** | [4](#4--cobertura-de-kyckyb) | É o teto do KYB. Comercial, não técnico |
+| ~~2~~ | ~~**Política versionada com vigência e autoria**~~ ✅ **fechado 2026-09-01** | [2](#2--decisão-auditável--o-diferencial) | Fechado sem migration. `config_history` deixou de ser escrita morta |
+| **1** | **Cota e rate limit por tenant** | [3](#3--confiança--o-comprador-consegue-assinar) | Vencido: a paralelização foi feita antes dele. Fecha DoS, noisy neighbor e fatura de bureau de uma vez. **Bloqueia** o re-KYC periódico e a ingestão em massa |
+| 2 | **Listagem paginada com cursor** | [1](#1--integração--um-dev-externo-integra-sozinho) | Barato, e sem isso o parceiro que perdeu um webhook não tem como reconciliar |
+| 3 | **Guia público + sandbox exposto** | [1](#1--integração--um-dev-externo-integra-sozinho) | Em posicionamento A, a integração **é** o produto |
+| 4 | **Criptografia em repouso + retenção** | [3](#3--confiança--o-comprador-consegue-assinar) | Bloqueia o questionário de segurança de qualquer comprador sério — antes de bloquear qualquer norma |
+| 5 | **Identidade de operador + 4-eyes** | [2](#2--decisão-auditável--o-diferencial) | Agora destravado: a política já tem autoria de operação; falta a de **pessoa** |
+| 6 | **Fonte de QSA contratada** | [4](#4--cobertura-de-kyckyb) | É o teto do KYB. Comercial, não técnico |
 
 ---
 
@@ -192,15 +192,37 @@ O ativo mais forte do projeto está **gravado e ilegível**. Esta seção transf
   `OUTCOME_CHANGED`, insumo ausente não publica resultado, replay não cria linha em `risk_scores`,
   404 para tenant alheio, 409 sem decisão, 401 sem credencial.
 
-- [ ] **Política versionada com vigência e autoria** 🔴
-  A plataforma não responde *"qual política estava vigente quando este cliente foi aprovado, e quem
-  aprovou essa política"*. `config_history` (V033) é escrita e **nada a lê**: dois `INSERT` no código
-  de produção e um `SELECT` num teste. É a metade que falta do replay — ele responde *o quê*, esta
-  responde *quem*.
-  *Pronto quando:* consulta as-of por `(tenant, rule_code, instante)` devolve a configuração vigente
-  com autoria, e uma mudança posterior à decisão **não** aparece no dossiê daquela decisão.
+- [x] **Política versionada com vigência e autoria** 🔴 — **fechado 2026-09-01**
+  A outra metade do replay: ele responde *o quê*, esta responde *quem*. `config_history` (V033) era
+  escrita desde sempre — duas tabelas, na mesma transação da alteração — e **nada a lia**. Fechado
+  **sem migration nova**, como o replay.
 
-- [ ] **Identidade do operador humano + 4-eyes + fim da admin key global** 🟠
+  O buraco preciso: `evaluated_json` grava que uma regra ficou `SUPPRESSED`, mas não **quem a
+  desligou nem quando**. A própria V033 chama isso de "a operação mais sensível do sistema".
+
+  Entregue: leitura *as-of* do registry e dos overrides por tenant, com **proveniência em quatro
+  casos** — `FROM_HISTORY`, `UNCHANGED_SINCE_SEED` (nunca alterada), `NOT_REGISTERED` (sem linha no
+  registry: fail-open, a regra rodava) e `UNKNOWN_BEFORE_HISTORY` (histórico todo posterior; a V033
+  grava o estado *novo* de cada mudança, e o anterior à primeira não existe). Confundir os dois
+  últimos seria afirmar o estado de hoje como o de então — o erro que a V033 existe para evitar.
+  ⚠️ `NOT_REGISTERED` só apareceu porque o teste de integração falhou: a primeira versão marcava
+  lacuna em quase toda regra (a V016 semeia 6 de 16 famílias). A autoria entra no dossiê do replay
+  por regra, e a linha do tempo é consultável por `GET /v1/risk-rules/{code}/history` e
+  `GET /v1/tenants/{tenantId}/risk-config/history` (administrativas).
+
+  ⚠️ **`POLICY_AUTHORSHIP_UNKNOWN` é a única lacuna que não degrada o veredito do replay**, e a
+  exceção mora no tipo (`GapKind.affectsDecision()`). Falta quem definiu a política, não o que o
+  motor decidiu. Degradar por isso rebaixaria todo replay antigo, e sinal que dispara sempre deixa de
+  ser sinal — o erro que `ScreeningCoverageRiskRule` já cometeu com `ADVERSE_MEDIA`.
+
+  *Verificado:* 7 testes de proveniência (os três casos × registry e override) + 5 de integração com
+  histórico real no banco — alguém desliga a regra pela API administrativa, a avaliação é decidida
+  depois, e o dossiê traz `SUPPRESSED` **com o nome de quem desligou**.
+
+- [ ] **Identidade do operador humano + 4-eyes + fim da admin key global** 🟠 — *destravado*
+  A política já tem autoria (`updated_by` lido e exposto no dossiê), mas ela é **autodeclarada**: a
+  chave de admin é única e global, então "compliance@barrier" no histórico é o que o chamador digitou,
+  não quem ele é. A trilha de política só vale o quanto vale a identidade por trás dela.
   `reviewed_by` é texto livre; `reviewed_by_key` identifica o **sistema**, não a pessoa. E a chave de
   admin é **estática, única e global**: ela liga e desliga regra regulatória e emite credencial de
   qualquer tenant, sem rotação e sem autoria. Comprometimento = controle total da plataforma sem

@@ -3,6 +3,7 @@ package com.barrier.riskengine.tenant.config.controller;
 import com.barrier.riskengine.tenant.config.controller.dto.UpsertRiskConfigRequest;
 import com.barrier.riskengine.tenant.config.controller.dto.RiskConfigEntryResponse;
 
+import com.barrier.riskengine.policy.ParamAuthorship;
 import com.barrier.riskengine.tenant.config.domain.TenantRiskConfigEntry;
 import com.barrier.riskengine.tenant.config.service.TenantRiskConfigAdminService;
 import com.barrier.riskengine.tenant.config.validation.TenantRiskConfigValidator;
@@ -85,5 +86,19 @@ public class TenantRiskConfigController {
               });
     }
     return ResponseEntity.ok(effective);
+  }
+
+  /**
+   * Linha do tempo dos overrides do tenant: cada alteração de calibragem, com autoria, da mais
+   * recente para a mais antiga.
+   *
+   * <p>É a resposta a "quem afrouxou o controle deste parceiro, e quando". Entrada com valor nulo
+   * significa override <b>removido</b> — a volta ao default global é uma mudança de controle como
+   * qualquer outra, e sem essa distinção ela seria indistinguível de nunca ter existido.
+   */
+  @GetMapping("/history")
+  public ResponseEntity<List<ParamAuthorship>> history(@PathVariable String tenantId) {
+    Tenant tenant = tenantService.resolve(tenantId);
+    return ResponseEntity.ok(configService.history(tenant.id()));
   }
 }

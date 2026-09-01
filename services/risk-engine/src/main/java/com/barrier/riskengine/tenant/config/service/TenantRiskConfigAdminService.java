@@ -1,8 +1,11 @@
 package com.barrier.riskengine.tenant.config.service;
 
+import com.barrier.riskengine.policy.ParamAuthorship;
+import com.barrier.riskengine.policy.PolicyProvenance;
 import com.barrier.riskengine.tenant.config.domain.TenantRiskConfigEntry;
 import com.barrier.riskengine.tenant.config.repository.TenantRiskConfigRepository;
 import com.barrier.riskengine.tenant.config.validation.TenantRiskConfigValidator;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -41,5 +44,47 @@ public class TenantRiskConfigAdminService {
   /** Overrides gravados para o tenant — sem os defaults globais. */
   public List<TenantRiskConfigEntry> findByTenant(String tenantId) {
     return repository.findByTenant(tenantId);
+  }
+
+  /**
+   * Quem definiu o parâmetro que a regra usou naquele instante — o portão do módulo para o replay
+   * de decisão.
+   *
+   * <p>Note o que este método <b>não</b> faz: não reconstrói o valor efetivo. Esse já está gravado
+   * junto da decisão em {@code evaluated_json}, para toda regra que rodou, inclusive as que
+   * passaram. Reconstruí-lo daqui criaria uma segunda fonte para o mesmo fato — e o projeto já pagou
+   * o preço de duas cópias de uma verdade divergirem. O que falta é a autoria, e é só isso que sai.
+   *
+   * <p>Três casos, na mesma disciplina de {@code RiskRuleRegistryService.stateAsOf}: override em
+   * vigor ({@code TENANT_OVERRIDE}), nenhum histórico para a chave ({@code GLOBAL_DEFAULT} — o valor
+   * veio do default, que é código, e a autoria dele é o {@code ENGINE_VERSION}), e histórico
+   * inteiramente posterior ({@code UNKNOWN}).
+   */
+  public ParamAuthorship authorshipAsOf(
+      String tenantId, String ruleCode, String paramKey, String effectiveValue, Instant at) {
+    return repository
+        .authorshipAsOf(tenantId, ruleCode, paramKey, at)
+        .orElseGet(
+            () ->
+                repository.hasAnyHistory(tenantId, ruleCode, paramKey)
+                    ? new ParamAuthorship(
+                        paramKey,
+                        ParamAuthorship.ParamSource.UNKNOWN,
+                        effectiveValue,
+                        null,
+                        null,
+                        PolicyProvenance.UNKNOWN_BEFORE_HISTORY)
+                    : new ParamAuthorship(
+                        paramKey,
+                        ParamAuthorship.ParamSource.GLOBAL_DEFAULT,
+                        effectiveValue,
+                        null,
+                        null,
+                        PolicyProvenance.UNCHANGED_SINCE_SEED));
+  }
+
+  /** Linha do tempo de overrides do tenant, da alteração mais recente para a mais antiga. */
+  public List<ParamAuthorship> history(String tenantId) {
+    return repository.history(tenantId);
   }
 }

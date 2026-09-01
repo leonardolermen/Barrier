@@ -867,12 +867,65 @@ E o snapshot que fecharia a lacuna de `company`/`profile` **não** foi feito de 
 cadastro multiplica PII sob retenção de 10 anos, e a decisão registrada é resolver isso junto com
 criptografia em repouso, não antes.
 
+**Política versionada com vigência e autoria (módulo `policy`).** A outra metade do replay: ele
+responde *o quê*, isto responde *quem*. `config_history` (V033) era escrita desde sempre — duas
+tabelas, na mesma transação da alteração — e **nada a lia**: dois `INSERT` no código de produção e um
+`SELECT` num teste. Também sem migration nova.
+
+**O buraco preciso:** `evaluated_json` grava que uma regra ficou `SUPPRESSED`, o que já é mais do que
+a maioria dos motores guarda, mas não diz **quem a desligou nem quando**. Uma regra de risco desligada
+por uma semana e religada não deixava vestígio de autoria — e a própria V033 chama isso de "a
+operação mais sensível do sistema", tanto que foi ela quem acrescentou `updated_by` ao registry, a
+única tabela de controle sem autor.
+
+`RiskRuleRegistryService.stateAsOf` e `TenantRiskConfigAdminService.authorshipAsOf` fazem a leitura
+*as-of*, e a parte difícil é a **proveniência**, em quatro casos — confundir dois deles é afirmar o
+estado de hoje como se fosse o de então, que é literalmente o erro que a V033 existe para evitar:
+`FROM_HISTORY` (há entrada em vigor no instante), `UNCHANGED_SINCE_SEED` (não há histórico: a regra
+nunca mudou, logo o estado atual vigia desde a semente), `NOT_REGISTERED` (não há histórico **nem
+linha**: o registry é kill switch e não allowlist, então a regra rodava por fail-open) e
+`UNKNOWN_BEFORE_HISTORY` (há histórico, **todo posterior** — a V033 grava o estado *novo* de cada
+mudança, e o anterior à primeira não existe em lugar nenhum). O último é limitação estrutural do
+desenho, não defeito de leitura.
+
+⚠️ **`NOT_REGISTERED` nasceu de uma falha do teste de integração, e é o caso comum**: a V016 semeia
+seis famílias e o motor tem dezesseis. A primeira versão tratava "sem linha no registry" como
+autoria não apurável e marcava lacuna em quase toda regra de todo replay — o mesmo excesso de sinal
+do `ADVERSE_MEDIA`, descoberto porque `DecisionReplayIntegrationTest` exigia zero lacunas numa base
+sem alteração de política nenhuma.
+
+**`GapKind.POLICY_AUTHORSHIP_UNKNOWN` é a única lacuna que não degrada o veredito do replay**, e a
+exceção está no tipo (`affectsDecision()`), não em comentário. O que falta ali é quem definiu a
+política, não o que o motor decidiu — o desfecho de cada regra segue gravado e a aritmética segue
+conferindo. Degradar por isso rebaixaria praticamente todo replay antigo (qualquer regra alterada uma
+vez, depois, produz a lacuna para toda decisão anterior), e sinal que dispara sempre deixa de ser
+sinal: é o mesmo erro que `ScreeningCoverageRiskRule` cometeu ao exigir cobertura de `ADVERSE_MEDIA`
+incondicionalmente e pontuar 100% das avaliações.
+
+**A autoria do parâmetro não reconstrói o valor.** `authorshipAsOf` recebe o valor efetivo (que vem
+do `evaluated_json`) e devolve só quem o definiu. Reconstruí-lo daqui criaria uma segunda fonte para
+o mesmo fato, e o projeto já pagou o preço de duas cópias divergirem. `ParamSource` separa
+`TENANT_OVERRIDE` de `GLOBAL_DEFAULT` (valor veio do código; a autoria dele é o `ENGINE_VERSION`,
+não uma pessoa) e de `UNKNOWN`. Entrada de histórico com `param_value` nulo é **override removido** —
+a volta ao default é mudança de controle como outra qualquer, e a V033 já previa a distinção.
+
+**Módulo `policy` é folha, e precisa ser.** `PolicyProvenance`/`RegistryPolicyState`/`ParamAuthorship`
+são vocabulário comum a `risk.registry` e `tenant.config`, e esses dois não podem depender um do
+outro: `risk → tenant.config` já existe (`NewCompanyRiskRule` lê `TenantRiskConfigService`), então o
+inverso fecharia ciclo. `policy` não depende de nada e a composição mora no `replay`, que já compõe
+cinco módulos. ArchUnit (`sem_ciclos_entre_modulos`) é quem prova.
+
+Linha do tempo consultável por `GET /v1/risk-rules/{code}/history` e
+`GET /v1/tenants/{tenantId}/risk-config/history`, **administrativas**. O regex de `ApiRoutes` passou
+a cobrir subcaminhos de `risk-config`/`api-keys`: a linha do tempo revela a calibragem de um parceiro
+e quem a mudou — administração, como a escrita que a produziu.
+
 Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver [docs/product/backlog.md](docs/product/backlog.md).
 
-Build validado 2026-08-31: `./mvnw test` verde (692 testes na risk-engine + 69 na webhook-api + 32
-no commons — **793 no total**, 0 falhas, inclui integração com Testcontainers). **Precisa de Docker rodando** —
+Build validado 2026-09-01: `./mvnw test` verde (707 testes na risk-engine + 69 na webhook-api + 32
+no commons — **808 no total**, 0 falhas, inclui integração com Testcontainers). **Precisa de Docker rodando** —
 sem ele os testes de integração erram com `Can't get Docker image` e a suíte fica verde só na
 aparência. Se o Docker Desktop travar em `initializing Inference manager`, o motivo são sockets
 órfãos indeletáveis no diretório `Docker/run` do AppData local: renomeie o diretório (apagar não

@@ -146,6 +146,8 @@ class DecisionReplayIntegrationTest {
     assertThat(resposta.replayed()).isNotNull();
     // Mesmo motor, mesma evidência, cadastro intocado desde a decisão: nada pode ter mudado.
     assertThat(resposta.verdict()).isEqualTo("SAME_DECISION");
+    // Zero lacunas, inclusive de autoria: nenhuma política foi alterada nesta base, então toda
+    // regra tem estado apurável (semeada e intocada, ou nunca registrada e ativa por fail-open).
     assertThat(resposta.gaps()).isEmpty();
     assertThat(resposta.replayed().score()).isEqualTo(resposta.recorded().score());
     assertThat(resposta.rules()).allMatch(r -> "SAME".equals(r.comparison()));

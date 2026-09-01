@@ -3,6 +3,7 @@ package com.barrier.riskengine.replay.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,7 +34,12 @@ import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.risk.service.RiskScoreQueryService;
 import com.barrier.riskengine.risk.service.RiskScoringService;
+import com.barrier.riskengine.policy.ParamAuthorship;
+import com.barrier.riskengine.policy.PolicyProvenance;
+import com.barrier.riskengine.policy.RegistryPolicyState;
+import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import com.barrier.riskengine.screening.service.ScreeningQueryService;
+import com.barrier.riskengine.tenant.config.service.TenantRiskConfigAdminService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +63,8 @@ class DecisionReplayServiceTest {
   @Mock ScreeningQueryService screenings;
   @Mock ReplayContextRebuilder rebuilder;
   @Mock RiskScoringService scoringService;
+  @Mock RiskRuleRegistryService registryService;
+  @Mock TenantRiskConfigAdminService configService;
 
   private DecisionReplayService service;
 
@@ -89,9 +97,38 @@ class DecisionReplayServiceTest {
             screenings,
             rebuilder,
             scoringService,
+            registryService,
+            configService,
             List.of(regra("PEP", ContextInput.SCREENING), regra("NEW_COMPANY", ContextInput.COMPANY)));
     lenient().when(assessments.get(ID, TENANT)).thenReturn(avaliacao());
     lenient().when(screenings.findById(any())).thenReturn(Optional.empty());
+    // Política conhecida por padrão: os testes deste arquivo são sobre o replay, não sobre autoria.
+    lenient()
+        .when(registryService.stateAsOf(any(), any()))
+        .thenAnswer(
+            inv ->
+                Optional.of(
+                    new RegistryPolicyState(
+                        inv.getArgument(0),
+                        true,
+                        "ALERT",
+                        "descrição",
+                        null,
+                        null,
+                        "compliance@barrier",
+                        Instant.parse("2026-01-10T09:00:00Z"),
+                        PolicyProvenance.FROM_HISTORY)));
+    lenient()
+        .when(configService.authorshipAsOf(any(), any(), any(), any(), any()))
+        .thenAnswer(
+            inv ->
+                new ParamAuthorship(
+                    inv.getArgument(2),
+                    ParamAuthorship.ParamSource.TENANT_OVERRIDE,
+                    inv.getArgument(3),
+                    "analista@parceiro",
+                    Instant.parse("2026-01-11T09:00:00Z"),
+                    PolicyProvenance.FROM_HISTORY));
   }
 
   private static Assessment avaliacao() {
@@ -306,5 +343,69 @@ class DecisionReplayServiceTest {
 
     assertThatThrownBy(() -> service.replay(ID, TENANT, ReplayMode.AS_DECIDED))
         .isInstanceOf(DecisionNotReplayableException.class);
+  }
+
+  @Test
+  void o_dossie_carrega_a_autoria_da_politica_vigente() {
+    when(riskScores.latestFor(ID.asString())).thenReturn(Optional.of(decisaoIntegra()));
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
+
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("NEW_COMPANY"))
+        .singleElement()
+        .satisfies(
+            r -> {
+              // evaluated_json já dizia QUE valor a regra usou; o que faltava era quem o definiu.
+              assertThat(r.recordedParameters()).containsEntry("months", "6");
+              assertThat(r.policy().registry().changedBy()).isEqualTo("compliance@barrier");
+              assertThat(r.policy().parameters())
+                  .singleElement()
+                  .satisfies(
+                      p -> {
+                        assertThat(p.paramKey()).isEqualTo("months");
+                        assertThat(p.changedBy()).isEqualTo("analista@parceiro");
+                        assertThat(p.source())
+                            .isEqualTo(ParamAuthorship.ParamSource.TENANT_OVERRIDE);
+                      });
+            });
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.REPRODUCED);
+  }
+
+  @Test
+  void autoria_nao_apuravel_e_declarada_mas_nao_degrada_o_veredito() {
+    // Regra alterada só DEPOIS desta decisão: a V033 grava o estado novo de cada mudança, então o
+    // anterior à primeira não existe. Degradar por isto rebaixaria todo replay antigo — e o
+    // desfecho da regra continua conhecido, que é o que o veredito afirma.
+    when(riskScores.latestFor(ID.asString())).thenReturn(Optional.of(decisaoIntegra()));
+    when(registryService.stateAsOf(eq("PEP"), any())).thenReturn(Optional.empty());
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
+
+    assertThat(replay.gaps())
+        .extracting(ReconstructionGap::kind)
+        .contains(GapKind.POLICY_AUTHORSHIP_UNKNOWN);
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.REPRODUCED);
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("PEP"))
+        .singleElement()
+        .satisfies(
+            r -> {
+              assertThat(r.policy().registry()).isNull();
+              // o desfecho da regra segue conhecido: é isso que separa esta lacuna das outras
+              assertThat(r.recordedOutcome()).isEqualTo(RuleOutcome.TRIGGERED);
+            });
+  }
+
+  @Test
+  void lacuna_de_insumo_continua_degradando_mesmo_com_autoria_conhecida() {
+    // Guarda contra o oposto do teste acima: a exceção é só para POLICY_AUTHORSHIP_UNKNOWN.
+    RiskResult pep = disparou("PEP", 300);
+    when(riskScores.latestFor(ID.asString()))
+        .thenReturn(Optional.of(score(List.of(pep), List.of(), 300, RiskLevel.MEDIUM, RiskRecommendation.REVIEW)));
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
+
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.DEGRADED);
   }
 }

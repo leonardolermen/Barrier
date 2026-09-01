@@ -65,6 +65,7 @@ public record ReplayResponse(
    *     não responderia isso hoje
    * @param missingInputs insumos declarados pela regra que não foram reconstruídos; preenchido
    *     apenas quando {@code comparison} é {@code NOT_REPLAYABLE}
+   * @param policy a política vigente sobre a regra no instante da decisão, com autoria
    */
   public record RuleDto(
       String ruleCode,
@@ -76,7 +77,43 @@ public record ReplayResponse(
       Integer replayedScore,
       String replayedReason,
       String comparison,
-      List<String> missingInputs) {}
+      List<String> missingInputs,
+      PolicyDto policy) {}
+
+  /**
+   * A política que vigia sobre a regra quando a decisão foi tomada.
+   *
+   * <p>{@code registry} nulo significa que a autoria não é apurável: há alterações registradas, mas
+   * todas posteriores à decisão, e {@code risk_rule_registry_history} guarda o estado <i>novo</i> de
+   * cada mudança — o anterior à primeira não foi gravado por ninguém. O desfecho da regra naquela
+   * avaliação continua conhecido (vem de {@code recordedOutcome}); o que falta é quem definiu a
+   * política.
+   */
+  public record PolicyDto(RegistryPolicyDto registry, List<ParamAuthorshipDto> parameters) {}
+
+  /**
+   * Estado do registry no instante: se a regra estava ligada, com que criticidade e vigência, e quem
+   * deixou assim. Ligar e desligar regra de risco é a operação mais sensível do sistema.
+   */
+  public record RegistryPolicyDto(
+      boolean enabled,
+      String criticality,
+      Instant validFrom,
+      Instant validUntil,
+      String changedBy,
+      Instant changedAt,
+      String provenance) {}
+
+  /**
+   * Quem definiu o parâmetro que a regra usou. O <b>valor</b> vem de {@code recordedParameters}, que
+   * a decisão já gravava — aqui está só a autoria, para não haver duas fontes do mesmo fato.
+   */
+  public record ParamAuthorshipDto(
+      String paramKey,
+      String source,
+      String changedBy,
+      Instant changedAt,
+      String provenance) {}
 
   /** Um insumo que não pôde ser reconstruído, com o motivo. */
   public record GapDto(String kind, String input, String detail) {}
