@@ -4,6 +4,8 @@ import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
+import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Insumo das regras de risco: os resultados de identidade e screening da avaliação, o perfil
@@ -32,9 +34,9 @@ public record RiskContext(
     CompanyProfile company,
     SubjectProfile profile,
     AssuranceSummary assurance,
-    java.time.Instant referenceInstant) {
+    Instant referenceInstant) {
 
   public RiskContext {
-    java.util.Objects.requireNonNull(referenceInstant, "referenceInstant");
+    Objects.requireNonNull(referenceInstant, "referenceInstant");
   }
 }
