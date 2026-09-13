@@ -1,5 +1,12 @@
 # Avaliação do fluxo de KYC e KYB
 
+> ⚠️ **Avaliação datada de 2026-08-13, parcialmente encerrada em 2026-09-13.** 4 dos 6 itens da
+> "Ordem de ataque" abaixo já foram fechados (guard de cobertura de QSA, `ADVERSE_MEDIA`
+> condicional, correção do `compliance.md`, revisão periódica) — ver a reconciliação ao final da
+> tabela. O diagnóstico (seções 1–7) **não foi reescrito**: registra o racional de cada achado tal
+> como levantado, inclusive dos itens já fechados. Para o estado atual, ver
+> [compliance.md](compliance.md) e o [backlog de produto](../product/backlog.md).
+
 - **Data:** 2026-08-13
 - **Escopo:** o fluxo de ponta a ponta, não o código. Complementa
   [compliance.md](compliance.md) (obrigações) e
@@ -143,13 +150,14 @@ itens, não se pode confiar nele no sentido otimista.
 
 ## Ordem de ataque
 
-| # | Item | Custo | Fecha |
-|---|---|---|---|
-| 1 | Guard de cobertura de QSA | baixo | fail-open regulatório |
-| 2 | `ADVERSE_MEDIA` na exigência de cobertura | baixo | fail-open silencioso |
-| 3 | Corrigir `compliance.md` | baixo | documento que um auditor lê primeiro |
-| 4 | Verificação do representante legal | médio | o que torna o KYB vendável |
-| 5 | Ligação PF↔PJ para sócios | alto | depende de provedor KYB com documento |
-| 6 | Revisão periódica por banda de risco | médio | obrigação da Circular 3.978 |
+| # | Item | Custo | Fecha | Estado em 2026-09-13 |
+|---|---|---|---|---|
+| 1 | Guard de cobertura de QSA | baixo | fail-open regulatório | ✅ `CorporateStructureCoverageRiskRule` (V039) |
+| 2 | `ADVERSE_MEDIA` na exigência de cobertura | baixo | fail-open silencioso | ✅ condicional a provedor autoritativo |
+| 3 | Corrigir `compliance.md` | baixo | documento que um auditor lê primeiro | ✅ corrigido |
+| 4 | Verificação do representante legal | médio | o que torna o KYB vendável | ⬜ aberto |
+| 5 | Ligação PF↔PJ para sócios | alto | depende de provedor KYB com documento | ⬜ aberto |
+| 6 | Revisão periódica por banda de risco | médio | obrigação da Circular 3.978 | ✅ `PeriodicReassessmentJob` + [ADR-0019](../adr/0019-politica-de-reavaliacao.md) |
 
-Os itens 1–3 fecham buracos que hoje aprovam cliente sem controle e não deixam rastro disso.
+Os itens 1–3 fecharam buracos que aprovavam cliente sem controle e não deixavam rastro disso.
+Restam abertos os itens 4 e 5 — ver [backlog de produto](../product/backlog.md).

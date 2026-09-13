@@ -8,6 +8,9 @@
 
 ## 1. Contexto e problema
 
+> Nota: `Barrier_Risk_Infrastructure_Strategy.docx` é um documento de estratégia fornecido pelo
+> autor deste projeto, **não versionado neste repositório**.
+
 O `Barrier_Risk_Infrastructure_Strategy.docx` propõe reposicionar o Barrier de plataforma de
 KYC/PLD-FT para *Risk Decisioning Platform*, com três wedges (KYC, Pix, KYB) sobre um núcleo
 comum. A tese é a mesma do [ADR-0020](../../adr/0020-posicionamento-motor-de-decisao-api-first.md)

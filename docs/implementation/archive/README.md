@@ -44,6 +44,8 @@ sobrepostos produzem exatamente este erro.
 | Fila de EDD separada e 4-eyes | remediação | 🟡 `SOLICITAR_DOCUMENTO` + fila da mesa ✅ · 4-eyes ⬜ |
 | Limite de vazão na entrega de webhook | remediação | 🟡 semáforo de workers ✅ (é **por pod**) · teto por tenant/destino ⬜ |
 | `ENGINE_VERSION: 1.7.0` | remediação, seção de convenções | ❌ era `1.8.0` |
+| Replay de decisão (`plano-produto-api-first.md:167`) | produto API-first | ✅ módulo `replay`, fechado 2026-08-31 |
+| Documentar a conta de partições no event-catalog.md (`plano-escala-horizontal.md:76`) | escala horizontal | 🟡 parcial — o catálogo existe e é normativo (chave de partição de cada evento), mas não traz a conta partições ≥ réplicas |
 
 ---
 
