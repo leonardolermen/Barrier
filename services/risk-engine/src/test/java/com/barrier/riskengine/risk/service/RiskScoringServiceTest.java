@@ -27,6 +27,7 @@ import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class RiskScoringServiceTest {
+
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
 
   @Mock RiskScoreRepository repository;
   @Mock RiskRuleRegistryService registryService;
@@ -65,7 +68,8 @@ class RiskScoringServiceTest {
         ScreeningResult.of("aid", List.of(hits)),
         null,
         null,
-        null);
+        null,
+        QUANDO);
   }
 
   /** PJ com sócio estrangeiro: dispara CORPORATE_STRUCTURE (regra de apetite, desligável). */
@@ -83,7 +87,8 @@ class RiskScoringServiceTest {
         ScreeningResult.of("aid", List.of()),
         company,
         null,
-        null);
+        null,
+        QUANDO);
   }
 
   @Test

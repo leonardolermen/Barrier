@@ -8,16 +8,20 @@ import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
 import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CorporateStructureCoverageRiskRuleTest {
 
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
+
   private final CorporateStructureCoverageRiskRule rule = new CorporateStructureCoverageRiskRule();
 
   private RiskResult evaluate(CompanyProfile company, IdentityCheck identity) {
-    return rule.evaluate(new RiskContext("aid", "default", identity, null, company, null, null));
+    return rule.evaluate(
+        new RiskContext("aid", "default", identity, null, company, null, null, QUANDO));
   }
 
   @Test

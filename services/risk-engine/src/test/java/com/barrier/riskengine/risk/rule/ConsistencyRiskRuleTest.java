@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 
 class ConsistencyRiskRuleTest {
 
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
+
   private RiskContext context(SubjectProfile profile) {
     return new RiskContext(
         "aid",
@@ -23,7 +25,8 @@ class ConsistencyRiskRuleTest {
         ScreeningResult.of("aid", List.of()),
         null,
         profile,
-        null);
+        null,
+        QUANDO);
   }
 
   private SubjectProfile profileWith(String phone, String state) {

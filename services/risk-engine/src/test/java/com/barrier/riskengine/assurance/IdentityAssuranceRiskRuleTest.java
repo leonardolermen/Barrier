@@ -19,6 +19,8 @@ import org.junit.jupiter.api.Test;
 
 class IdentityAssuranceRiskRuleTest {
 
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
+
   private final IdentityAssuranceRiskRule rule =
       new IdentityAssuranceRiskRule(600, 100, 200, 3, 300);
 
@@ -46,7 +48,7 @@ class IdentityAssuranceRiskRuleTest {
   }
 
   private static RiskContext contexto(AssuranceSummary assurance) {
-    return new RiskContext("a1", "t1", null, null, null, null, assurance);
+    return new RiskContext("a1", "t1", null, null, null, null, assurance, QUANDO);
   }
 
   /** Parceiro que não usa a etapa não pode ser punido por ela. */

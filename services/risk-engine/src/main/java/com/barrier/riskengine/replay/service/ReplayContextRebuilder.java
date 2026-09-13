@@ -145,7 +145,8 @@ public class ReplayContextRebuilder {
             screening,
             null, // sempre: ver COMPANY_NOT_PERSISTED
             profile,
-            assuranceSummary);
+            assuranceSummary,
+            score.scoredAt()); // instante da decisão, nunca Instant.now() — é o que o replay reproduz
     return new RebuiltContext(context, unreliable, gaps);
   }
 

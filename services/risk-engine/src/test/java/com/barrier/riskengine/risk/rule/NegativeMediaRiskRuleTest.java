@@ -11,10 +11,13 @@ import com.barrier.riskengine.screening.domain.enums.MatchBasis;
 import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class NegativeMediaRiskRuleTest {
+
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
 
   private RiskContext context(ScreeningHit... hits) {
     return new RiskContext(
@@ -24,7 +27,8 @@ class NegativeMediaRiskRuleTest {
         ScreeningResult.of("aid", List.of(hits)),
         null,
         null,
-        null);
+        null,
+        QUANDO);
   }
 
   @Test

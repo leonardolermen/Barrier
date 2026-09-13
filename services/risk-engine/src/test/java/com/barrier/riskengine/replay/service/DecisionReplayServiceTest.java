@@ -57,6 +57,7 @@ class DecisionReplayServiceTest {
 
   private static final String TENANT = "default";
   private static final AssessmentId ID = AssessmentId.newId();
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
 
   @Mock AssessmentService assessments;
   @Mock RiskScoreQueryService riskScores;
@@ -160,7 +161,9 @@ class DecisionReplayServiceTest {
 
   private static RebuiltContext semLacuna() {
     return new RebuiltContext(
-        new RiskContext(ID.asString(), TENANT, null, null, null, null, null), Set.of(), List.of());
+        new RiskContext(ID.asString(), TENANT, null, null, null, null, null, QUANDO),
+        Set.of(),
+        List.of());
   }
 
   // ---------- AS_DECIDED ----------
@@ -299,7 +302,7 @@ class DecisionReplayServiceTest {
     when(rebuilder.rebuild(any(), any()))
         .thenReturn(
             new RebuiltContext(
-                new RiskContext(ID.asString(), TENANT, null, null, null, null, null),
+                new RiskContext(ID.asString(), TENANT, null, null, null, null, null, QUANDO),
                 Set.of(ContextInput.COMPANY),
                 List.of(
                     ReconstructionGap.of(

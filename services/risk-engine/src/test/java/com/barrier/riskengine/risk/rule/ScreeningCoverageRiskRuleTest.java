@@ -11,6 +11,7 @@ import com.barrier.riskengine.screening.client.WatchlistQuery;
 import com.barrier.riskengine.screening.client.interfaces.NegativeMediaProvider;
 import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.watchlist.WatchlistImportStatus;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class ScreeningCoverageRiskRuleTest {
 
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
+
   @Mock WatchlistImportStatus status;
 
   /**
@@ -29,12 +32,12 @@ class ScreeningCoverageRiskRuleTest {
    */
   private RiskResult evaluateSemProvedorDeMidia() {
     return new ScreeningCoverageRiskRule(status)
-        .evaluate(new RiskContext("aid", "default", null, null, null, null, null));
+        .evaluate(new RiskContext("aid", "default", null, null, null, null, null, QUANDO));
   }
 
   private RiskResult evaluateComProvedores(List<NegativeMediaProvider> providers) {
     return new ScreeningCoverageRiskRule(status, providers)
-        .evaluate(new RiskContext("aid", "default", null, null, null, null, null));
+        .evaluate(new RiskContext("aid", "default", null, null, null, null, null, QUANDO));
   }
 
   @Test
