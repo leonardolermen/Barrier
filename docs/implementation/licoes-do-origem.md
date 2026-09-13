@@ -51,8 +51,8 @@ com sua consulta paga.
 1. **`bureaus-manager`** — serviço dedicado que cacheia respostas por **24h em Redis**, com
    escopo por adapter + contexto, devolve envelope normalizado e persiste o payload bruto no
    Mongo para auditoria. Trocar de provedor não impacta quem consome.
-2. **TTL de reuso de decisão** ([`adr-derivacao-quadro-custos.md`](../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/adr-derivacao-quadro-custos.md)
-   D3) — cadastro com decisão dentro do TTL cria vínculo e **não** chama análise nova. O
+2. **TTL de reuso de decisão** (ADR do Origem: `adr-derivacao-quadro-custos.md`, D3) — cadastro
+   com decisão dentro do TTL cria vínculo e **não** chama análise nova. O
    primário é o intervalo mínimo por faixa de risco; o fallback é
    `DERIVACAO_REAPROVEITAR_DECISAO_HORAS=24`.
 
@@ -134,8 +134,7 @@ por subject/tenant), mas todas são contra *avalanche de importação*. Não há
 **quando reavaliar um cliente é legítimo**: um PATCH de cadastro, um reintake, um cliente
 tocado por duas fontes na mesma semana — tudo dispara ou nada dispara, sem critério.
 
-**Como o Origem resolve.**
-[`adr-reanalise-gatilhos.md`](../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/adr-reanalise-gatilhos.md)
+**Como o Origem resolve.** ADR do Origem: `adr-reanalise-gatilhos.md`
 — reanálise exige **gatilho** + **alteração material** + **intervalo mínimo desde a última
 decisão**, com intervalo por faixa de risco:
 
@@ -191,8 +190,7 @@ grau, com provider de relacionamentos atrás de interface". Não há **nenhuma**
 custo — e navegação societária é o caso mais explosivo que existe: cada nó da árvore é uma
 consulta paga, e a árvore não tem tamanho conhecido de antemão.
 
-**Como o Origem resolve.**
-[`adr-derivacao-quadro-custos.md`](../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/adr-derivacao-quadro-custos.md)
+**Como o Origem resolve.** ADR do Origem: `adr-derivacao-quadro-custos.md`
 — e o desenho é melhor que o do Barrier em três pontos:
 
 - **Ordem por custo/benefício (D1):** dentro de cada PJ, CPFs de beneficiários **antes** dos
@@ -251,8 +249,7 @@ Registry**.
 
 **O que importar.** Ainda não. Com dois deployables e um tópico, registry é cerimônia. O item
 fica registrado como **gatilho**: no terceiro consumidor do `barrier.assessment.completed`, ou
-no primeiro evento com payload que muda de forma, o custo se inverte. O
-[event-catalog.md](../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/event-catalog.md)
+no primeiro evento com payload que muda de forma, o custo se inverte. O `event-catalog.md`
 do Origem (304 linhas) é o formato a copiar quando chegar a hora — o Barrier hoje não tem
 catálogo de eventos nenhum.
 
@@ -264,8 +261,7 @@ catálogo de eventos nenhum.
 do relay de outbox. Cada um faz a coisa certa **isoladamente**. Não há documento dizendo quem
 é dono de qual recuperação — e é assim que dois mecanismos acabam recuperando a mesma coisa.
 
-**Como o Origem resolve.**
-[`adr-bureau-recovery-ownership.md`](../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/adr-bureau-recovery-ownership.md)
+**Como o Origem resolve.** ADR do Origem: `adr-bureau-recovery-ownership.md`
 — 29 linhas, uma tabela de responsabilidade por estado, escrita **depois** de o
 `bureau_pending_worker` do Origem ter duplicado solicitações ao bureau abrindo ciclo novo.
 Custou dinheiro para aprender. A tabela termina com uma proibição explícita: *"Origem **não**
@@ -281,8 +277,7 @@ previne uma classe de bug que o Barrier ainda não teve porque ainda não escalo
 
 Registrado com o mesmo cuidado que o resto, porque a tentação é copiar o modelo inteiro:
 
-- **Média aritmética de sub-scores.** O
-  [`risk-subscore-model.md`](../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/plans/risk-subscore-model.md)
+- **Média aritmética de sub-scores.** O `risk-subscore-model.md` do Origem
   precisou de dois remendos contra a própria fórmula: "pior sub-score é floor do geral" e
   "produto dormido sai da média". Diluição é propriedade da média, não bug — e se resolve não
   usando média. O modelo aditivo com override do Barrier já é superior.

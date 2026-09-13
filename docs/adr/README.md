@@ -11,7 +11,7 @@ Formato baseado em [Michael Nygard](https://cognitect.com/blog/2011/11/15/docume
 | [0002](0002-classic-layered-architecture.md) | Camadas clássicas por serviço | Aceito    |
 | [0003](0003-event-driven-kafka-choreography.md) | Event-driven com Kafka (coreografia) | Aceito |
 | [0004](0004-outbox-pattern.md) | Outbox pattern para publicação de eventos | Aceito |
-| [0005](0005-product-model-risk-engine.md) | Modelo de produto: motor de risco (A→B) | Aceito |
+| [0005](0005-product-model-risk-engine.md) | Modelo de produto: motor de risco (A→B) | Aceito — "quando ir para B" parcialmente substituído pelo ADR-0016 |
 | [0006](0006-sync-and-webhook-response.md) | Retorno síncrono + webhook       | Aceito    |
 | [0007](0007-java25-spring-boot.md) | Java 25 + Spring Boot 3 (atualizado p/ 4.0 em prática) | Aceito |
 | [0008](0008-monorepo-maven.md) | Monorepo Maven multi-módulo           | Aceito    |
@@ -22,7 +22,7 @@ Formato baseado em [Michael Nygard](https://cognitect.com/blog/2011/11/15/docume
 | [0013](0013-watchlist-fontes-producao.md) | Watchlist em produção: fail-fast sem CGU/OFAC habilitados | Aceito |
 | [0014](0014-bureau-cpf-bigboost.md) | Bureau real de CPF via BigBoost (self-service, sem CNPJ) | Aceito |
 | [0015](0015-ingestao-em-massa-faixa-separada.md) | Ingestão em massa como faixa separada, com cota por tenant | Proposto |
-| [0016](0016-plataforma-completa-modelo-b.md) | Plataforma completa: verificação de veracidade, documentoscopia e biometria guardando **resultado, não acervo** | Proposto |
+| [0016](0016-plataforma-completa-modelo-b.md) | Plataforma completa: verificação de veracidade, documentoscopia e biometria guardando **resultado, não acervo** | Aceito |
 | [0017](0017-ownership-de-recovery.md) | Ownership de recovery: um dono por estado de falha | Aceito |
 | [0018](0018-custo-de-navegacao-ubo.md) | Custo de navegação societária (UBO): ordem, short-circuit e sem teto de profundidade | Aceito |
 | [0019](0019-politica-de-reavaliacao.md) | Política de reavaliação: gatilho, materialidade e intervalo mínimo por nível | Aceito |
