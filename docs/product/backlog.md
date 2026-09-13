@@ -38,7 +38,7 @@ Herdada dos planos anteriores e mantida porque funcionou:
 
 | Dimensão | Estado |
 |---|---|
-| Motor de risco e trilha | **Forte.** 16 regras (Strategy), registry com vigência, `evaluated_json` com regras suprimidas e parâmetro efetivo, `config_history`. A auditoria externa classificou a trilha como melhor que a de fornecedores estabelecidos |
+| Motor de risco e trilha | **Forte.** 12 regras (Strategy), registry com vigência, `evaluated_json` com regras suprimidas e parâmetro efetivo, `config_history`. A auditoria externa classificou a trilha como melhor que a de fornecedores estabelecidos |
 | Pipeline e escala | **Provado em parte.** CI, Dockerfile, 5 réplicas em `kind`, `SingletonJobLock`, 3 tópicos × 6 partições, processamento e entrega paralelos com teto. Faltam as verificações de disjunção sob carga e a remedição com bureau real |
 | Contrato público | **Recém-aberto.** OpenAPI nos dois serviços com grupo administrativo fora, assinatura de webhook carimbada no tempo. Falta tudo o que vem depois do contrato: guia, sandbox exposto, paginação, histórico de entrega |
 | Auditabilidade como produto | **A parte mais forte.** Replay em dois modos + política versionada com vigência e autoria, ambos sem migration nova. Falta a autoria de **pessoa** (hoje `reviewed_by` é texto livre) e o shadow mode |

@@ -33,13 +33,15 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
 
 1. **Evidência da decisão persistida** — `risk_scores` guarda score, nível, fatores e a
    versão do motor (`engine_version`); `identity_checks` e `screening_results` guardam o
-   insumo. *Não* existe serviço de Audit separado, nem eventos intermediários por etapa:
-   há um único evento (`barrier.assessment.completed`).
+   insumo. *Não* existe serviço de Audit separado, nem eventos intermediários por etapa: o
+   barramento tem três tópicos (`barrier.assessment.completed`,
+   `barrier.subject.risk_level_changed`, `barrier.behavior.recorded`) — catálogo normativo em
+   [event-catalog.md](event-catalog.md).
 2. **Rastreabilidade** — `assessmentId` liga as etapas de uma decisão de ponta a ponta.
 3. **Cobertura de listas verificável** — `WatchlistImportStatus` registra o resultado da
    última importação por fonte; `WatchlistHealthIndicator` derruba o health quando falta
    cobertura de sanções ou PEP; `ScreeningCoverageRiskRule` impede aprovação automática de
-   avaliação decidida sem lista (SANCTION e PEP, incondicional). Desde esta branch, também exige
+   avaliação decidida sem lista (SANCTION e PEP, incondicional). Também exige
    ADVERSE_MEDIA — mas só quando existe `NegativeMediaProvider` autoritativo (contratado)
    configurado: sem provedor real (hoje o único é o stub de dev), mídia negativa não entra na
    exigência, porque a ausência vale para 100% da base e pontuar por avaliação só encheria a fila
@@ -48,8 +50,10 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
 4. **PEP** — `PepWatchlistSource` ingere o cadastro da CGU (`MatchType.PEP`), que é o
    insumo da `PepRiskRule`. ⚠️ O formato do CSV **não foi verificado contra o portal real**
    (403 no ambiente de desenvolvimento) — validar antes de confiar em produção.
-5. **Evidência de decisão** — cada `risk.scored` e `case.decided` guarda os fatores que
-   levaram à decisão (explicabilidade regulatória).
+5. **Evidência de decisão** — `risk_scores` guarda score/nível/versão do motor,
+   `evaluated_json` guarda toda regra que rodou (`TRIGGERED`/`NOT_TRIGGERED`/`SUPPRESSED`) com
+   o parâmetro efetivo, e `assessment_actions` (mesa, append-only) guarda toda ação manual sobre
+   o caso — juntos, os fatores que levaram à decisão (explicabilidade regulatória).
 6. **Cadastro mínimo (CMN 4.753)** — `SubjectProfile` cobre o checklist por tipo de
    documento (PF/PJ); avaliação com cadastro incompleto é rebaixada para revisão manual em
    vez de aprovar automaticamente sem os dados exigidos.
@@ -75,8 +79,7 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
     importação de watchlist passa a apontar um cliente já aprovado (por documento e, para
     OFAC/CSNU que não publicam documento, por nome); reavaliar é submeter uma avaliação nova
     pelo pipeline normal (`origin = RESCREENING`), não um caminho paralelo de decisão. ⚠️
-    Cobre só quem **entra** na lista — quem sai não dispara nada — e não faz revisão
-    periódica por prazo (ver lacuna abaixo).
+    Cobre só quem **entra** na lista — quem sai não dispara nada.
 11. **Reprodutibilidade da decisão** — `tenant_risk_config_history` e
     `risk_rule_registry_history` (V033) guardam a linha do tempo de configuração (quem mudou
     o quê e quando, inclusive kill switch); `screening_results.sources_json` preserva o
@@ -84,6 +87,14 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
     rodou com o desfecho (`TRIGGERED`/`NOT_TRIGGERED`/`SUPPRESSED`) e o parâmetro efetivo
     usado, inclusive das regras que passaram. ⚠️ Fica aberto o histórico de
     `subject_profiles` (dado pessoal — decidir junto com retenção/cifragem da Fase 6).
+12. **Revisão periódica por banda de risco** ([ADR-0019](../adr/0019-politica-de-reavaliacao.md))
+    — `ReassessmentPolicy` fixa o intervalo máximo por nível corrente (LOW 1095 dias · MEDIUM 730
+    · HIGH 365 · CRITICAL 183 · sem projeção 183, fail-safe) e `PeriodicReassessmentJob`
+    (`@Scheduled`, madrugada) é o gatilho que submete a avaliação quando o prazo vence. ⚠️
+    Desligado por padrão (`barrier.rescreening.periodic.enabled`) e com teto por execução
+    (`max-per-run`, 200) — ligar numa base com histórico acumulado drena a fila ao longo de
+    dias, mais antigo primeiro; o teto é global, não por tenant (mesmo problema que a cota do
+    ADR-0015 resolve para ingestão em massa).
 
 ## Lacunas conhecidas (não confundir com "endereçado")
 
@@ -93,7 +104,7 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
   beneficiário final: sem percentual de participação, o corte de 25% da Resolução BCB 44 é
   inalcançável com o dado disponível; sócios não têm documento (screening só por nome, alto
   falso positivo) e não há ligação PF↔PJ (sócio de uma PJ não vira/consulta um subject PF).
-- **Cobertura de QSA depende do bureau contratado** (antes desta branch, fail-open
+- **Cobertura de QSA depende do bureau contratado** (antes desta correção, fail-open
   silencioso): o `basic_data` da BigBoost não traz QSA — quando ela atende, o
   `CompanyProfile` chegava com sócios vazios e nada registrava que o KYB não rodou.
   `CorporateStructureCoverageRiskRule` (V039, regulatória) fecha o silêncio forçando REVIEW
@@ -109,10 +120,6 @@ O domínio é regulado. Estes requisitos dirigem decisões arquiteturais e não 
 - **Representante legal de PJ não verificado**: `legalRepresentative` é campo declarado, sem
   documentoscopia/biometria como há para PF, nem conferência contra o QSA quando ele existe.
   Qualquer um pode se declarar representante de qualquer CNPJ.
-- **Revisão periódica por banda de risco**: a Circular 3.978 exige revisão proporcional ao
-  risco (cliente HIGH revisto mais que LOW); hoje só existe o rescreening por delta de lista
-  (item 10 acima) — um cliente CRITICAL que nunca casa com lista nenhuma nunca é reavaliado
-  por prazo.
 
 ## A endereçar explicitamente na fase 2
 

@@ -37,27 +37,32 @@ e threshold em máquina de dev só produz build vermelho aleatório.
 
 ## Como ler isso
 
-A entrega é um POST **síncrono na thread do listener**. A vazão é, portanto,
-`concorrência × (1 / latência do endpoint do cliente)` — e o cliente é quem determina a latência.
-Um parceiro que responde em 100 ms derruba o serviço inteiro para 9 ev/s na configuração padrão
-(1 partição, `concurrency=1`), e a fila de todos os outros tenants espera atrás dele: é bloqueio de
-cabeça de fila, não lentidão distribuída. Com 8 partições e 8 consumidores o mesmo cenário sobe
-para 55 ev/s.
+**Medição de 2026-08-10, com a entrega ainda como POST síncrono na thread do listener** (estado
+já corrigido — ver os itens marcados "feito" abaixo). Na configuração de então, a vazão era
+`concorrência × (1 / latência do endpoint do cliente)` — e o cliente determinava a latência. Um
+parceiro que respondia em 100 ms derrubava o serviço inteiro para 9 ev/s na configuração padrão
+(1 partição, `concurrency=1`), e a fila de todos os outros tenants esperava atrás dele: bloqueio de
+cabeça de fila, não lentidão distribuída. Com 8 partições e 8 consumidores o mesmo cenário subia
+para 55 ev/s. Os números seguem válidos como registro histórico; a causa que eles diagnosticavam
+foi endereçada (abaixo).
 
 Contexto: o `AssessmentProcessor` do risk-engine drenava ~12,5 avaliações/s na medição da
 [ADR-0015](../../../../../docs/adr/0015-ingestao-em-massa-faixa-separada.md). Ou seja — o webhook
 só vira gargalo quando o endpoint do cliente é lento, mas aí vira **com folga**.
 
-O que isso indica como próximo passo (nenhum feito ainda):
+O que a medição indicava como próximo passo, e o que aconteceu com cada item desde então:
 
-- **Tópico com mais de uma partição.** Hoje nada no projeto cria o tópico com partições
-  explícitas — ele nasce com 1 no auto-create do broker, e aí `spring.kafka.listener.concurrency`
-  não tem o que paralelizar. Sem isso o resto não adianta.
-- **Isolar o tenant lento.** Com a chave sendo o `assessmentId`, os eventos de um tenant se
-  espalham por todas as partições — o parceiro lento contamina todas. Chavear por tenant confina o
-  dano à partição dele.
-- **Tirar o POST da thread do listener** (entregar por worker pool lendo de `deliveries`), que é o
-  que remove o acoplamento entre latência do cliente e vazão de consumo de vez.
+- **Tópico com mais de uma partição — feito.** `KafkaTopicsConfig` cria os três tópicos do
+  barramento com partições explícitas (default 6, ≥ réplicas alvo), provado por
+  `KafkaTopicCreationIntegrationTest` contra o broker.
+- **Tirar o POST da thread do listener — feito.** `WebhookDeliveryService.onEvent` (chamado pelo
+  listener) só registra a entrega em `deliveries`; quem entrega é `retryDue()` (agendado), por um
+  `Executors.newVirtualThreadPerTaskExecutor()` com `Semaphore` limitando concorrência. A latência
+  do parceiro deixou de existir no caminho do broker.
+- **Isolar o tenant lento — em aberto.** A chave de partição continua sendo o `assessmentId`
+  (`KafkaEventPublisher`); os eventos de um tenant ainda se espalham por todas as partições, e um
+  parceiro lento ainda contamina todas. Chavear por tenant confinaria o dano à partição dele —
+  não feito.
 
 O `load.sink-latency-ms=0` (121 ev/s, ~8 ms por evento numa thread) mede o custo do próprio
 serviço: insert + POST + update, dois round-trips ao Postgres por entrega.

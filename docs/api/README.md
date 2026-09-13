@@ -79,7 +79,7 @@ avaliação nova.
 | **03 · PF automático** | submissão → `APROVADO` → **primeira entrega no receptor** |
 | **04 · EDD** | PEP cai em `EM_REVISAO` → decisão humana → **segunda entrega** |
 | **05 · PJ** | KYB de 1º grau via BrasilAPI (exige rede) |
-| **06 · Histórico** | evento interno mudando o score sem consulta externa |
+| **06 · Histórico** ⚠️ | evento interno mudando o score sem consulta externa — depende de branch não integrada em `main` (rota `/v1/subjects/{document}/history`; em `main` o equivalente é `POST /v1/behavior-events`) |
 | **07 · Config por tenant** | override de parâmetro de regra de apetite |
 | **08 · Registry** | kill switch global de uma família de regra |
 
@@ -107,8 +107,6 @@ rode pasta a pasta com `--folder`.
 
 ## Notas
 
-- **Swagger/OpenAPI** ainda não está ligado (springdoc está previsto para a Fase 5; springdoc
-  3.x + Spring Boot 4 precisa de validação de compatibilidade).
 - Ao editar `reason` na decisão, garanta corpo **UTF-8 válido** — alguns terminais no Windows
   reescrevem o encoding e a API rejeita com `400 Invalid UTF-8` (não é bug da app).
 - O segredo do webhook aparece **uma vez**, no registro e na rotação. O `GET` só informa

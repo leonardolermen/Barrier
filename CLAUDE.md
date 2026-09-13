@@ -9,7 +9,8 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
   — **o único backlog vivo.** Antes havia quatro planos sobrepostos, e o custo foi medido: quatro
   itens ficaram marcados como abertos meses depois de resolvidos, e a paralelização foi feita antes
   da cota que o próprio plano exigia primeiro. Consulte a **sequência recomendada** antes de propor
-  trabalho novo. Em execução agora: **replay de decisão**.
+  trabalho novo. Em execução agora: **política de risco custom por parceiro** (branch atual;
+  spec em [docs/superpowers/specs/2026-09-13-politica-de-risco-custom-por-parceiro-design.md](docs/superpowers/specs/2026-09-13-politica-de-risco-custom-por-parceiro-design.md)).
 - **Posicionamento do produto:** [ADR-0020](docs/adr/0020-posicionamento-motor-de-decisao-api-first.md)
   — motor de decisão **API-first**. O parceiro tem a jornada dele e compra decisão explicável e
   trilha auditável; hosted page/SDK/UI da mesa são posicionamento B, depois. **Em A, a integração é
@@ -889,7 +890,7 @@ mudança, e o anterior à primeira não existe em lugar nenhum). O último é li
 desenho, não defeito de leitura.
 
 ⚠️ **`NOT_REGISTERED` nasceu de uma falha do teste de integração, e é o caso comum**: a V016 semeia
-seis famílias e o motor tem dezesseis. A primeira versão tratava "sem linha no registry" como
+seis famílias e o motor tem doze. A primeira versão tratava "sem linha no registry" como
 autoria não apurável e marcava lacuna em quase toda regra de todo replay — o mesmo excesso de sinal
 do `ADVERSE_MEDIA`, descoberto porque `DecisionReplayIntegrationTest` exigia zero lacunas numa base
 sem alteração de política nenhuma.
@@ -920,7 +921,7 @@ Linha do tempo consultável por `GET /v1/risk-rules/{code}/history` e
 a cobrir subcaminhos de `risk-config`/`api-keys`: a linha do tempo revela a calibragem de um parceiro
 e quem a mudou — administração, como a escrita que a produziu.
 
-Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
+Próximo: Fase 5 (hardening: mascaramento) e o backlog de
 compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
 1º grau, bureau real de CPF) — ver [docs/product/backlog.md](docs/product/backlog.md).
 
