@@ -341,8 +341,14 @@ próprio parceiro sem risco regulatório para o Barrier.
 `/v1/tenants/{id}/risk-config` **continua administrativo**, porque calibra parâmetro e pode
 afrouxar. O critério fica escrito: **quem só endurece é self-service; quem calibra segue admin.**
 
-`ApiRoutes` precisa classificar `/v1/policies` e `/v1/policy-fields` como parceiro, e o
-`OpenApiCoverageIntegrationTest` quebra o build se a rota nascer sem contrato.
+`ApiRoutes` **não precisa mudar**, e o motivo é bom: ele é uma *denylist*, não uma allowlist. Tudo
+sob `/v1/` é rota de parceiro exceto o que casa o padrão administrativo, então `/v1/policies` e
+`/v1/policy-fields` já nascem protegidas pelo filtro de tenant. Foi justamente a inversão para
+denylist que impediu os módulos `mesa` e `behavior` de nascerem inacessíveis de novo. Ainda assim,
+confirmar por teste em vez de assumir, e não editar o padrão `ADMIN`.
+
+O `OpenApiCoverageIntegrationTest` quebra o build se a rota nascer sem contrato, e o
+`ApiRouteCoverageTest` exige que todo controller caia em exatamente um dos dois lados.
 
 A resposta de erro de compilação tem que citar o campo, o operador e a trava violada. Contrato que
 descreve mal o erro empurra o dev externo para o suporte, que foi exatamente o defeito corrigido
