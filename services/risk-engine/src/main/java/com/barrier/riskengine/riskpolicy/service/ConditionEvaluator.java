@@ -147,8 +147,8 @@ public class ConditionEvaluator {
       case IS_NOT_NULL -> true;
       case EQ -> igual(valor, literal);
       case NEQ -> !igual(valor, literal);
-      case IN -> ((Literal.TextSet) literal).values().contains(String.valueOf(valor));
-      case NOT_IN -> !((Literal.TextSet) literal).values().contains(String.valueOf(valor));
+      case IN -> pertenceAoConjunto(valor, (Literal.TextSet) literal);
+      case NOT_IN -> !pertenceAoConjunto(valor, (Literal.TextSet) literal);
       case STARTS_WITH -> String.valueOf(valor).startsWith(((Literal.Text) literal).value());
       case LT -> comoBigDecimal(valor).compareTo(((Literal.Numeric) literal).value()) < 0;
       case LTE -> comoBigDecimal(valor).compareTo(((Literal.Numeric) literal).value()) <= 0;
@@ -161,6 +161,23 @@ public class ConditionEvaluator {
       case WITHIN_LAST ->
           dentroDosUltimos((LocalDate) valor, ((Literal.Duration) literal).value(), context);
     };
+  }
+
+  /**
+   * {@code IN}/{@code NOT_IN} sobre campo {@code NUMBER} tem que comparar como {@link BigDecimal}
+   * (via {@code compareTo}), não como string -- {@code String.valueOf} de {@code 100} e {@code
+   * 100.00} divergem por escala decimal, e {@code EQ} sobre o mesmo campo já usa {@code
+   * compareTo} (mesmo raciocínio de {@link #igual}). Sem isto, dois operadores do mesmo tipo de
+   * campo discordavam sobre o que é o mesmo número -- e a discordância era silenciosa: a regra
+   * compilava e nunca disparava. Sobre {@code STRING}/{@code ENUM} o membro do conjunto é texto, e
+   * a comparação continua sendo por igualdade de string.
+   */
+  private boolean pertenceAoConjunto(Object valor, Literal.TextSet literal) {
+    if (valor instanceof BigDecimal numero) {
+      return literal.values().stream()
+          .anyMatch(membro -> comoBigDecimal(membro).compareTo(numero) == 0);
+    }
+    return literal.values().contains(String.valueOf(valor));
   }
 
   private boolean igual(Object valor, Literal literal) {

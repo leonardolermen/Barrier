@@ -212,7 +212,11 @@ class ConditionEvaluatorTest {
    * sempre devolvesse {@code true} passaria num teste que só cobre o caso positivo, e aqui o
    * avaliador decide se uma regra de risco dispara ou fica muda sem log nenhum dizendo por quê.
    * Cobre também os tipos que os 8 testes originais não exercitavam: NUMBER (com escala decimal
-   * diferente, {@code 100} contra {@code 100.00}) e ENUM com IN/NOT_IN.
+   * diferente, {@code 100} contra {@code 100.00}) e ENUM com IN/NOT_IN. NUMBER com IN/NOT_IN é
+   * achado da revisão final: o par casa/não-casa aqui usa a mesma escala decimal diferente de
+   * EQ/LTE/GTE de propósito -- {@code IN}/{@code NOT_IN} comparavam o membro do conjunto como
+   * string, e "100.00" (o valor guardado) nunca é igual a "100" (o que o parceiro escreve) por
+   * igualdade textual, mesmo sendo o mesmo número.
    */
   private Stream<OperatorCase> operatorCases() {
     RiskContext comEmpresaAberta2026 = comEmpresa(LocalDate.of(2026, 7, 1));
@@ -342,6 +346,30 @@ class ConditionEvaluatorTest {
                 Operator.NOT_IN,
                 Literal.textSet(List.of("VERIFIED", "MISMATCH"))),
             identidadeVerificada,
+            false),
+        new OperatorCase(
+            "IN casa (number, escala decimal diferente: 100 == 100.00)",
+            comparacao(
+                "profile.shareCapital", Operator.IN, Literal.textSet(List.of("100", "999"))),
+            comCapitalCem,
+            true),
+        new OperatorCase(
+            "IN nao casa (number)",
+            comparacao(
+                "profile.shareCapital", Operator.IN, Literal.textSet(List.of("250", "999"))),
+            comCapitalCem,
+            false),
+        new OperatorCase(
+            "NOT_IN casa (number)",
+            comparacao(
+                "profile.shareCapital", Operator.NOT_IN, Literal.textSet(List.of("250", "999"))),
+            comCapitalCem,
+            true),
+        new OperatorCase(
+            "NOT_IN nao casa (number, escala decimal diferente: 100 == 100.00)",
+            comparacao(
+                "profile.shareCapital", Operator.NOT_IN, Literal.textSet(List.of("100", "999"))),
+            comCapitalCem,
             false),
         new OperatorCase(
             "STARTS_WITH casa (acento preservado)",
