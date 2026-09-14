@@ -14,7 +14,7 @@ import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
  * decisivos, continuam exatas.
  *
  * @param policyVersion versão da política custom ativa do tenant <b>agora</b> — não
- *     necessariamente a mesma de {@link RecordedDecision#policyVersion()}. Diferir dos dois é
+ *     necessariamente a mesma de {@link RecordedDecision#policyVersion()}. Diferir dele é
  *     esperado e não é, por si, um achado: é o parceiro tendo editado a própria política, e é
  *     exatamente o que este campo existe para tornar visível em vez de aparecer disfarçado de
  *     mudança de {@code engineVersion}
