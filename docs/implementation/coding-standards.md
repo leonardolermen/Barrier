@@ -16,7 +16,7 @@ e o `CLAUDE.md` apontam para cá.
 | Mapeamento  | Mappers escritos à mão (`XyzEntityMapper`/`XyzDtoMapper`, classes `final` com métodos estáticos) — MapStruct está no `pom.xml` mas ainda sem uso real |
 | Testes      | JUnit 5, Mockito, AssertJ, Testcontainers, ArchUnit |
 | Boilerplate | Lombok **só em entidade JPA**, para acessores — ver regra abaixo     |
-| API docs    | Nenhuma ainda — springdoc-openapi previsto para a Fase 5 (ver [risk-engine-plan.md](archive/risk-engine-plan.md)) |
+| API docs    | springdoc-openapi 3.0.0, grupos `parceiro` (publicável) e `admin` (nunca publicado) — ver [OpenApiConfig](../../services/risk-engine/src/main/java/com/barrier/riskengine/web/OpenApiConfig.java) |
 | Observ.     | Micrometer + logs estruturados (JSON)               |
 
 ## Regra de camadas (clássica)
@@ -43,7 +43,7 @@ Regras invioláveis (validadas por ArchUnit):
 | **Layered architecture**    | Estrutura de todo serviço                                  |
 | **Repository**              | Persistência via Spring Data JPA                          |
 | **Transactional Outbox**    | Toda publicação de evento (grava outbox na mesma tx)      |
-| **Gateway / Adapter**       | Integrações externas: `BureauProvider`, `WatchlistProvider`, `GeoIpProvider`, `PhoneProvider`, `EmailProvider`, `CreditScoreProvider` (interface + impl, stub em dev) |
+| **Gateway / Adapter**       | Integrações externas: `BureauProvider`, `WatchlistProvider`, `NegativeMediaProvider` (interface + impl, stub em dev). `GeoIpProvider`/`PhoneProvider`/`EmailProvider`/`CreditScoreProvider` não existem em `main` — eram provider planejado, nunca implementado |
 | **Strategy**                | Regras de risco (`RiskRule`) e de screening (`ScreeningRule`) — adicionar fonte = adicionar regra, sem tocar no motor |
 | **Pipeline / Orchestrator** | `AssessmentProcessor` orquestra identity → screening → risk → gate de completude |
 | **Value Object**            | `Cpf`, `Cnpj`, `AssessmentId` (records validados)         |
@@ -59,7 +59,8 @@ abstração especulativa.
 - Use **records** para value objects e DTOs imutáveis.
 - Validação de VO no construtor compacto (ex.: `Cpf` valida dígitos verificadores).
 - Enums para estados e classificações (`RiskLevel { LOW, MEDIUM, HIGH, CRITICAL }`,
-  `AssessmentStatus { EM_ANALISE, APROVADO, REPROVADO, EM_REVISAO }`).
+  `AssessmentStatus { EM_ANALISE, APROVADO, REPROVADO, EM_REVISAO, SOLICITAR_DOCUMENTO,
+  FALHA_PROCESSAMENTO }`).
 - Estados de agregado mudam por métodos de domínio, não por setters soltos.
 
 ## Persistência e Outbox
@@ -92,7 +93,9 @@ método de domínio.
 
 ## Kafka
 
-- Tópicos nomeados por evento: `barrier.assessment.completed`.
+- Tópicos nomeados por evento: `barrier.assessment.completed`, `barrier.subject.risk_level_changed`,
+  `barrier.behavior.recorded` — catálogo normativo em
+  [event-catalog.md](../architecture/event-catalog.md).
 - Chave da mensagem = `assessmentId` (garante ordem por avaliação).
 - Todo evento carrega envelope: `eventId`, `assessmentId` (correlation), `occurredAt`,
   `version`, `payload`.
@@ -120,12 +123,12 @@ método de domínio.
 
 - REST com verbos e status corretos: `POST /assessments` → `202`, `GET /assessments/{id}`
   → `200`/`404`.
-- Contrato ainda não documentado em OpenAPI (springdoc é Fase 5) — usar a
-  [collection Postman](../api/README.md) como referência viva. DTO de request validado com
-  Bean Validation.
+- Contrato publicado em OpenAPI (springdoc, grupo `parceiro`) — ver
+  [docs/api/README.md](../api/README.md). DTO de request validado com Bean Validation.
 - Versionamento por caminho quando quebrar contrato (`/v1/...`).
-- Endpoints internos/admin (config por tenant, registry de regras, histórico) usam a mesma
-  pré-auth por header do resto da API — sem gate de admin-auth dedicado ainda.
+- Endpoints internos/admin (config por tenant, registry de regras, histórico) são protegidos
+  por `AdminApiKeyFilter` (header `X-Admin-Key`), separado da pré-auth por tenant do resto da
+  API.
 
 ## Segurança e LGPD
 

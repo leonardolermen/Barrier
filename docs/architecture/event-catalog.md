@@ -7,8 +7,9 @@ quebra consumidor sem aviso.
 **Por que ele existe agora.** O gatilho declarado na [prioridade 8 das lições do Origem][licoes] era
 *"o terceiro consumidor do barramento, ou o primeiro evento com payload que muda de forma"*. Com
 `barrier.behavior.recorded` (F8), o barramento passou de um tópico para três, e a partir daqui o
-custo de não ter catálogo é maior que o de mantê-lo. O formato copia o
-[`event-catalog.md` do Origem][origem], que já sustenta quatro serviços em produção.
+custo de não ter catálogo é maior que o de mantê-lo. O formato copia o `event-catalog.md` do
+Origem (documento externo, não versionado neste repositório), que já sustenta quatro serviços em
+produção.
 
 ## Regras que valem para todo evento
 
@@ -131,4 +132,3 @@ atualizado no mesmo PR que muda o evento. Catálogo desatualizado é pior que ca
 confiança falsa.
 
 [licoes]: ../implementation/licoes-do-origem.md
-[origem]: ../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/event-catalog.md

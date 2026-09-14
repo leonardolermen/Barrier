@@ -1,5 +1,7 @@
 package com.barrier.riskengine.risk.registry.repository;
 
+import com.barrier.riskengine.policy.PolicyProvenance;
+import com.barrier.riskengine.policy.RegistryPolicyState;
 import com.barrier.riskengine.risk.registry.domain.RiskRuleCriticality;
 import com.barrier.riskengine.risk.registry.domain.RiskRuleRegistryEntry;
 import java.time.Instant;
@@ -14,6 +16,10 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 class RiskRuleRegistryRepositoryImpl implements RiskRuleRegistryRepository {
+
+  private static final String SELECT_HISTORY =
+      "SELECT rule_code, enabled, criticality, description, valid_from, valid_until, updated_by,"
+          + " changed_at FROM risk_rule_registry_history WHERE rule_code = ?";
 
   private static final String INSERT_HISTORY =
       "INSERT INTO risk_rule_registry_history"
@@ -83,6 +89,57 @@ class RiskRuleRegistryRepositoryImpl implements RiskRuleRegistryRepository {
         updatedBy,
         java.sql.Timestamp.from(now));
     return saved;
+  }
+
+  @Override
+  public Optional<RegistryPolicyState> historyAsOf(String ruleCode, Instant at) {
+    if (at == null) {
+      return Optional.empty();
+    }
+    return jdbc
+        .query(
+            SELECT_HISTORY + " AND changed_at <= ? ORDER BY changed_at DESC LIMIT 1",
+            (rs, i) -> toState(rs, PolicyProvenance.FROM_HISTORY),
+            ruleCode,
+            java.sql.Timestamp.from(at))
+        .stream()
+        .findFirst();
+  }
+
+  @Override
+  public boolean hasAnyHistory(String ruleCode) {
+    Integer total =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM risk_rule_registry_history WHERE rule_code = ?",
+            Integer.class,
+            ruleCode);
+    return total != null && total > 0;
+  }
+
+  @Override
+  public List<RegistryPolicyState> history(String ruleCode) {
+    return jdbc.query(
+        SELECT_HISTORY + " ORDER BY changed_at DESC",
+        (rs, i) -> toState(rs, PolicyProvenance.FROM_HISTORY),
+        ruleCode);
+  }
+
+  private static RegistryPolicyState toState(java.sql.ResultSet rs, PolicyProvenance provenance)
+      throws java.sql.SQLException {
+    return new RegistryPolicyState(
+        rs.getString("rule_code"),
+        rs.getBoolean("enabled"),
+        rs.getString("criticality"),
+        rs.getString("description"),
+        instante(rs.getTimestamp("valid_from")),
+        instante(rs.getTimestamp("valid_until")),
+        rs.getString("updated_by"),
+        instante(rs.getTimestamp("changed_at")),
+        provenance);
+  }
+
+  private static Instant instante(java.sql.Timestamp ts) {
+    return ts == null ? null : ts.toInstant();
   }
 
   private RiskRuleRegistryEntry toDomain(RiskRuleRegistryEntity e) {

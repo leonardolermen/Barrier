@@ -9,7 +9,10 @@ de risco** (operador LGPD), evoluindo para plataforma completa. Ver [README](REA
   — **o único backlog vivo.** Antes havia quatro planos sobrepostos, e o custo foi medido: quatro
   itens ficaram marcados como abertos meses depois de resolvidos, e a paralelização foi feita antes
   da cota que o próprio plano exigia primeiro. Consulte a **sequência recomendada** antes de propor
-  trabalho novo. Em execução agora: **replay de decisão**.
+  trabalho novo. **Política de risco custom por parceiro** (P1 do "Risk Control Plane", spec em
+  [docs/superpowers/specs/2026-09-13-politica-de-risco-custom-por-parceiro-design.md](docs/superpowers/specs/2026-09-13-politica-de-risco-custom-por-parceiro-design.md))
+  fechou em 2026-09-14. Em execução agora: nada deste plano — próximo item recomendado é P2
+  (shadow mode / backtest de política, ver backlog).
 - **Posicionamento do produto:** [ADR-0020](docs/adr/0020-posicionamento-motor-de-decisao-api-first.md)
   — motor de decisão **API-first**. O parceiro tem a jornada dele e compra decisão explicável e
   trilha auditável; hosted page/SDK/UI da mesa são posicionamento B, depois. **Em A, a integração é
@@ -867,12 +870,157 @@ E o snapshot que fecharia a lacuna de `company`/`profile` **não** foi feito de 
 cadastro multiplica PII sob retenção de 10 anos, e a decisão registrada é resolver isso junto com
 criptografia em repouso, não antes.
 
-Próximo: Fase 5 (hardening: OpenAPI, mascaramento) e o backlog de
-compliance da Fase 6 (COAF/SISCOAF, retenção de 10 anos, criptografia em repouso, UBO além do
-1º grau, bureau real de CPF) — ver [docs/product/backlog.md](docs/product/backlog.md).
+**Política versionada com vigência e autoria (módulo `policy`).** A outra metade do replay: ele
+responde *o quê*, isto responde *quem*. `config_history` (V033) era escrita desde sempre — duas
+tabelas, na mesma transação da alteração — e **nada a lia**: dois `INSERT` no código de produção e um
+`SELECT` num teste. Também sem migration nova.
 
-Build validado 2026-08-31: `./mvnw test` verde (692 testes na risk-engine + 69 na webhook-api + 32
-no commons — **793 no total**, 0 falhas, inclui integração com Testcontainers). **Precisa de Docker rodando** —
+**O buraco preciso:** `evaluated_json` grava que uma regra ficou `SUPPRESSED`, o que já é mais do que
+a maioria dos motores guarda, mas não diz **quem a desligou nem quando**. Uma regra de risco desligada
+por uma semana e religada não deixava vestígio de autoria — e a própria V033 chama isso de "a
+operação mais sensível do sistema", tanto que foi ela quem acrescentou `updated_by` ao registry, a
+única tabela de controle sem autor.
+
+`RiskRuleRegistryService.stateAsOf` e `TenantRiskConfigAdminService.authorshipAsOf` fazem a leitura
+*as-of*, e a parte difícil é a **proveniência**, em quatro casos — confundir dois deles é afirmar o
+estado de hoje como se fosse o de então, que é literalmente o erro que a V033 existe para evitar:
+`FROM_HISTORY` (há entrada em vigor no instante), `UNCHANGED_SINCE_SEED` (não há histórico: a regra
+nunca mudou, logo o estado atual vigia desde a semente), `NOT_REGISTERED` (não há histórico **nem
+linha**: o registry é kill switch e não allowlist, então a regra rodava por fail-open) e
+`UNKNOWN_BEFORE_HISTORY` (há histórico, **todo posterior** — a V033 grava o estado *novo* de cada
+mudança, e o anterior à primeira não existe em lugar nenhum). O último é limitação estrutural do
+desenho, não defeito de leitura.
+
+⚠️ **`NOT_REGISTERED` nasceu de uma falha do teste de integração, e é o caso comum**: a V016 semeia
+seis famílias e o motor tem doze. A primeira versão tratava "sem linha no registry" como
+autoria não apurável e marcava lacuna em quase toda regra de todo replay — o mesmo excesso de sinal
+do `ADVERSE_MEDIA`, descoberto porque `DecisionReplayIntegrationTest` exigia zero lacunas numa base
+sem alteração de política nenhuma.
+
+**`GapKind.POLICY_AUTHORSHIP_UNKNOWN` é a única lacuna que não degrada o veredito do replay**, e a
+exceção está no tipo (`affectsDecision()`), não em comentário. O que falta ali é quem definiu a
+política, não o que o motor decidiu — o desfecho de cada regra segue gravado e a aritmética segue
+conferindo. Degradar por isso rebaixaria praticamente todo replay antigo (qualquer regra alterada uma
+vez, depois, produz a lacuna para toda decisão anterior), e sinal que dispara sempre deixa de ser
+sinal: é o mesmo erro que `ScreeningCoverageRiskRule` cometeu ao exigir cobertura de `ADVERSE_MEDIA`
+incondicionalmente e pontuar 100% das avaliações.
+
+**A autoria do parâmetro não reconstrói o valor.** `authorshipAsOf` recebe o valor efetivo (que vem
+do `evaluated_json`) e devolve só quem o definiu. Reconstruí-lo daqui criaria uma segunda fonte para
+o mesmo fato, e o projeto já pagou o preço de duas cópias divergirem. `ParamSource` separa
+`TENANT_OVERRIDE` de `GLOBAL_DEFAULT` (valor veio do código; a autoria dele é o `ENGINE_VERSION`,
+não uma pessoa) e de `UNKNOWN`. Entrada de histórico com `param_value` nulo é **override removido** —
+a volta ao default é mudança de controle como outra qualquer, e a V033 já previa a distinção.
+
+**Módulo `policy` é folha, e precisa ser.** `PolicyProvenance`/`RegistryPolicyState`/`ParamAuthorship`
+são vocabulário comum a `risk.registry` e `tenant.config`, e esses dois não podem depender um do
+outro: `risk → tenant.config` já existe (`NewCompanyRiskRule` lê `TenantRiskConfigService`), então o
+inverso fecharia ciclo. `policy` não depende de nada e a composição mora no `replay`, que já compõe
+cinco módulos. ArchUnit (`sem_ciclos_entre_modulos`) é quem prova.
+
+Linha do tempo consultável por `GET /v1/risk-rules/{code}/history` e
+`GET /v1/tenants/{tenantId}/risk-config/history`, **administrativas**. O regex de `ApiRoutes` passou
+a cobrir subcaminhos de `risk-config`/`api-keys`: a linha do tempo revela a calibragem de um parceiro
+e quem a mudou — administração, como a escrita que a produziu.
+
+**Política de risco custom por parceiro (P1 do "Risk Control Plane", módulo `riskpolicy`).** Primeira
+entrega em que o time de risco do parceiro escreve a própria regra e a ativa sem depender de deploy
+do Barrier: `POST /v1/policies` cria uma versão `DRAFT`, `POST /v1/policies/{version}/activate` liga
+(arquivando a anterior do mesmo tenant/domínio, `domínio` = `ONBOARDING` nesta entrega). Tudo sob
+`/v1/`, já protegido pelo filtro de tenant porque `ApiRoutes` é **denylist**, não allowlist —
+`/v1/policies` e `/v1/policy-fields` nascem de parceiro sem entrar em lista nenhuma; `/v1/tenants/
+{id}/risk-config` continua administrativo, critério explícito: quem só endurece é self-service, quem
+calibra parâmetro (podendo afrouxar) segue admin. Migration V049: tabela `risk_policies` (chave
+natural `(tenant, domínio, versão)`, índice único parcial garantindo uma `ACTIVE` por par) e
+`risk_scores.policy_version` — segundo eixo de versão, ao lado de `engine_version`.
+
+**O catálogo de campos (`FieldCatalog`) é a interface pública da linguagem**, e o que a desacopla do
+formato do `RiskContext`: cada `PolicyField` declara id estável (`company.openingDate`), tipo
+(`DATE`/`NUMBER`/`STRING`/`ENUM`/`BOOLEAN`/`LIST`), o `ContextInput` de origem — de onde o
+`requires()` de uma política é *derivado*, nunca declarado à mão — e a exposição em evidência
+(`BY_VALUE` ou `OUTCOME_ONLY`, a defesa de privacidade: campo `OUTCOME_ONLY` nunca tem o valor
+escrito na evidência, só o resultado da comparação). Campo `LIST` nunca pode ser `BY_VALUE`: o
+construtor de `PolicyField` recusa a combinação — a lista crua carrega PII e não explica nada por si
+—, mesma razão por que `screening.hits[].party` devolve só `ScreenedParty.Role`, nunca o record
+inteiro (que carrega `name`/`document`). Campo pode ser marcado obsoleto, nunca removido, mesmo
+raciocínio de migration Flyway imutável: política antiga precisa continuar interpretável quando o
+catálogo crescer. `GET /v1/policy-fields` publica o catálogo desde o dia um — é o limite real do
+produto, documentado em vez de escondido. Regra é uma árvore de predicados (`And`/`Or`/`Not`/
+`Comparison`/`AnyOf`, interface selada, total por construção — sem laço, sem recursão, teto de
+profundidade/nós verificado na compilação) sobre esse catálogo; `AnyOf` resolve lista (`NoneOf` é
+açúcar para `Not(AnyOf(...))`), e `PolicyRule` é deliberadamente a forma de um `RiskResult`
+(código/score/severidade/recomendação) — nada no motor aprende vocabulário novo.
+
+**Invariante aditivo: só soma, força REVIEW ou força REJECT — nunca remove, rebaixa ou zera fator do
+motor.** É a decisão que **reabre** a recusa "regra customizável pelo parceiro" registrada em
+[docs/implementation/archive/README.md](docs/implementation/archive/README.md) sem invalidá-la: o
+racional ali segue valendo por completo para regra **subtrativa**, e o invariante aditivo é o que
+garante que essa direção de dano não existe aqui — o compliance officer do comprador ganha um botão
+de apertar, não de afrouxar. Quatro travas de compilação (`PolicyCompiler`) ficam de pé: `score >= 0`;
+código `CUSTOM_[A-Z0-9_]+`, que separa por construção fator do parceiro de família do motor e de
+`RegulatoryRiskRules`, e deixa quem lê `evaluated_json` distinguir os dois sem consultar nada; só
+campo do catálogo, com operador válido para o tipo; teto de tamanho da árvore. `InvarianteAditivoTest`
+prova a propriedade (score e recomendação com política nunca mais fracos que sem ela) sobre uma
+matriz de contextos × políticas — é o teste que sustenta a decisão de produto, não um teste de
+exemplo. **É por isso que isto é self-service e `tenant_risk_config` continua administrativo**:
+calibrar parâmetro de `NewCompanyRiskRule`/`SensitiveCnaeRiskRule` pode afrouxar (`months` maior,
+lista de CNAE menor), então continua exigindo operação interna; regra custom só endurece, então o
+parceiro mexe sozinho.
+
+**A inversão.** `RiskScoringService` (módulo `risk`) precisa de uma segunda fonte de regras, e
+declarar a interface do lado de quem implementa fecharia o ciclo `risk → riskpolicy → risk`. Por
+isso `CustomRuleSource` é declarada em `risk` (que não sabe quem a implementa) e implementada em
+`riskpolicy` (`CustomRuleSourceImpl`) — mesmo padrão de `AssuranceRecordedListener` e
+`AssessmentCompletedListener`; `sem_ciclos_entre_modulos` prova. `RiskScoringService` injeta
+`Optional<CustomRuleSource>` (zero beans resolve para `CustomRules.NONE`): tenant sem política ativa
+não produz regra custom nenhuma, e o comportamento é idêntico ao de antes desta entrega. Regra custom
+entra no mesmo stream das de código, cai no mesmo `evaluated_json`, passa pela mesma
+`ScoreAggregation` e pelo mesmo `RiskRuleRegistryService.isActive` — fail-open inofensivo, porque
+código de regra custom nunca terá linha no registry; kill switch de política é arquivar a versão
+ativa do tenant, não o registry.
+
+**Sem cache local, de propósito.** `CustomRuleSourceImpl.forContext` lê
+`RiskPolicyRepository.findActive` a cada avaliação — busca indexada por `(tenant, domínio, status)`.
+Guardar a política ativa num mapa de instância repetiria, pela quarta vez neste workstream, o erro
+que `WatchlistImportStatus`, o dedup do `AlertEvaluator` e `KafkaTopicsConfig` já cometeram: estado do
+cluster guardado na memória de um pod. Ativação numa réplica não invalidaria o cache das outras
+quatro, que seguiriam decidindo com a política anterior — para uma decisão regulada, silenciosamente.
+Se isto um dia virar gargalo medido, a saída é cache com invalidação compartilhada entre réplicas,
+nunca um mapa local.
+
+`referenceInstant` (`RiskContext`, preenchido pelo `AssessmentProcessor` a partir do instante da
+avaliação e pelo `replay` a partir do instante gravado) é o que permite `OLDER_THAN`/`WITHIN_LAST`
+reproduzirem o mesmo resultado num replay de decisão antiga em vez de usar o relógio de parede — as
+regras de código que já dependem de data (`NewCompanyRiskRule`) usam o relógio direto e têm a mesma
+fragilidade latente, registrada e fora de escopo desta entrega.
+
+**Replay ganha o segundo eixo de versão.** O dossiê (`AS_DECIDED` e `CURRENT_ENGINE`) passou a
+reportar `policyVersion` ao lado de `engineVersion`, os dois "como decidido" e "hoje"
+(`RecordedDecision`/`ReplayedDecision` e os DTOs correspondentes) — **sem** acrescentar documento
+nem nome: a resposta continua só código de regra, pontuação e versões. `AS_DECIDED` funciona sem
+tocar em nada, porque regra custom grava em `evaluated_json` como qualquer outra — verificado, não
+presumido. O que faltava era o `requires()` de uma regra custom no `CURRENT_ENGINE`:
+`DecisionReplayService` guardava só o mapa código→insumos das regras de **código** (beans, fixas), e
+regra custom não é bean — varia por tenant e por versão de política. Sem isso, uma regra que lê
+`company.*` numa avaliação de PJ nunca seria marcada `NOT_REPLAYABLE`, porque o `CompanyProfile` é
+transiente (`GapKind.COMPANY_NOT_PERSISTED`), mas o código da regra custom nunca estava no mapa
+fixo — o mesmo fail-open que este projeto já teve que fechar três vezes noutras frentes.
+`DecisionReplayService` passou a injetar `Optional<CustomRuleSource>` também, e deriva o `requires()`
+das regras da política **ativa agora**, por chamada (`requisitosIncluindoCustom`) — não
+precomputável no construtor, porque a política ativa varia por tenant e pode ter mudado entre a
+decisão e o replay dela.
+
+`ENGINE_VERSION` sobe para `barrier-risk-rules/1.9.0`: o motor ganhou uma fonte de regras, e uma
+decisão tomada nesta versão pode conter fator que a anterior não conseguia produzir.
+
+Próximo: P2 do "Risk Control Plane" (shadow mode / backtest de política — até existir, o parceiro
+ativa política no escuro), depois o backlog de compliance (COAF/SISCOAF, retenção de 10 anos,
+criptografia em repouso, UBO além do 1º grau, bureau real de CPF) — ver
+[docs/product/backlog.md](docs/product/backlog.md).
+
+Build validado 2026-09-14: `./mvnw test` verde (845 testes na risk-engine + 69 na webhook-api + 32
+no commons — **946 no total**, 0 falhas, 0 erros, inclui integração com Testcontainers). **Precisa
+de Docker rodando** —
 sem ele os testes de integração erram com `Can't get Docker image` e a suíte fica verde só na
 aparência. Se o Docker Desktop travar em `initializing Inference manager`, o motivo são sockets
 órfãos indeletáveis no diretório `Docker/run` do AppData local: renomeie o diretório (apagar não

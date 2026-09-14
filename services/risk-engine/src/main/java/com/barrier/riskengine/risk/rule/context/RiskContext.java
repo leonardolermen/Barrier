@@ -4,6 +4,8 @@ import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
+import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Insumo das regras de risco: os resultados de identidade e screening da avaliação, o perfil
@@ -18,6 +20,11 @@ import com.barrier.riskengine.subject.profile.domain.SubjectProfile;
  * @param profile cadastro do subject (endereço/telefone/etc.); pode estar em branco
  * @param assurance resultados de documentoscopia e biometria; {@code null} quando o parceiro não
  *     usa essa etapa. Ausência é diferente de falha, e as regras tratam as duas de forma diferente
+ * @param referenceInstant instante que a política usa como "agora" nos operadores de data. É o
+ *     instante da decisão, nunca o relógio de parede: sem isso, o replay de uma decisão antiga
+ *     calcularia idade e janela contra hoje e reportaria como mudança de motor o que é só o tempo
+ *     passando. Diferente dos demais insumos, está sempre disponível e por isso não tem
+ *     {@link ContextInput} correspondente.
  */
 public record RiskContext(
     String assessmentId,
@@ -26,4 +33,10 @@ public record RiskContext(
     ScreeningResult screening,
     CompanyProfile company,
     SubjectProfile profile,
-    AssuranceSummary assurance) {}
+    AssuranceSummary assurance,
+    Instant referenceInstant) {
+
+  public RiskContext {
+    Objects.requireNonNull(referenceInstant, "referenceInstant");
+  }
+}

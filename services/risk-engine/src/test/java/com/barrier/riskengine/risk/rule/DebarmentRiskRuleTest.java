@@ -12,6 +12,7 @@ import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +22,8 @@ import org.junit.jupiter.api.Test;
  * de serviço a quem a lei não impede de ser cliente.
  */
 class DebarmentRiskRuleTest {
+
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
 
   private final DebarmentRiskRule rule = new DebarmentRiskRule();
 
@@ -32,7 +35,8 @@ class DebarmentRiskRuleTest {
         ScreeningResult.of("aid", List.of(hits)),
         null,
         null,
-        null);
+        null,
+        QUANDO);
   }
 
   private static ScreeningHit hit(MatchBasis basis, ScreenedParty party) {

@@ -3,8 +3,11 @@
 ## Como está implementado hoje
 
 O núcleo de decisão é **em processo** dentro da Risk Engine (os módulos identity → screening
-→ risk conversam por chamada de método, não por Kafka). O **único evento publicado** é
-`barrier.assessment.completed`, consumido pela **Webhook API**.
+→ risk conversam por chamada de método, não por Kafka). O barramento tem **três tópicos**
+(`barrier.assessment.completed`, `barrier.subject.risk_level_changed`,
+`barrier.behavior.recorded`); os dois primeiros são consumidos pela **Webhook API**, no mesmo
+listener e consumer-group. [event-catalog.md](event-catalog.md) é a fonte normativa — produtor,
+chave de partição, consumidores e payload de cada evento.
 
 ### Passo a passo de uma avaliação
 
@@ -57,12 +60,18 @@ Cliente        Risk Engine (assessment→identity→screening→risk)   Kafka   
 
 ### Contrato de evento
 
-| Evento                        | Emitido por | Consumido por |
-|-------------------------------|-------------|---------------|
-| `barrier.assessment.completed`| Risk Engine | Webhook API   |
+| Evento                                  | Emitido por | Consumido por |
+|------------------------------------------|-------------|---------------|
+| `barrier.assessment.completed`            | Risk Engine | Webhook API (`AssessmentCompletedListener`), `DeliveryReconciliationJob` |
+| `barrier.subject.risk_level_changed`      | Risk Engine | Webhook API (mesmo listener/group do desfecho) |
+| `barrier.behavior.recorded`               | Risk Engine | nenhum ainda — acervo é a fundação (F8) |
 
-Envelope (`EventEnvelope` em `commons`): `eventId` (idempotência), `type`, `assessmentId`
-(correlation id + chave de partição no Kafka), `occurredAt`, `version`, `payload`.
+Detalhe de cada evento (produtor, chave de partição, payload) em
+[event-catalog.md](event-catalog.md), que é a fonte normativa. Envelope (`EventEnvelope` em
+`commons`): `eventId` (idempotência), `type`, `assessmentId` (id do agregado — nome histórico,
+nem sempre uma avaliação), `occurredAt`, `version`, `payload`. A chave de partição no Kafka
+varia por evento (`assessmentId` nos eventos de avaliação, `subjectId` no comportamental) — não
+é sempre o `assessmentId` do envelope.
 
 ### Garantias
 

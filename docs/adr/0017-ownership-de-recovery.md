@@ -23,7 +23,7 @@ faltando), e a mesma avaliação pode satisfazer dois sintomas ao mesmo tempo.
 
 O ecossistema Origem já pagou por esse aprendizado. O `bureau_pending_worker` duplicou
 solicitações ao bureau abrindo ciclo novo para casos que outro mecanismo já estava conduzindo;
-o [`adr-bureau-recovery-ownership.md`][origem] foi escrito **depois** do incidente, tem 29
+o ADR do Origem `adr-bureau-recovery-ownership.md` foi escrito **depois** do incidente, tem 29
 linhas, e a parte que resolve é uma tabela de responsabilidade por estado terminada em
 proibições explícitas. Ver [lições do Origem][licoes], prioridade 9 — é o item mais barato da
 fila e previne uma classe de bug que o Barrier ainda não teve porque ainda não escalou.
@@ -127,6 +127,5 @@ provider voltou), nunca um job novo varrendo avaliações concluídas.
 [recon]: ../../services/webhook-api/src/main/java/com/barrier/webhook/service/DeliveryReconciliationJob.java
 [v023]: ../../services/risk-engine/src/main/resources/db/migration/V023__assessment_processing_control.sql
 [v025]: ../../services/risk-engine/src/main/resources/db/migration/V025__outbox_claim.sql
-[origem]: ../../../Backend/bmp-origem-back/Docs/Cadastro%20Unico/adr-bureau-recovery-ownership.md
 [licoes]: ../implementation/licoes-do-origem.md
 [fila]: ../implementation/archive/fila-origem.md

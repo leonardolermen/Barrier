@@ -38,10 +38,10 @@ Herdada dos planos anteriores e mantida porque funcionou:
 
 | Dimensão | Estado |
 |---|---|
-| Motor de risco e trilha | **Forte.** 16 regras (Strategy), registry com vigência, `evaluated_json` com regras suprimidas e parâmetro efetivo, `config_history`. A auditoria externa classificou a trilha como melhor que a de fornecedores estabelecidos |
+| Motor de risco e trilha | **Forte.** 12 regras (Strategy), registry com vigência, `evaluated_json` com regras suprimidas e parâmetro efetivo, `config_history`. A auditoria externa classificou a trilha como melhor que a de fornecedores estabelecidos |
 | Pipeline e escala | **Provado em parte.** CI, Dockerfile, 5 réplicas em `kind`, `SingletonJobLock`, 3 tópicos × 6 partições, processamento e entrega paralelos com teto. Faltam as verificações de disjunção sob carga e a remedição com bureau real |
 | Contrato público | **Recém-aberto.** OpenAPI nos dois serviços com grupo administrativo fora, assinatura de webhook carimbada no tempo. Falta tudo o que vem depois do contrato: guia, sandbox exposto, paginação, histórico de entrega |
-| Auditabilidade como produto | **Replay entregue** (`POST /v1/assessments/{id}/replay`, dois modos, sem migration). Falta a **autoria**: `config_history` (V033) continua sem nenhuma leitura as-of |
+| Auditabilidade como produto | **A parte mais forte.** Replay em dois modos (agora com o eixo `policyVersion`) + política versionada com vigência e autoria + política custom por parceiro (P1, aditiva). Falta a autoria de **pessoa** (hoje `reviewed_by` é texto livre) e o shadow mode/backtest (P2) |
 | KYC de PF | **Bloqueado por fornecedor.** Bureau real implementado e desligado; documentoscopia e biometria devolvem `UNAVAILABLE` em `prod` |
 | KYB de PJ | **Não automatiza.** `basic_data` da BigBoost não traz QSA, e `CorporateStructureCoverageRiskRule` é fail-closed de propósito — toda PJ atendida pelo bureau real vai a revisão manual |
 | Antifraude | **Inexistente.** `behavior_events` é tabela: zero regras leem o acervo |
@@ -57,13 +57,13 @@ estão marcadas.
 | # | Item | Grupo | Por que aqui |
 |---|---|---|---|
 | ~~1~~ | ~~**Replay de decisão**~~ ✅ **fechado 2026-08-31** | [2](#2--decisão-auditável--o-diferencial) | Os dados já estavam gravados e ninguém os lia. Fechado sem migration |
-| **1** | **Política versionada com vigência e autoria** | [2](#2--decisão-auditável--o-diferencial) | **Agora é o próximo.** O replay já entrega o parâmetro efetivo de cada regra; falta a autoria. `config_history` (V033) segue sem nenhuma leitura as-of |
-| 2 | **Cota e rate limit por tenant** | [3](#3--confiança--o-comprador-consegue-assinar) | Vencido: a paralelização foi feita antes dele. Fecha DoS, noisy neighbor e fatura de bureau de uma vez. **Bloqueia** o re-KYC periódico e a ingestão em massa |
-| 3 | **Listagem paginada com cursor** | [1](#1--integração--um-dev-externo-integra-sozinho) | Barato, e sem isso o parceiro que perdeu um webhook não tem como reconciliar |
-| 4 | **Guia público + sandbox exposto** | [1](#1--integração--um-dev-externo-integra-sozinho) | Em posicionamento A, a integração **é** o produto |
-| 5 | **Criptografia em repouso + retenção** | [3](#3--confiança--o-comprador-consegue-assinar) | Bloqueia o questionário de segurança de qualquer comprador sério — antes de bloquear qualquer norma |
-| 6 | **Identidade de operador + 4-eyes** | [2](#2--decisão-auditável--o-diferencial) | Depende de 2 |
-| 7 | **Fonte de QSA contratada** | [4](#4--cobertura-de-kyckyb) | É o teto do KYB. Comercial, não técnico |
+| ~~2~~ | ~~**Política versionada com vigência e autoria**~~ ✅ **fechado 2026-09-01** | [2](#2--decisão-auditável--o-diferencial) | Fechado sem migration. `config_history` deixou de ser escrita morta |
+| **1** | **Cota e rate limit por tenant** | [3](#3--confiança--o-comprador-consegue-assinar) | Vencido: a paralelização foi feita antes dele. Fecha DoS, noisy neighbor e fatura de bureau de uma vez. **Bloqueia** o re-KYC periódico e a ingestão em massa |
+| 2 | **Listagem paginada com cursor** | [1](#1--integração--um-dev-externo-integra-sozinho) | Barato, e sem isso o parceiro que perdeu um webhook não tem como reconciliar |
+| 3 | **Guia público + sandbox exposto** | [1](#1--integração--um-dev-externo-integra-sozinho) | Em posicionamento A, a integração **é** o produto |
+| 4 | **Criptografia em repouso + retenção** | [3](#3--confiança--o-comprador-consegue-assinar) | Bloqueia o questionário de segurança de qualquer comprador sério — antes de bloquear qualquer norma |
+| 5 | **Identidade de operador + 4-eyes** | [2](#2--decisão-auditável--o-diferencial) | Agora destravado: a política já tem autoria de operação; falta a de **pessoa** |
+| 6 | **Fonte de QSA contratada** | [4](#4--cobertura-de-kyckyb) | É o teto do KYB. Comercial, não técnico |
 
 ---
 
@@ -192,15 +192,66 @@ O ativo mais forte do projeto está **gravado e ilegível**. Esta seção transf
   `OUTCOME_CHANGED`, insumo ausente não publica resultado, replay não cria linha em `risk_scores`,
   404 para tenant alheio, 409 sem decisão, 401 sem credencial.
 
-- [ ] **Política versionada com vigência e autoria** 🔴
-  A plataforma não responde *"qual política estava vigente quando este cliente foi aprovado, e quem
-  aprovou essa política"*. `config_history` (V033) é escrita e **nada a lê**: dois `INSERT` no código
-  de produção e um `SELECT` num teste. É a metade que falta do replay — ele responde *o quê*, esta
-  responde *quem*.
-  *Pronto quando:* consulta as-of por `(tenant, rule_code, instante)` devolve a configuração vigente
-  com autoria, e uma mudança posterior à decisão **não** aparece no dossiê daquela decisão.
+- [x] **Política de risco custom por parceiro (P1 do "Risk Control Plane")** 🔴 — **fechado 2026-09-14**
+  O time de risco do parceiro escreve a própria regra e ativa sem deploy do Barrier: árvore de
+  predicados sobre um catálogo de campos versionado (`GET /v1/policy-fields`), compilada contra
+  quatro travas (score ≥ 0, namespace `CUSTOM_`, só campos do catálogo, teto de árvore) e ativada por
+  `POST /v1/policies/{version}/activate`. Migration V049 (`risk_policies` + `risk_scores.policy_version`).
+  `ENGINE_VERSION` subiu para `barrier-risk-rules/1.9.0`.
 
-- [ ] **Identidade do operador humano + 4-eyes + fim da admin key global** 🟠
+  **Só aditiva, piso regulatório intocável** — decisão 1 do brainstorming, e é o que reabre a
+  recusa "regras editáveis pelo parceiro" registrada em
+  [docs/implementation/archive/README.md](../implementation/archive/README.md): regra custom pode
+  somar, forçar REVIEW ou REJECT, nunca remove nem rebaixa fator do motor. `InvarianteAditivoTest`
+  prova a propriedade (score e recomendação com política nunca mais fracos que sem ela) sobre uma
+  matriz de contextos × políticas. `CustomRuleSource` é declarada em `risk` e implementada em
+  `riskpolicy` (mesma inversão de `AssuranceRecordedListener`) — sem cache local, de propósito: o
+  projeto já pagou três vezes o preço de estado do cluster na memória de um pod.
+
+  O replay ganhou o segundo eixo de versão: `policyVersion`, "como decidido" e "hoje", ao lado de
+  `engineVersion` — para que o parceiro editando a própria política apareça como isso, e não como o
+  motor tendo mudado de opinião. `requires()` de uma regra custom continua sendo derivado da árvore
+  em tempo de replay, então uma regra que lê `company.*` numa avaliação de PJ vira
+  `NOT_REPLAYABLE` como qualquer regra de código — sem isso o `CompanyProfile` transiente ficaria
+  silenciosamente fora da checagem.
+
+  *Verificado:* unitário (cada operador, `AnyOf` sobre lista vazia/um/vários), compilação (uma
+  falha por trava), o invariante aditivo, `requires()` derivado por bytecode, ArchUnit (sem
+  dependência de `client`, sem ciclo de módulo) e integração com Testcontainers (política ativa
+  entra em `evaluated_json`, `risk_scores.policy_version` grava, replay nos dois modos). Contagem
+  exata da suíte em `CLAUDE.md`.
+
+- [x] **Política versionada com vigência e autoria** 🔴 — **fechado 2026-09-01**
+  A outra metade do replay: ele responde *o quê*, esta responde *quem*. `config_history` (V033) era
+  escrita desde sempre — duas tabelas, na mesma transação da alteração — e **nada a lia**. Fechado
+  **sem migration nova**, como o replay.
+
+  O buraco preciso: `evaluated_json` grava que uma regra ficou `SUPPRESSED`, mas não **quem a
+  desligou nem quando**. A própria V033 chama isso de "a operação mais sensível do sistema".
+
+  Entregue: leitura *as-of* do registry e dos overrides por tenant, com **proveniência em quatro
+  casos** — `FROM_HISTORY`, `UNCHANGED_SINCE_SEED` (nunca alterada), `NOT_REGISTERED` (sem linha no
+  registry: fail-open, a regra rodava) e `UNKNOWN_BEFORE_HISTORY` (histórico todo posterior; a V033
+  grava o estado *novo* de cada mudança, e o anterior à primeira não existe). Confundir os dois
+  últimos seria afirmar o estado de hoje como o de então — o erro que a V033 existe para evitar.
+  ⚠️ `NOT_REGISTERED` só apareceu porque o teste de integração falhou: a primeira versão marcava
+  lacuna em quase toda regra (a V016 semeia 6 de 16 famílias). A autoria entra no dossiê do replay
+  por regra, e a linha do tempo é consultável por `GET /v1/risk-rules/{code}/history` e
+  `GET /v1/tenants/{tenantId}/risk-config/history` (administrativas).
+
+  ⚠️ **`POLICY_AUTHORSHIP_UNKNOWN` é a única lacuna que não degrada o veredito do replay**, e a
+  exceção mora no tipo (`GapKind.affectsDecision()`). Falta quem definiu a política, não o que o
+  motor decidiu. Degradar por isso rebaixaria todo replay antigo, e sinal que dispara sempre deixa de
+  ser sinal — o erro que `ScreeningCoverageRiskRule` já cometeu com `ADVERSE_MEDIA`.
+
+  *Verificado:* 7 testes de proveniência (os três casos × registry e override) + 5 de integração com
+  histórico real no banco — alguém desliga a regra pela API administrativa, a avaliação é decidida
+  depois, e o dossiê traz `SUPPRESSED` **com o nome de quem desligou**.
+
+- [ ] **Identidade do operador humano + 4-eyes + fim da admin key global** 🟠 — *destravado*
+  A política já tem autoria (`updated_by` lido e exposto no dossiê), mas ela é **autodeclarada**: a
+  chave de admin é única e global, então "compliance@barrier" no histórico é o que o chamador digitou,
+  não quem ele é. A trilha de política só vale o quanto vale a identidade por trás dela.
   `reviewed_by` é texto livre; `reviewed_by_key` identifica o **sistema**, não a pessoa. E a chave de
   admin é **estática, única e global**: ela liga e desliga regra regulatória e emite credencial de
   qualquer tenant, sem rotação e sem autoria. Comprometimento = controle total da plataforma sem
@@ -219,12 +270,17 @@ O ativo mais forte do projeto está **gravado e ilegível**. Esta seção transf
   *Pronto quando:* replay de PJ reporta zero lacunas, e o snapshot está sob a mesma política de
   retenção e cifragem do resto da PII.
 
-- [ ] **Shadow mode / simulação de regra contra histórico** 🟠
-  Hoje **toda mudança de regra é aposta**: não há como rodar uma regra nova sobre o histórico e ver
-  o impacto antes de ligar. Com o replay pronto (fechado), é o passo seguinte natural — e é a resposta ao
-  no-code rule builder da Alloy **sem** sacrificar o `ENGINE_VERSION`.
-  *Pronto quando:* uma versão candidata do motor roda sobre uma janela do histórico e produz o diff
-  de desfechos por regra, sem tocar em `risk_scores`.
+- [ ] **Shadow mode / backtest de política (P2 do "Risk Control Plane")** 🟠 — **próximo item do programa**
+  Hoje **toda ativação de política é aposta**: `POST /v1/policies/{version}/activate` liga a regra
+  do parceiro direto em produção, sem nenhum jeito de ver o impacto antes. **Até este item existir,
+  o parceiro ativa política no escuro** — sabe o que a regra diz, não o que ela teria mudado. Com o
+  replay pronto (fechado) e a política custom fechada (P1, fechado), é o passo seguinte natural: uma
+  versão `DRAFT` roda sobre uma janela do histórico e produz o diff de desfechos por regra, sem
+  tocar em `risk_scores` nem no motor de produção — mesmo raciocínio de `CURRENT_ENGINE` no replay,
+  aplicado à política em vez de ao motor. Também é a resposta ao no-code rule builder da Alloy
+  **sem** sacrificar o `ENGINE_VERSION`.
+  *Pronto quando:* uma versão `DRAFT` roda sobre uma janela do histórico e produz o diff de
+  desfechos por regra, sem tocar em `risk_scores`.
 
 - [ ] **Tracing distribuído por etapa** 🟡
   `correlationId` persistido e restaurado através de thread, scheduler e broker resolve o problema
@@ -443,10 +499,20 @@ o racional junto.
 |---|---|
 | Hosted page / SDK de captura | Posicionamento B. Muda a exposição LGPD — hoje o sistema nunca toca em dado biométrico ([ADR-0020](../adr/0020-posicionamento-motor-de-decisao-api-first.md)) |
 | **UI** da mesa de análise | B. Em A o analista é do parceiro, na ferramenta do parceiro. ⚠️ O módulo `mesa` **continua valendo**: fila, SLA pausável e timeline são entregues **como API**, no grupo `parceiro` do contrato — é a UI que é B, não a capacidade |
-| Regras editáveis pelo parceiro (self-service) | Dá ao regulado o botão de afrouxar o próprio controle de PLD-FT, e o compliance officer do comprador **não quer** que a área de negócio dele tenha esse botão. A forma regulatória disso é política versionada com vigência, autoria e replay (grupo 2) |
+| Regra **subtrativa** editável pelo parceiro (afrouxar/zerar controle) | Dá ao regulado o botão de afrouxar o próprio controle de PLD-FT, e o compliance officer do comprador **não quer** que a área de negócio dele tenha esse botão. Continua fora de escopo — ver nota abaixo, a recusa não foi apagada, foi **reaberta com argumento** só para a forma aditiva |
 | Regra-como-dado editável em runtime | Sacrificaria `ENGINE_VERSION` e a trilha reproduzível |
 | Schema registry de eventos | Entra quando o produtor deixar de ser único, ou na primeira quebra real a coordenar entre times que não compilam juntos. Hoje o `commons` dá compatibilidade em tempo de compilação. O [event-catalog.md](../architecture/event-catalog.md) é a mitigação, e só funciona se for atualizado no mesmo PR que muda o evento |
 | Reuso de verificação de identidade entre tenants | Repetiria o erro que o ADR-0012 corrigiu no cadastro. Opt-in futuro, com ADR próprio |
+
+**Sobre a linha da regra subtrativa:** até 2026-09-14 esta tabela dizia só "regras editáveis pelo
+parceiro", sem distinguir aditiva de subtrativa — porque a distinção não existia ainda. O racional
+da recusa original não foi apagado (nem deveria: continua valendo, palavra por palavra, para regra
+que afrouxa ou zera um fator do motor) — foi **reaberto com argumento**, registrado em
+[docs/implementation/archive/README.md](../implementation/archive/README.md) e desenvolvido em
+[docs/superpowers/specs/2026-09-13-politica-de-risco-custom-por-parceiro-design.md](../superpowers/specs/2026-09-13-politica-de-risco-custom-por-parceiro-design.md)
+§3. O argumento é estreito de propósito: regra que só soma, força REVIEW ou força REJECT não dá ao
+regulado nenhum botão de afrouxar — o piso regulatório (`RegulatoryRiskRules`) segue intocável, e é
+isso, não uma mudança de opinião sobre o risco original, que abriu o P1 acima.
 
 ⚠️ **`SerproBureauProvider` é esqueleto morto** — sem `@Component`, `check()` só lança
 `BureauUnavailableException`. Não conte com ele em estimativa nenhuma.

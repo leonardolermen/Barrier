@@ -3,6 +3,7 @@ package com.barrier.riskengine.risk.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.identity.domain.CompanyProfile;
@@ -10,8 +11,10 @@ import com.barrier.riskengine.identity.domain.IdentityCheck;
 import com.barrier.riskengine.identity.domain.IdentityStatus;
 import com.barrier.riskengine.risk.domain.enums.RiskLevel;
 import com.barrier.riskengine.risk.domain.enums.RiskRecommendation;
+import com.barrier.riskengine.risk.domain.enums.Severity;
 import com.barrier.riskengine.risk.domain.model.EvaluatedRule;
 import com.barrier.riskengine.risk.domain.model.RiskDecision;
+import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.domain.model.RuleOutcome;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
@@ -19,7 +22,10 @@ import com.barrier.riskengine.risk.repository.interfaces.RiskScoreRepository;
 import com.barrier.riskengine.risk.rule.CorporateStructureRiskRule;
 import com.barrier.riskengine.risk.rule.IdentityRiskRule;
 import com.barrier.riskengine.risk.rule.PepRiskRule;
+import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRuleSource;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRules;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.risk.rule.SanctionRiskRule;
 import com.barrier.riskengine.screening.domain.enums.MatchBasis;
@@ -27,16 +33,22 @@ import com.barrier.riskengine.screening.domain.enums.MatchType;
 import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class RiskScoringServiceTest {
+
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
 
   @Mock RiskScoreRepository repository;
   @Mock RiskRuleRegistryService registryService;
@@ -54,7 +66,8 @@ class RiskScoringServiceTest {
             new SanctionRiskRule(),
             new PepRiskRule(),
             new CorporateStructureRiskRule());
-    service = new RiskScoringService(configuredRules, repository, registryService);
+    service =
+        new RiskScoringService(configuredRules, repository, registryService, Optional.empty());
   }
 
   private RiskContext context(IdentityStatus identity, ScreeningHit... hits) {
@@ -65,7 +78,8 @@ class RiskScoringServiceTest {
         ScreeningResult.of("aid", List.of(hits)),
         null,
         null,
-        null);
+        null,
+        QUANDO);
   }
 
   /** PJ com sócio estrangeiro: dispara CORPORATE_STRUCTURE (regra de apetite, desligável). */
@@ -83,7 +97,8 @@ class RiskScoringServiceTest {
         ScreeningResult.of("aid", List.of()),
         company,
         null,
-        null);
+        null,
+        QUANDO);
   }
 
   @Test
@@ -303,7 +318,7 @@ class RiskScoringServiceTest {
   private RiskScoringService comRegraExtra(RiskRule extra) {
     List<RiskRule> rules = new java.util.ArrayList<>(configuredRules);
     rules.add(extra);
-    return new RiskScoringService(rules, repository, registryService);
+    return new RiskScoringService(rules, repository, registryService, Optional.empty());
   }
 
   /** Regra de apetite: pontua alto e não opina sobre o desfecho — quem decide é a banda. */
@@ -436,5 +451,95 @@ class RiskScoringServiceTest {
     assertThat(d.recommendation()).isEqualTo(RiskRecommendation.REVIEW);
     assertThat(d.results()).hasSize(1);
     assertThat(d.results().getFirst().ruleCode()).isEqualTo("IDENTITY_UNAVAILABLE");
+  }
+
+  /**
+   * Sem fonte de regra custom (nenhum bean {@code CustomRuleSource}), a decisão não carrega
+   * versão.
+   */
+  @Test
+  void semFonteDeRegraCustomPolicyVersionFicaNulo() {
+    RiskDecision d = service.score(context(IdentityStatus.VERIFIED));
+
+    assertThat(d.policyVersion()).isNull();
+  }
+
+  /**
+   * Tenant sem política ativa: a fonte existe (bean presente), mas devolve {@link
+   * CustomRules#NONE}. O comportamento tem de ficar idêntico ao de um tenant sem fonte nenhuma —
+   * é a garantia central do §5.4 do spec.
+   */
+  @Test
+  void tenantSemPoliticaAtivaNaoProduzRegraCustomNenhuma() {
+    CustomRuleSource semPolitica = context -> CustomRules.NONE;
+    RiskScoringService withSource =
+        new RiskScoringService(
+            configuredRules, repository, registryService, Optional.of(semPolitica));
+
+    RiskDecision d = withSource.score(context(IdentityStatus.VERIFIED));
+
+    assertThat(d.policyVersion()).isNull();
+    assertThat(d.evaluated())
+        .extracting(EvaluatedRule::ruleCode)
+        .containsExactlyInAnyOrder("IDENTITY", "SANCTION", "PEP", "CORPORATE_STRUCTURE");
+  }
+
+  /**
+   * Regra do parceiro entra no mesmo stream das regras de código: contribui para score e
+   * recomendação, aparece na trilha, e a versão da política que a produziu fica na decisão.
+   */
+  @Test
+  void regraCustomDoParceiroEntraNoMesmoStreamEAVersaoDaPoliticaFicaNaDecisao() {
+    RiskRule custom =
+        new RiskRule() {
+          @Override
+          public RiskResult evaluate(RiskContext ctx) {
+            return new RiskResult(
+                "CUSTOM_TESTE",
+                200,
+                Severity.MEDIUM,
+                "política do parceiro: regra de teste",
+                List.of("evidencia"),
+                null);
+          }
+
+          @Override
+          public Set<ContextInput> requires() {
+            return Set.of();
+          }
+
+          @Override
+          public String code() {
+            return "CUSTOM_TESTE";
+          }
+        };
+    CustomRuleSource source = ctx -> new CustomRules(3, List.of(custom));
+    RiskScoringService withSource =
+        new RiskScoringService(configuredRules, repository, registryService, Optional.of(source));
+
+    RiskDecision d = withSource.score(context(IdentityStatus.VERIFIED));
+
+    assertThat(d.policyVersion()).isEqualTo(3);
+    assertThat(d.totalScore()).isEqualTo(200);
+    assertThat(d.results()).extracting(RiskResult::ruleCode).contains("CUSTOM_TESTE");
+    assertThat(d.evaluated())
+        .extracting(EvaluatedRule::ruleCode)
+        .contains("IDENTITY", "SANCTION", "PEP", "CORPORATE_STRUCTURE", "CUSTOM_TESTE");
+  }
+
+  /**
+   * Fixa a relação que o replay depende de ({@code RiskScore.from}): {@code scoredAt} é o
+   * {@code referenceInstant} do {@code RiskContext} que produziu a decisão, não o instante em que
+   * a linha foi persistida. {@code QUANDO} aqui é fixo e no passado -- se {@code from} voltasse a
+   * usar {@code Instant.now()}, este teste veria {@code scoredAt} no presente, muito depois de
+   * {@code QUANDO}, e falharia.
+   */
+  @Test
+  void scoredAtEOReferenceInstantDoContextoNaoOInstanteDePersistencia() {
+    service.score(context(IdentityStatus.VERIFIED));
+
+    ArgumentCaptor<RiskScore> captor = ArgumentCaptor.forClass(RiskScore.class);
+    verify(repository).save(captor.capture());
+    assertThat(captor.getValue().scoredAt()).isEqualTo(QUANDO);
   }
 }

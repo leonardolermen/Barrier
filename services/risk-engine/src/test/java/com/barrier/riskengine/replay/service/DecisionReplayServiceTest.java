@@ -3,6 +3,7 @@ package com.barrier.riskengine.replay.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,10 +31,17 @@ import com.barrier.riskengine.risk.domain.model.RiskScore;
 import com.barrier.riskengine.risk.domain.model.RuleOutcome;
 import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRuleSource;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRules;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.risk.service.RiskScoreQueryService;
 import com.barrier.riskengine.risk.service.RiskScoringService;
+import com.barrier.riskengine.policy.ParamAuthorship;
+import com.barrier.riskengine.policy.PolicyProvenance;
+import com.barrier.riskengine.policy.RegistryPolicyState;
+import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import com.barrier.riskengine.screening.service.ScreeningQueryService;
+import com.barrier.riskengine.tenant.config.service.TenantRiskConfigAdminService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -51,12 +59,16 @@ class DecisionReplayServiceTest {
 
   private static final String TENANT = "default";
   private static final AssessmentId ID = AssessmentId.newId();
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
 
   @Mock AssessmentService assessments;
   @Mock RiskScoreQueryService riskScores;
   @Mock ScreeningQueryService screenings;
   @Mock ReplayContextRebuilder rebuilder;
   @Mock RiskScoringService scoringService;
+  @Mock RiskRuleRegistryService registryService;
+  @Mock TenantRiskConfigAdminService configService;
+  @Mock CustomRuleSource customRuleSource;
 
   private DecisionReplayService service;
 
@@ -89,9 +101,42 @@ class DecisionReplayServiceTest {
             screenings,
             rebuilder,
             scoringService,
-            List.of(regra("PEP", ContextInput.SCREENING), regra("NEW_COMPANY", ContextInput.COMPANY)));
+            registryService,
+            configService,
+            List.of(regra("PEP", ContextInput.SCREENING), regra("NEW_COMPANY", ContextInput.COMPANY)),
+            Optional.of(customRuleSource));
     lenient().when(assessments.get(ID, TENANT)).thenReturn(avaliacao());
     lenient().when(screenings.findById(any())).thenReturn(Optional.empty());
+    // Tenant sem política custom por padrão: os testes que não são sobre política ativam a fonte
+    // só quando precisam, no mesmo espírito de CustomRuleSource#NONE.
+    lenient().when(customRuleSource.forContext(any())).thenReturn(CustomRules.NONE);
+    // Política conhecida por padrão: os testes deste arquivo são sobre o replay, não sobre autoria.
+    lenient()
+        .when(registryService.stateAsOf(any(), any()))
+        .thenAnswer(
+            inv ->
+                Optional.of(
+                    new RegistryPolicyState(
+                        inv.getArgument(0),
+                        true,
+                        "ALERT",
+                        "descrição",
+                        null,
+                        null,
+                        "compliance@barrier",
+                        Instant.parse("2026-01-10T09:00:00Z"),
+                        PolicyProvenance.FROM_HISTORY)));
+    lenient()
+        .when(configService.authorshipAsOf(any(), any(), any(), any(), any()))
+        .thenAnswer(
+            inv ->
+                new ParamAuthorship(
+                    inv.getArgument(2),
+                    ParamAuthorship.ParamSource.TENANT_OVERRIDE,
+                    inv.getArgument(3),
+                    "analista@parceiro",
+                    Instant.parse("2026-01-11T09:00:00Z"),
+                    PolicyProvenance.FROM_HISTORY));
   }
 
   private static Assessment avaliacao() {
@@ -105,7 +150,7 @@ class DecisionReplayServiceTest {
   private static RiskScore score(List<RiskResult> triggered, List<EvaluatedRule> evaluated, int total, RiskLevel level, RiskRecommendation rec) {
     return new RiskScore(
         UUID.randomUUID(), ID.asString(), level, total, rec, triggered, evaluated,
-        UUID.randomUUID(), UUID.randomUUID(), "barrier-risk-rules/1.7.0", Instant.now());
+        UUID.randomUUID(), UUID.randomUUID(), "barrier-risk-rules/1.7.0", null, Instant.now());
   }
 
   /** Decisão íntegra: PEP disparou (300/REVIEW), NEW_COMPANY rodou e passou. */
@@ -123,7 +168,9 @@ class DecisionReplayServiceTest {
 
   private static RebuiltContext semLacuna() {
     return new RebuiltContext(
-        new RiskContext(ID.asString(), TENANT, null, null, null, null, null), Set.of(), List.of());
+        new RiskContext(ID.asString(), TENANT, null, null, null, null, null, QUANDO),
+        Set.of(),
+        List.of());
   }
 
   // ---------- AS_DECIDED ----------
@@ -192,7 +239,8 @@ class DecisionReplayServiceTest {
                 List.of(
                     EvaluatedRule.triggered("PEP", pep, Map.of()),
                     EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
-                "barrier-risk-rules/1.8.0"));
+                "barrier-risk-rules/1.8.0",
+                null));
 
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
 
@@ -213,7 +261,8 @@ class DecisionReplayServiceTest {
                 List.of(
                     EvaluatedRule.triggered("PEP", pepHoje, Map.of()),
                     EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
-                "barrier-risk-rules/1.9.0"));
+                "barrier-risk-rules/1.9.0",
+                null));
 
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
 
@@ -240,7 +289,8 @@ class DecisionReplayServiceTest {
                 List.of(
                     EvaluatedRule.suppressed("PEP"),
                     EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
-                "barrier-risk-rules/1.8.0"));
+                "barrier-risk-rules/1.8.0",
+                null));
 
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
 
@@ -262,7 +312,7 @@ class DecisionReplayServiceTest {
     when(rebuilder.rebuild(any(), any()))
         .thenReturn(
             new RebuiltContext(
-                new RiskContext(ID.asString(), TENANT, null, null, null, null, null),
+                new RiskContext(ID.asString(), TENANT, null, null, null, null, null, QUANDO),
                 Set.of(ContextInput.COMPANY),
                 List.of(
                     ReconstructionGap.of(
@@ -277,7 +327,8 @@ class DecisionReplayServiceTest {
                     // Sem o CompanyProfile a regra devolve "não disparou". É exatamente este
                     // resultado que NÃO pode virar "rodou e passou" na resposta.
                     EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
-                "barrier-risk-rules/1.8.0"));
+                "barrier-risk-rules/1.8.0",
+                null));
 
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
 
@@ -306,5 +357,252 @@ class DecisionReplayServiceTest {
 
     assertThatThrownBy(() -> service.replay(ID, TENANT, ReplayMode.AS_DECIDED))
         .isInstanceOf(DecisionNotReplayableException.class);
+  }
+
+  @Test
+  void o_dossie_carrega_a_autoria_da_politica_vigente() {
+    when(riskScores.latestFor(ID.asString())).thenReturn(Optional.of(decisaoIntegra()));
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
+
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("NEW_COMPANY"))
+        .singleElement()
+        .satisfies(
+            r -> {
+              // evaluated_json já dizia QUE valor a regra usou; o que faltava era quem o definiu.
+              assertThat(r.recordedParameters()).containsEntry("months", "6");
+              assertThat(r.policy().registry().changedBy()).isEqualTo("compliance@barrier");
+              assertThat(r.policy().parameters())
+                  .singleElement()
+                  .satisfies(
+                      p -> {
+                        assertThat(p.paramKey()).isEqualTo("months");
+                        assertThat(p.changedBy()).isEqualTo("analista@parceiro");
+                        assertThat(p.source())
+                            .isEqualTo(ParamAuthorship.ParamSource.TENANT_OVERRIDE);
+                      });
+            });
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.REPRODUCED);
+  }
+
+  @Test
+  void autoria_nao_apuravel_e_declarada_mas_nao_degrada_o_veredito() {
+    // Regra alterada só DEPOIS desta decisão: a V033 grava o estado novo de cada mudança, então o
+    // anterior à primeira não existe. Degradar por isto rebaixaria todo replay antigo — e o
+    // desfecho da regra continua conhecido, que é o que o veredito afirma.
+    when(riskScores.latestFor(ID.asString())).thenReturn(Optional.of(decisaoIntegra()));
+    when(registryService.stateAsOf(eq("PEP"), any())).thenReturn(Optional.empty());
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
+
+    assertThat(replay.gaps())
+        .extracting(ReconstructionGap::kind)
+        .contains(GapKind.POLICY_AUTHORSHIP_UNKNOWN);
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.REPRODUCED);
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("PEP"))
+        .singleElement()
+        .satisfies(
+            r -> {
+              assertThat(r.policy().registry()).isNull();
+              // o desfecho da regra segue conhecido: é isso que separa esta lacuna das outras
+              assertThat(r.recordedOutcome()).isEqualTo(RuleOutcome.TRIGGERED);
+            });
+  }
+
+  @Test
+  void lacuna_de_insumo_continua_degradando_mesmo_com_autoria_conhecida() {
+    // Guarda contra o oposto do teste acima: a exceção é só para POLICY_AUTHORSHIP_UNKNOWN.
+    RiskResult pep = disparou("PEP", 300);
+    when(riskScores.latestFor(ID.asString()))
+        .thenReturn(Optional.of(score(List.of(pep), List.of(), 300, RiskLevel.MEDIUM, RiskRecommendation.REVIEW)));
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
+
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.DEGRADED);
+  }
+
+  // ---------- Política custom: dois eixos de versão ----------
+
+  private static RiskScore scoreComPolicyVersion(Integer policyVersion) {
+    RiskResult pep = disparou("PEP", 300);
+    return new RiskScore(
+        UUID.randomUUID(),
+        ID.asString(),
+        RiskLevel.MEDIUM,
+        300,
+        RiskRecommendation.REVIEW,
+        List.of(pep),
+        List.of(
+            EvaluatedRule.triggered("PEP", pep, Map.of()),
+            EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        "barrier-risk-rules/1.9.0",
+        policyVersion,
+        Instant.now());
+  }
+
+  @Test
+  void dossie_reporta_a_versao_da_politica_que_decidiu() {
+    when(riskScores.latestFor(ID.asString())).thenReturn(Optional.of(scoreComPolicyVersion(3)));
+
+    // AS_DECIDED: só o eixo "como decidido" existe -- não há reexecução, então não há "hoje".
+    DecisionReplay comoDecidido = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
+    assertThat(comoDecidido.recordedDecision().policyVersion()).isEqualTo(3);
+    assertThat(comoDecidido.replayedDecision()).isNull();
+
+    // CURRENT_ENGINE: os dois eixos aparecem, e podem divergir -- o parceiro editou a política
+    // entre a decisão e o replay, e isso é visível sem se disfarçar de mudança de motor.
+    when(rebuilder.rebuild(any(), any())).thenReturn(semLacuna());
+    RiskResult pep = disparou("PEP", 300);
+    when(scoringService.evaluate(any()))
+        .thenReturn(
+            new RiskDecision(
+                RiskLevel.MEDIUM,
+                RiskRecommendation.REVIEW,
+                300,
+                List.of(pep),
+                List.of(
+                    EvaluatedRule.triggered("PEP", pep, Map.of()),
+                    EvaluatedRule.passed(
+                        "NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
+                "barrier-risk-rules/1.9.0",
+                5));
+
+    DecisionReplay hoje = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
+    assertThat(hoje.recordedDecision().policyVersion()).isEqualTo(3);
+    assertThat(hoje.replayedDecision().policyVersion()).isEqualTo(5);
+  }
+
+  @Test
+  void current_engine_separa_mudanca_de_motor_de_mudanca_de_politica() {
+    // Decidido com a política v1: só PEP, sem regra custom nenhuma.
+    RiskResult pep = disparou("PEP", 300);
+    when(riskScores.latestFor(ID.asString()))
+        .thenReturn(
+            Optional.of(
+                new RiskScore(
+                    UUID.randomUUID(),
+                    ID.asString(),
+                    RiskLevel.MEDIUM,
+                    300,
+                    RiskRecommendation.REVIEW,
+                    List.of(pep),
+                    List.of(EvaluatedRule.triggered("PEP", pep, Map.of())),
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    "barrier-risk-rules/1.9.0",
+                    1,
+                    Instant.now())));
+    when(rebuilder.rebuild(any(), any())).thenReturn(semLacuna());
+
+    // Hoje: o parceiro ativou a v2, que acrescentou CUSTOM_NOVA_REGRA -- mesmo ENGINE_VERSION.
+    RiskResult custom = disparou("CUSTOM_NOVA_REGRA", 50);
+    when(scoringService.evaluate(any()))
+        .thenReturn(
+            new RiskDecision(
+                RiskLevel.MEDIUM,
+                RiskRecommendation.REVIEW,
+                350,
+                List.of(pep, custom),
+                List.of(
+                    EvaluatedRule.triggered("PEP", pep, Map.of()),
+                    EvaluatedRule.triggered("CUSTOM_NOVA_REGRA", custom, Map.of())),
+                "barrier-risk-rules/1.9.0",
+                2));
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
+
+    // O motor não mudou -- é a política que mudou, e o dossiê tem de mostrar os dois eixos
+    // separadamente para a diferença ficar atribuível a quem de fato a causou.
+    assertThat(replay.recordedDecision().engineVersion())
+        .isEqualTo(replay.replayedDecision().engineVersion());
+    assertThat(replay.recordedDecision().policyVersion()).isEqualTo(1);
+    assertThat(replay.replayedDecision().policyVersion()).isEqualTo(2);
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.DIFFERENT_DECISION);
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("CUSTOM_NOVA_REGRA"))
+        .singleElement()
+        .extracting(ReplayedRule::comparison)
+        .isEqualTo(RuleComparison.ADDED);
+    // PEP, a regra de código, não mudou -- a diferença é inteira da regra no namespace do
+    // parceiro (trava de compilação §5.5: CUSTOM_ é exclusivo dele).
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("PEP"))
+        .singleElement()
+        .extracting(ReplayedRule::comparison)
+        .isEqualTo(RuleComparison.SAME);
+  }
+
+  @Test
+  void regra_custom_que_le_company_em_pj_vira_nao_replayavel() {
+    // CompanyProfile é transiente (GapKind.COMPANY_NOT_PERSISTED): uma regra custom que lê
+    // ContextInput.COMPANY não pode ser reexecutada honestamente sobre uma decisão de PJ, mas o
+    // código dela nunca está no mapa fixo derivado das regras de código -- só a derivação a
+    // partir da política ativa (CustomRuleSource) alcança isto.
+    RiskRule regraCustomDeCompany = regra("CUSTOM_QSA_ESTRANGEIRO", ContextInput.COMPANY);
+    RiskResult pep = disparou("PEP", 300);
+    RiskScore gravado =
+        score(
+            List.of(pep),
+            List.of(
+                EvaluatedRule.triggered("PEP", pep, Map.of()),
+                EvaluatedRule.passed(
+                    "CUSTOM_QSA_ESTRANGEIRO",
+                    RiskResult.notApplicable("CUSTOM_QSA_ESTRANGEIRO"),
+                    Map.of())),
+            300,
+            RiskLevel.MEDIUM,
+            RiskRecommendation.REVIEW);
+    when(riskScores.latestFor(ID.asString())).thenReturn(Optional.of(gravado));
+    when(rebuilder.rebuild(any(), any()))
+        .thenReturn(
+            new RebuiltContext(
+                new RiskContext(ID.asString(), TENANT, null, null, null, null, null, QUANDO),
+                Set.of(ContextInput.COMPANY),
+                List.of(
+                    ReconstructionGap.of(
+                        GapKind.COMPANY_NOT_PERSISTED, ContextInput.COMPANY, "transiente"))));
+    when(customRuleSource.forContext(any()))
+        .thenReturn(new CustomRules(2, List.of(regraCustomDeCompany)));
+    when(scoringService.evaluate(any()))
+        .thenReturn(
+            new RiskDecision(
+                RiskLevel.MEDIUM,
+                RiskRecommendation.REVIEW,
+                300,
+                List.of(pep),
+                List.of(
+                    EvaluatedRule.triggered("PEP", pep, Map.of()),
+                    EvaluatedRule.passed(
+                        "CUSTOM_QSA_ESTRANGEIRO",
+                        RiskResult.notApplicable("CUSTOM_QSA_ESTRANGEIRO"),
+                        Map.of())),
+                "barrier-risk-rules/1.9.0",
+                2));
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
+
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.DEGRADED);
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("CUSTOM_QSA_ESTRANGEIRO"))
+        .singleElement()
+        .satisfies(
+            r -> {
+              assertThat(r.comparison()).isEqualTo(RuleComparison.NOT_REPLAYABLE);
+              assertThat(r.missingInputs()).containsExactly(ContextInput.COMPANY);
+              assertThat(r.replayedOutcome())
+                  .as("resultado sobre insumo ausente não sai, custom ou de código")
+                  .isNull();
+            });
+    // A regra de código, cujo insumo é reconstruível, continua comparável -- a degradação é
+    // por regra, não global.
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("PEP"))
+        .singleElement()
+        .extracting(ReplayedRule::comparison)
+        .isEqualTo(RuleComparison.SAME);
   }
 }

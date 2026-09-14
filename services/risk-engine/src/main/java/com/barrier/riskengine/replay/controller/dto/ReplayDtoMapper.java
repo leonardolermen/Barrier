@@ -1,11 +1,14 @@
 package com.barrier.riskengine.replay.controller.dto;
 
+import com.barrier.riskengine.policy.ParamAuthorship;
+import com.barrier.riskengine.policy.RegistryPolicyState;
 import com.barrier.riskengine.replay.domain.ArithmeticCheck;
 import com.barrier.riskengine.replay.domain.DecisionReplay;
 import com.barrier.riskengine.replay.domain.RecordedDecision;
 import com.barrier.riskengine.replay.domain.ReconstructionGap;
 import com.barrier.riskengine.replay.domain.ReplayedDecision;
 import com.barrier.riskengine.replay.domain.ReplayedRule;
+import com.barrier.riskengine.replay.domain.RulePolicy;
 import com.barrier.riskengine.risk.rule.context.ContextInput;
 import java.util.Comparator;
 
@@ -37,6 +40,7 @@ public final class ReplayDtoMapper {
         recorded.score(),
         recorded.recommendation(),
         recorded.engineVersion(),
+        recorded.policyVersion(),
         recorded.decidedAt(),
         recorded.identityCheckId(),
         recorded.screeningResultId(),
@@ -47,7 +51,11 @@ public final class ReplayDtoMapper {
     return replayed == null
         ? null
         : new ReplayResponse.ReplayedDecisionDto(
-            replayed.level(), replayed.score(), replayed.recommendation(), replayed.engineVersion());
+            replayed.level(),
+            replayed.score(),
+            replayed.recommendation(),
+            replayed.engineVersion(),
+            replayed.policyVersion());
   }
 
   private static ReplayResponse.ArithmeticDto toDto(ArithmeticCheck check) {
@@ -72,7 +80,38 @@ public final class ReplayDtoMapper {
         rule.replayedScore(),
         rule.replayedReason(),
         rule.comparison().name(),
-        rule.missingInputs().stream().map(ContextInput::name).sorted().toList());
+        rule.missingInputs().stream().map(ContextInput::name).sorted().toList(),
+        toDto(rule.policy()));
+  }
+
+  private static ReplayResponse.PolicyDto toDto(RulePolicy policy) {
+    if (policy == null) {
+      return new ReplayResponse.PolicyDto(null, java.util.List.of());
+    }
+    return new ReplayResponse.PolicyDto(
+        toDto(policy.registry()), policy.parameters().stream().map(ReplayDtoMapper::toDto).toList());
+  }
+
+  private static ReplayResponse.RegistryPolicyDto toDto(RegistryPolicyState state) {
+    return state == null
+        ? null
+        : new ReplayResponse.RegistryPolicyDto(
+            state.enabled(),
+            state.criticality(),
+            state.validFrom(),
+            state.validUntil(),
+            state.changedBy(),
+            state.changedAt(),
+            state.provenance().name());
+  }
+
+  private static ReplayResponse.ParamAuthorshipDto toDto(ParamAuthorship authorship) {
+    return new ReplayResponse.ParamAuthorshipDto(
+        authorship.paramKey(),
+        authorship.source().name(),
+        authorship.changedBy(),
+        authorship.changedAt(),
+        authorship.provenance().name());
   }
 
   private static ReplayResponse.GapDto toDto(ReconstructionGap gap) {

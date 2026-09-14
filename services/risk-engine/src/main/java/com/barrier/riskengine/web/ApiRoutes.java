@@ -28,8 +28,10 @@ final class ApiRoutes {
   private static final String API_PREFIX = "/v1/";
 
   /**
-   * {@code /v1/risk-rules[/...]}, {@code /v1/tenants/{id}/risk-config} e
-   * {@code /v1/tenants/{id}/api-keys}. São endpoints que mudam <b>como o motor decide</b> (para
+   * {@code /v1/risk-rules[/...]}, {@code /v1/tenants/{id}/risk-config[/...]} e
+   * {@code /v1/tenants/{id}/api-keys[/...]}. Os subcaminhos entram porque a linha do tempo da
+   * política ({@code .../risk-config/history}) revela a calibragem de um parceiro e a autoria de
+   * quem a mudou — administração, como a escrita que a produziu. São endpoints que mudam <b>como o motor decide</b> (para
    * todos os tenants ou para um parceiro) e a emissão de credencial — se esta fosse self-service,
    * qualquer um emitiria a chave de qualquer tenant e a autenticação não valeria nada.
    *
@@ -37,7 +39,7 @@ final class ApiRoutes {
    * tenants. Por isso não passa pelo filtro de tenant.
    */
   private static final Pattern ADMIN =
-      Pattern.compile("^/v1/(risk-rules(/.*)?|tenants/[^/]+/(risk-config|api-keys))$");
+      Pattern.compile("^/v1/(risk-rules(/.*)?|tenants/[^/]+/(risk-config|api-keys)(/.*)?)$");
 
   private ApiRoutes() {}
 

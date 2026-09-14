@@ -231,6 +231,10 @@ public class AssessmentProcessor {
   }
 
   private void complete(Assessment assessment) {
+    // Capturado uma vez e reutilizado: toda regra desta avaliação precisa enxergar o mesmo "agora",
+    // nunca um por regra (duas chamadas a Instant.now() poderiam cair em lados diferentes de uma
+    // janela de data).
+    Instant now = Instant.now();
     // Fora de transação: são chamadas de rede, e prender conexão de banco durante elas foi o que
     // esgotava o pool quando um bureau ficava lento.
     IdentityResult identity =
@@ -300,7 +304,8 @@ public class AssessmentProcessor {
                 screening,
                 identity.company(),
                 profile,
-                assurance));
+                assurance,
+                now));
 
     AssessmentStatus finalStatus = toStatus(decision.recommendation());
     List<String> factors = new ArrayList<>(decision.explanations());

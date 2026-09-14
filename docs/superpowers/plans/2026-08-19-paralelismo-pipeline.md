@@ -1,5 +1,13 @@
 # Paralelismo do pipeline — Plano de Implementação
 
+> ⚠️ **Encerrado em 2026-09-13.** Esta frente já está em produção (paralelismo do processamento e
+> da entrega, `SingletonJobLock`, correção da ordenação entre pods) — ver
+> `CLAUDE.md` (seção "Paralelismo do pipeline") e o
+> [backlog de produto](../../product/backlog.md) para o estado atual. Os 45 checkboxes abaixo
+> ficam **como registro histórico do plano**, não como pendência: não foram marcados um a um
+> nesta atualização, porque fazer isso exigiria reconferir cada item contra o código, e o que
+> importa aqui é que a frente está fechada, não o rastro tarefa a tarefa.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
@@ -21,8 +29,9 @@ Testcontainers, AssertJ, Mockito.
 
 - Camadas `controller → service → repository`; integração externa só por interface (`client`).
   Validado por ArchUnit.
-- Migrations Flyway são **imutáveis**: nunca editar uma aplicada. Próximas livres: **V049**
-  (risk-engine), **V008** (webhook-api).
+- Migrations Flyway são **imutáveis**: nunca editar uma aplicada. Próxima livre: **V049**
+  (risk-engine). A **V008** da webhook-api citada abaixo já foi consumida
+  (`V008__delivery_partition_key.sql`) — próxima livre ali é **V009**.
 - `workers ≤ maximum-pool-size − 2`. Com `DB_POOL_SIZE=8` na risk-engine, teto de 6. Com pool 5 na
   webhook-api, teto de 3.
 - Nunca logar CPF/CNPJ sem mascarar.
