@@ -16,6 +16,7 @@ import com.barrier.riskengine.riskpolicy.domain.tree.Condition;
 import com.barrier.riskengine.riskpolicy.domain.tree.Literal;
 import com.barrier.riskengine.riskpolicy.domain.tree.Operator;
 import java.time.Period;
+import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -128,6 +129,33 @@ class PolicyCompilerTest {
                     List.of(new PolicyRule("CUSTOM_Z", "z", finalFundo, 100, Severity.LOW, null))))
         .isInstanceOf(PolicyCompilationException.class)
         .hasMessageContaining("profundidade");
+  }
+
+  /**
+   * O único teste de trava 4 que o brief pediu monta uma árvore <b>funda</b> (cadeia de {@code
+   * Not}), e {@code checarTamanhoDaArvore} confere profundidade antes de contagem de nós -- a
+   * profundidade sempre lança primeiro nesse caso, e o contador de nós nunca é exercitado. Se ele
+   * estivesse quebrado ou apagado, nenhum teste perceberia. Esta árvore é <b>larga e rasa</b> (um
+   * único {@code Or} com mais filhos do que {@code MAX_NODES}, profundidade 2) para tripar só a
+   * contagem -- e a asserção final prova que a mensagem não veio do teto de profundidade.
+   */
+  @Test
+  void trava_4_arvore_larga_demais_nao_compila_mesmo_rasa() {
+    Condition folha = empresaNova();
+    Condition largo =
+        new Condition.Or(Collections.nCopies(PolicyCompiler.MAX_NODES + 1, folha));
+
+    assertThatThrownBy(
+            () ->
+                compiler.compile(
+                    List.of(
+                        new PolicyRule("CUSTOM_LARGO", "largo", largo, 100, Severity.LOW, null))))
+        .isInstanceOf(PolicyCompilationException.class)
+        .satisfies(
+            e ->
+                assertThat(e.getMessage())
+                    .contains("nos")
+                    .doesNotContain("profundidade"));
   }
 
   @Test

@@ -307,7 +307,7 @@ public class PolicyCompiler {
               + profundidade
               + ", acima do teto "
               + MAX_DEPTH
-              + " -- trava 4: profundidade e numero de nos");
+              + " -- trava 4: profundidade da arvore");
     }
     int nos = contarNos(rule.when());
     if (nos > MAX_NODES) {
@@ -318,7 +318,7 @@ public class PolicyCompiler {
               + nos
               + " nos, acima do teto "
               + MAX_NODES
-              + " -- trava 4: profundidade e numero de nos");
+              + " -- trava 4: numero de nos da arvore");
     }
   }
 
