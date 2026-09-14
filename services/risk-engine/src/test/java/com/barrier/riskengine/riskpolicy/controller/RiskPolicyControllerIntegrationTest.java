@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -212,6 +213,32 @@ class RiskPolicyControllerIntegrationTest {
             .toEntity(PolicyResponse.class)
             .getBody();
     assertThat(deA.version()).isEqualTo(criada.version());
+  }
+
+  /**
+   * Fecha o achado da revisão: o serviço já tinha {@code list}, mas nenhum teste chamava a rota
+   * pela superfície HTTP real -- e o ponto desta task é provar a superfície, não o serviço em
+   * processo.
+   */
+  @Test
+  void lista_as_versoes_do_tenant_por_http() {
+    String tenant = credencialDe("parceiro-policy-f");
+    RestClient client = com(tenant);
+
+    var v1 = criaRascunho(client, regraIdentidadeVerificada("CUSTOM_LISTA_A", 10));
+    var v2 = criaRascunho(client, regraIdentidadeVerificada("CUSTOM_LISTA_B", 20));
+
+    List<PolicyResponse> listadas =
+        client
+            .get()
+            .uri("/v1/policies")
+            .retrieve()
+            .body(new ParameterizedTypeReference<List<PolicyResponse>>() {});
+
+    assertThat(listadas)
+        .withFailMessage("versões listadas: %s", listadas)
+        .extracting(PolicyResponse::version)
+        .contains(v1.version(), v2.version());
   }
 
   @Test

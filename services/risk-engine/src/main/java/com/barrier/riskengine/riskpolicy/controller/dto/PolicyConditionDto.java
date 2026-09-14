@@ -5,6 +5,7 @@ import com.barrier.riskengine.riskpolicy.domain.tree.Operator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -24,6 +25,16 @@ import java.util.List;
  * com.barrier.riskengine.riskpolicy.domain.catalog.PolicyField} inteiro), então quem escreve a
  * requisição não tem como forjar {@code type}/{@code exposure} de um campo -- só {@code
  * PolicyDtoMapper.toDomain} resolve o id contra o {@code FieldCatalog}.
+ *
+ * <p><b>Cada variante leva {@code @Schema(name = ...)} explícito.</b> Sem isso o springdoc nomeia
+ * o schema publicado pelo nome simples da classe Java -- {@code And}, {@code Or}, {@code Text},
+ * {@code None} -- direto na seção compartilhada {@code components.schemas}, e uma colisão com
+ * outro tipo aninhado do mesmo nome em qualquer módulo é sobrescrita <b>em silêncio</b>, não
+ * erro. A própria {@code PolicyRuleJson.ConditionWire}, uma camada abaixo, já usa sufixo
+ * ({@code AndWire}, {@code TextWire}) para o mesmo motivo; aqui, no contrato público, contra o
+ * qual o parceiro gera cliente, a colisão custa mais caro -- renomear depois de alguém ter
+ * gerado código é quebra de contrato, o mesmo raciocínio que fez a assinatura carimbada de
+ * webhook ser feita antes de haver parceiro integrado.
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
 @JsonSubTypes({
@@ -35,22 +46,27 @@ import java.util.List;
 })
 public sealed interface PolicyConditionDto {
 
+  @Schema(name = "PolicyConditionAnd")
   @JsonIgnoreProperties(ignoreUnknown = true)
   record And(@NotEmpty @Valid List<PolicyConditionDto> operands) implements PolicyConditionDto {}
 
+  @Schema(name = "PolicyConditionOr")
   @JsonIgnoreProperties(ignoreUnknown = true)
   record Or(@NotEmpty @Valid List<PolicyConditionDto> operands) implements PolicyConditionDto {}
 
+  @Schema(name = "PolicyConditionNot")
   @JsonIgnoreProperties(ignoreUnknown = true)
   record Not(@NotNull @Valid PolicyConditionDto operand) implements PolicyConditionDto {}
 
   /** {@code field} é o id do catálogo ({@code company.openingDate}), nunca o campo resolvido. */
+  @Schema(name = "PolicyConditionComparison")
   @JsonIgnoreProperties(ignoreUnknown = true)
   record Comparison(
       @NotBlank String field, @NotNull Operator op, @NotNull @Valid PolicyLiteralDto value)
       implements PolicyConditionDto {}
 
   /** {@code listField} é o id de um campo {@code LIST} do catálogo ({@code company.partners}). */
+  @Schema(name = "PolicyConditionAnyOf")
   @JsonIgnoreProperties(ignoreUnknown = true)
   record AnyOf(@NotBlank String listField, @NotNull @Valid PolicyConditionDto each)
       implements PolicyConditionDto {}
