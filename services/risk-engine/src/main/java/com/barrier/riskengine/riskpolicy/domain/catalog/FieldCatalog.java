@@ -126,7 +126,7 @@ public final class FieldCatalog {
             "screening.hits",
             PolicyFieldType.LIST,
             ContextInput.SCREENING,
-            EvidenceExposure.BY_VALUE,
+            EvidenceExposure.OUTCOME_ONLY,
             ctx(c -> c.screening() == null ? List.of() : c.screening().hits())),
         campoDeElemento(
             "screening.hits[].type",
@@ -174,7 +174,7 @@ public final class FieldCatalog {
             "company.partners",
             PolicyFieldType.LIST,
             ContextInput.COMPANY,
-            EvidenceExposure.BY_VALUE,
+            EvidenceExposure.OUTCOME_ONLY,
             ctx(c -> c.company() == null ? List.of() : c.company().partners())),
         campoDeElemento(
             "company.partners[].legalEntity",

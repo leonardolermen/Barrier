@@ -25,6 +25,23 @@ public record PolicyField(
     String parentListId,
     Function<Object, Object> extractor) {
 
+  /**
+   * Campo {@code LIST} nunca pode ser {@code BY_VALUE}: o valor é a lista crua de apontamentos ou
+   * de sócios, que carrega PII (nome, documento) e não explica nada por si — o mesmo formato de
+   * vazamento que {@code screening.hits[].party} tinha no nível do elemento. O tipo é a defesa:
+   * quem acrescentar um campo de lista novo não consegue cometer o mesmo erro, em vez de depender
+   * de lembrar.
+   */
+  public PolicyField {
+    if (type == PolicyFieldType.LIST && exposure == EvidenceExposure.BY_VALUE) {
+      throw new IllegalArgumentException(
+          "campo '"
+              + id
+              + "': lista nao pode ser BY_VALUE -- evidencia nunca deve expor a lista crua "
+              + "(vaza PII e nao explica nada); use OUTCOME_ONLY");
+    }
+  }
+
   /** Resolve o valor; devolve {@code null} quando o caminho não existe no contexto. */
   public Object resolve(Object root) {
     if (root == null) {

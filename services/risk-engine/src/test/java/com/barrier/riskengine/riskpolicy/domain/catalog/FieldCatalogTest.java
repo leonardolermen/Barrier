@@ -1,6 +1,7 @@
 package com.barrier.riskengine.riskpolicy.domain.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.risk.rule.context.ContextInput;
@@ -80,11 +81,14 @@ class FieldCatalogTest {
             "identity.documentDigits",
             "identity.name",
             "identity.rawResponse",
+            "identity.providerReference",
             "screening.hits[].matchedName",
             "company.partners[].name",
             "profile.phone",
             "profile.email",
             "profile.address.street",
+            "profile.address.number",
+            "profile.legalRepresentativeName",
             "profile.legalRepresentativeDocument");
 
     assertThat(proibidos).allSatisfy(id -> assertThat(FieldCatalog.V1.find(id)).isEmpty());
@@ -96,6 +100,31 @@ class FieldCatalogTest {
         .isEqualTo(EvidenceExposure.OUTCOME_ONLY);
     assertThat(FieldCatalog.V1.find("profile.declaredIncome").orElseThrow().exposure())
         .isEqualTo(EvidenceExposure.OUTCOME_ONLY);
+    assertThat(FieldCatalog.V1.find("screening.hits").orElseThrow().exposure())
+        .isEqualTo(EvidenceExposure.OUTCOME_ONLY);
+    assertThat(FieldCatalog.V1.find("company.partners").orElseThrow().exposure())
+        .isEqualTo(EvidenceExposure.OUTCOME_ONLY);
+  }
+
+  @Test
+  void identity_documentType_e_string_nao_enum() {
+    assertThat(FieldCatalog.V1.find("identity.documentType").orElseThrow().type())
+        .isEqualTo(PolicyFieldType.STRING);
+  }
+
+  @Test
+  void campo_lista_marcado_by_value_e_recusado_na_construcao() {
+    assertThatThrownBy(
+            () ->
+                new PolicyField(
+                    "fake.list",
+                    PolicyFieldType.LIST,
+                    ContextInput.SCREENING,
+                    EvidenceExposure.BY_VALUE,
+                    null,
+                    raiz -> raiz))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("fake.list");
   }
 
   @Test
