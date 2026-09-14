@@ -80,9 +80,24 @@ public class RiskPolicyService {
     return policy.activate(activatedBy, when);
   }
 
+  /**
+   * Arquivar uma versão já {@code ARCHIVED} é recusado, não um no-op silencioso: sobrescreveria
+   * {@code archivedAt} com um instante novo e destruiria a resposta para "quando esta política
+   * deixou de valer" -- a mesma trilha exata que motivou {@code config_history} e a imutabilidade
+   * da versão ativada. Um retry de rede depois de timeout faz exatamente essa segunda chamada, e
+   * um 409 avisando que já estava arquivada é melhor que um 200 que esconde o bug do cliente.
+   */
   @Transactional
   public RiskPolicy archive(String tenantId, int version) {
     RiskPolicy policy = require(tenantId, version);
+    if (policy.status() == PolicyStatus.ARCHIVED) {
+      throw new PolicyStateException(
+          "versão "
+              + version
+              + " do tenant '"
+              + tenantId
+              + "' já está ARCHIVED -- arquivar de novo destruiria o archivedAt original");
+    }
     Instant when = Instant.now();
     repository.archive(policy.id(), when);
     return policy.archive(when);

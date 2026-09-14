@@ -9,6 +9,7 @@ import com.barrier.riskengine.riskpolicy.domain.PolicyDomain;
 import com.barrier.riskengine.riskpolicy.domain.PolicyRule;
 import com.barrier.riskengine.riskpolicy.domain.PolicyStatus;
 import com.barrier.riskengine.riskpolicy.domain.RiskPolicy;
+import com.barrier.riskengine.riskpolicy.domain.RiskPolicyNotFoundException;
 import com.barrier.riskengine.riskpolicy.domain.catalog.FieldCatalog;
 import com.barrier.riskengine.riskpolicy.domain.tree.Condition;
 import com.barrier.riskengine.riskpolicy.domain.tree.Literal;
@@ -186,5 +187,18 @@ class RiskPolicyRepositoryIntegrationTest {
     garanteTenant(tenantId);
 
     assertThat(repository.findActive(tenantId, PolicyDomain.ONBOARDING)).isEmpty();
+  }
+
+  @Test
+  void activate_de_id_inexistente_lanca_excecao_de_dominio() {
+    assertThatThrownBy(
+            () -> repository.activate(UUID.randomUUID(), "supervisor@parceiro", Instant.now()))
+        .isInstanceOf(RiskPolicyNotFoundException.class);
+  }
+
+  @Test
+  void archive_de_id_inexistente_lanca_excecao_de_dominio() {
+    assertThatThrownBy(() -> repository.archive(UUID.randomUUID(), Instant.now()))
+        .isInstanceOf(RiskPolicyNotFoundException.class);
   }
 }

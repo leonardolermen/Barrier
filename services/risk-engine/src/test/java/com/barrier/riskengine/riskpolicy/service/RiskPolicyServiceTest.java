@@ -125,6 +125,32 @@ class RiskPolicyServiceTest {
         .isEqualTo(PolicyStatus.ARCHIVED);
   }
 
+  /**
+   * Um retry de rede depois de timeout reenvia o mesmo {@code archive}. Sem a guarda, a segunda
+   * chamada sobrescreveria {@code archivedAt} com um instante novo e destruiria a resposta para
+   * "quando esta política deixou de valer".
+   */
+  @Test
+  void archive_duas_vezes_lanca_e_preserva_o_archivedAt_original() throws InterruptedException {
+    RiskPolicy v1 = criarDraft("CUSTOM_A");
+    service.activate(TENANT, v1.version(), "supervisor@parceiro");
+
+    RiskPolicy primeiroArquivamento = service.archive(TENANT, v1.version());
+    Instant archivedAtOriginal = primeiroArquivamento.archivedAt();
+
+    // Garante que, se a guarda falhasse e um segundo archive rodasse, o Instant.now() novo seria
+    // detectavelmente diferente do original -- sem isto dois Instant.now() na mesma janela de
+    // resolução do relógio poderiam empatar e mascarar a sobrescrita.
+    Thread.sleep(5);
+
+    assertThatThrownBy(() -> service.archive(TENANT, v1.version()))
+        .isInstanceOf(PolicyStateException.class)
+        .hasMessageContaining("ARCHIVED");
+
+    assertThat(repository.findByTenantAndVersion(TENANT, v1.version()).orElseThrow().archivedAt())
+        .isEqualTo(archivedAtOriginal);
+  }
+
   // --- dobra ------------------------------------------------------------------
 
   private static final class InMemoryRiskPolicyRepository implements RiskPolicyRepository {

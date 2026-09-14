@@ -3,11 +3,11 @@ package com.barrier.riskengine.riskpolicy.repository;
 import com.barrier.riskengine.riskpolicy.domain.PolicyDomain;
 import com.barrier.riskengine.riskpolicy.domain.PolicyStatus;
 import com.barrier.riskengine.riskpolicy.domain.RiskPolicy;
+import com.barrier.riskengine.riskpolicy.domain.RiskPolicyNotFoundException;
 import com.barrier.riskengine.riskpolicy.repository.interfaces.RiskPolicyJpaRepository;
 import com.barrier.riskengine.riskpolicy.repository.interfaces.RiskPolicyRepository;
 import java.time.Instant;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Repository;
@@ -81,8 +81,7 @@ class RiskPolicyRepositoryImpl implements RiskPolicyRepository {
   }
 
   private RiskPolicyEntity requireById(UUID id) {
-    return jpa.findById(id)
-        .orElseThrow(() -> new NoSuchElementException("Política de risco não encontrada: " + id));
+    return jpa.findById(id).orElseThrow(() -> new RiskPolicyNotFoundException(id));
   }
 
   private RiskPolicy toDomain(RiskPolicyEntity e) {
