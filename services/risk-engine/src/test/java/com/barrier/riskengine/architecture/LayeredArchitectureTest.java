@@ -1,5 +1,6 @@
 package com.barrier.riskengine.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -115,6 +116,20 @@ public class LayeredArchitectureTest {
       com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses()
           .that()
           .resideInAPackage("com.barrier.riskengine.replay..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("..client..");
+
+  /**
+   * Regra escrita por parceiro não sai para a rede. O módulo não depende de nenhum pacote {@code
+   * client}, então não tem como chamar o que não enxerga — mesma garantia estrutural de {@code
+   * replay_nao_alcanca_integracao_externa}.
+   */
+  @ArchTest
+  static final ArchRule politica_custom_nao_alcanca_integracao_externa =
+      noClasses()
+          .that()
+          .resideInAPackage("com.barrier.riskengine.riskpolicy..")
           .should()
           .dependOnClassesThat()
           .resideInAPackage("..client..");
