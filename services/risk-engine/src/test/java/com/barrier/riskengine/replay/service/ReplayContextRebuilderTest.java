@@ -77,7 +77,7 @@ class ReplayContextRebuilderTest {
   private RiskScore score(UUID identity, UUID screening) {
     return new RiskScore(
         UUID.randomUUID(), "aid", RiskLevel.LOW, 0, RiskRecommendation.APPROVE,
-        List.of(), List.of(), identity, screening, "barrier-risk-rules/1.7.0", DECIDIDA_EM);
+        List.of(), List.of(), identity, screening, "barrier-risk-rules/1.7.0", null, DECIDIDA_EM);
   }
 
   private static SubjectProfile perfilAtualizadoEm(UUID subjectId, Instant quando) {

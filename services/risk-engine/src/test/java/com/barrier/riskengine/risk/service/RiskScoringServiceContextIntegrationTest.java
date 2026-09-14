@@ -2,7 +2,10 @@ package com.barrier.riskengine.risk.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.barrier.riskengine.riskpolicy.service.CustomRuleSourceImpl;
 import com.barrier.riskengine.risk.rule.interfaces.CustomRuleSource;
+import java.lang.reflect.Field;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,19 +18,19 @@ import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * Sobe o contexto real da aplicação e confirma que {@link RiskScoringService} é construído
- * **sem** nenhum bean {@link CustomRuleSource} presente — o estado em que esta tarefa deixa o
- * repositório, já que a única implementação (Task 7) ainda não existe.
+ * Sobe o contexto real da aplicação e confirma que {@link RiskScoringService} é construído com o
+ * único bean {@link CustomRuleSource} — {@link CustomRuleSourceImpl}, Task 7 — de fato injetado.
  *
  * <p><b>Por que este teste existe, e não só o unitário.</b> {@code RiskScoringServiceTest} chama
  * {@code new RiskScoringService(...)} direto, sem passar pelo container — prova que a classe
- * funciona, não que ela pode ser <b>construída</b> no ambiente real. Se o construtor exigisse
- * {@code CustomRuleSource} cru em vez de {@code Optional<CustomRuleSource>}, o {@code
- * RiskEngineApplication} (que escaneia {@code com.barrier} inteiro e instancia {@code @Service}
- * ansiosamente) não teria bean para injetar e o contexto inteiro falharia na subida —
- * exatamente o defeito que {@code FieldCatalogConfig} teve com {@code FieldCatalog} na Task 4
- * (107 erros de {@code ApplicationContext} em 30 classes de teste, descobertos só na suíte
- * completa, 25 minutos depois).
+ * funciona, não que o grafo de dependências real se fecha. Antes da Task 7, este arquivo provava
+ * o estado simétrico (zero beans, {@code Optional} resolvendo para vazio — ver {@code
+ * CustomRuleSourceImplTest} e {@code RiskScoringServiceTest} para essa mesma garantia no nível
+ * unitário, que não depende do container e continua valendo). Com a Task 7, o estado alcançável
+ * pela aplicação real passou a ser sempre "exatamente um bean", e é isso que este teste passou a
+ * provar — as duas pontas do {@code Optional<CustomRuleSource>} seguem cobertas, cada uma no
+ * nível que faz sentido provar: o container prova o que existe hoje, o unitário prova que a
+ * ausência não quebraria a subida se ela pudesse ocorrer.
  *
  * <p>Contexto completo (não um recorte com {@code classes = {...}}) de propósito, no mesmo
  * padrão de {@code FieldCatalogConfigIntegrationTest} — é o ambiente real que precisa ser
@@ -52,13 +55,25 @@ class RiskScoringServiceContextIntegrationTest {
     assertThat(riskScoringService).isNotNull();
   }
 
+  /**
+   * Prova por execução, não por leitura: pega o valor real do campo privado {@code
+   * customRuleSource} da instância que o Spring construiu, em vez de inferir a partir da
+   * contagem de beans que a resolução do {@code Optional} "deveria" funcionar.
+   */
   @Test
-  void sobe_sem_nenhum_bean_de_custom_rule_source() {
+  void risk_scoring_service_recebe_o_bean_de_custom_rule_source()
+      throws ReflectiveOperationException {
     assertThat(applicationContext.getBeanNamesForType(CustomRuleSource.class))
-        .as(
-            "Task 7 é a única implementação de CustomRuleSource e ainda não existe — o "
-                + "contexto tem de subir mesmo assim, resolvendo Optional<CustomRuleSource> "
-                + "para vazio")
-        .isEmpty();
+        .as("CustomRuleSourceImpl (Task 7) é a única implementação de CustomRuleSource")
+        .hasSize(1);
+
+    Field field = RiskScoringService.class.getDeclaredField("customRuleSource");
+    field.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    Optional<CustomRuleSource> injected =
+        (Optional<CustomRuleSource>) field.get(riskScoringService);
+
+    assertThat(injected).isPresent();
+    assertThat(injected.get()).isInstanceOf(CustomRuleSourceImpl.class);
   }
 }

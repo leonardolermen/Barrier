@@ -60,6 +60,10 @@ public class RiskScoreEntity {
   @Column(name = "engine_version", nullable = false, length = 40)
   private String engineVersion;
 
+  /** Segundo eixo de versão, ao lado de {@code engineVersion}; nulo para tenant sem política. */
+  @Column(name = "policy_version")
+  private Integer policyVersion;
+
   @Column(name = "scored_at", nullable = false)
   private Instant scoredAt;
 }

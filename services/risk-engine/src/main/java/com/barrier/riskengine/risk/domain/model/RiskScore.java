@@ -13,6 +13,9 @@ import java.util.UUID;
  * @param evaluated todas as regras avaliadas, com o desfecho de cada uma
  * @param identityCheckId a verificação de identidade <b>exata</b> que alimentou esta decisão
  * @param screeningResultId o screening <b>exato</b> que alimentou esta decisão
+ * @param policyVersion versão da política custom do tenant que contribuiu regras a esta decisão;
+ *     {@code null} quando o tenant não tem política ativa — segundo eixo de versão, ao lado de
+ *     {@code engineVersion}
  */
 public record RiskScore(
     UUID id,
@@ -25,6 +28,7 @@ public record RiskScore(
     UUID identityCheckId,
     UUID screeningResultId,
     String engineVersion,
+    Integer policyVersion,
     Instant scoredAt) {
 
   public RiskScore {
@@ -52,6 +56,7 @@ public record RiskScore(
         context.identity() == null ? null : context.identity().id(),
         context.screening() == null ? null : context.screening().id(),
         decision.engineVersion(),
+        decision.policyVersion(),
         Instant.now());
   }
 }

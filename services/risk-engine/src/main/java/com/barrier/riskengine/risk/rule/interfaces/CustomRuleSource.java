@@ -10,6 +10,11 @@ import com.barrier.riskengine.risk.rule.context.RiskContext;
  * declarar a interface lá fecharia o ciclo {@code risk → riskpolicy → risk}, que o ArchUnit
  * ({@code sem_ciclos_entre_modulos}) rejeita. Mesma inversão de
  * {@code AssuranceRecordedListener} e {@code AssessmentCompletedListener}.
+ *
+ * <p>⚠️ Pensada como bean único: {@code RiskScoringService} injeta {@code
+ * Optional<CustomRuleSource>} (zero beans resolve para {@link CustomRules#NONE}), mas uma segunda
+ * implementação sem {@code @Primary}/{@code @Qualifier} quebra a subida do contexto com {@code
+ * NoUniqueBeanDefinitionException}.
  */
 public interface CustomRuleSource {
 

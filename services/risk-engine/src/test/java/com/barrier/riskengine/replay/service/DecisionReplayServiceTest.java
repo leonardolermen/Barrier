@@ -143,7 +143,7 @@ class DecisionReplayServiceTest {
   private static RiskScore score(List<RiskResult> triggered, List<EvaluatedRule> evaluated, int total, RiskLevel level, RiskRecommendation rec) {
     return new RiskScore(
         UUID.randomUUID(), ID.asString(), level, total, rec, triggered, evaluated,
-        UUID.randomUUID(), UUID.randomUUID(), "barrier-risk-rules/1.7.0", Instant.now());
+        UUID.randomUUID(), UUID.randomUUID(), "barrier-risk-rules/1.7.0", null, Instant.now());
   }
 
   /** Decisão íntegra: PEP disparou (300/REVIEW), NEW_COMPANY rodou e passou. */
