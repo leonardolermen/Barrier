@@ -458,7 +458,7 @@ class AssessmentProcessorTest {
             new NewCompanyRiskRule(6, 150, Clock.systemUTC(), tenantConfig),
             new SensitiveCnaeRiskRule(java.util.Set.of(), 200, tenantConfig),
             new IdentityAssuranceRiskRule(600, 100, 200, 3, 300));
-    return new RiskScoringService(allRules, riskScoreRepository, registryService);
+    return new RiskScoringService(allRules, riskScoreRepository, registryService, Optional.empty());
   }
 
   private AssessmentProcessor processorComMotorReal(RiskScoringService realRiskScoringService) {

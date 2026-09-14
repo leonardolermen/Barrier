@@ -232,7 +232,8 @@ class DecisionReplayServiceTest {
                 List.of(
                     EvaluatedRule.triggered("PEP", pep, Map.of()),
                     EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
-                "barrier-risk-rules/1.8.0"));
+                "barrier-risk-rules/1.8.0",
+                null));
 
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
 
@@ -253,7 +254,8 @@ class DecisionReplayServiceTest {
                 List.of(
                     EvaluatedRule.triggered("PEP", pepHoje, Map.of()),
                     EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
-                "barrier-risk-rules/1.9.0"));
+                "barrier-risk-rules/1.9.0",
+                null));
 
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
 
@@ -280,7 +282,8 @@ class DecisionReplayServiceTest {
                 List.of(
                     EvaluatedRule.suppressed("PEP"),
                     EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
-                "barrier-risk-rules/1.8.0"));
+                "barrier-risk-rules/1.8.0",
+                null));
 
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
 
@@ -317,7 +320,8 @@ class DecisionReplayServiceTest {
                     // Sem o CompanyProfile a regra devolve "não disparou". É exatamente este
                     // resultado que NÃO pode virar "rodou e passou" na resposta.
                     EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
-                "barrier-risk-rules/1.8.0"));
+                "barrier-risk-rules/1.8.0",
+                null));
 
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
 
