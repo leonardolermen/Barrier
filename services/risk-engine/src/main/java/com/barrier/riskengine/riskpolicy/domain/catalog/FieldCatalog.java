@@ -3,6 +3,7 @@ package com.barrier.riskengine.riskpolicy.domain.catalog;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.screening.domain.ScreenedParty;
 import com.barrier.riskengine.screening.domain.ScreeningHit;
 import java.util.List;
 import java.util.Map;
@@ -79,6 +80,19 @@ public final class FieldCatalog {
     return new PolicyField(id, type, input, exposure, parentListId, extractor);
   }
 
+  /**
+   * Extrai só o {@link ScreenedParty.Role} de um {@link ScreeningHit}, nunca o {@link
+   * ScreenedParty} inteiro. {@code ScreenedParty} carrega {@code name} e {@code document} — devolver
+   * o record exporia PII pela evidência da regra (marcada {@code BY_VALUE}), pelo {@code GET} da
+   * avaliação e pelo dossiê de replay. {@code Role} é o único enum de verdade ali, e é o que faz a
+   * comparação {@code EQ}/{@code IN} contra {@code TITULAR}/{@code SOCIO}/{@code
+   * REPRESENTANTE_LEGAL} funcionar.
+   */
+  private static Object partyRole(Object elemento) {
+    ScreenedParty party = ((ScreeningHit) elemento).party();
+    return party == null ? null : party.role();
+  }
+
   private static List<PolicyField> buildFields() {
     return List.of(
         // identity
@@ -90,7 +104,7 @@ public final class FieldCatalog {
             ctx(c -> c.identity() == null ? null : c.identity().status())),
         campo(
             "identity.documentType",
-            PolicyFieldType.ENUM,
+            PolicyFieldType.STRING,
             ContextInput.IDENTITY,
             EvidenceExposure.BY_VALUE,
             ctx(c -> c.identity() == null ? null : c.identity().documentType())),
@@ -134,7 +148,7 @@ public final class FieldCatalog {
             ContextInput.SCREENING,
             EvidenceExposure.BY_VALUE,
             "screening.hits",
-            e -> ((ScreeningHit) e).party()),
+            FieldCatalog::partyRole),
         campoDeElemento(
             "screening.hits[].source",
             PolicyFieldType.STRING,

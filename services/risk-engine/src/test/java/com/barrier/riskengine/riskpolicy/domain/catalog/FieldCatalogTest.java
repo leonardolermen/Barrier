@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.barrier.riskengine.identity.domain.CompanyProfile;
 import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.screening.domain.ScreenedParty;
+import com.barrier.riskengine.screening.domain.ScreeningHit;
+import com.barrier.riskengine.screening.domain.enums.MatchBasis;
+import com.barrier.riskengine.screening.domain.enums.MatchType;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -35,6 +39,20 @@ class FieldCatalogTest {
 
     assertThat(campo.resolve(socio)).isEqualTo(true);
     assertThat(campo.parentListId()).isEqualTo("company.partners");
+  }
+
+  @Test
+  void campo_party_extrai_so_o_papel_sem_vazar_nome_ou_documento() {
+    ScreenedParty socioComPii =
+        new ScreenedParty(ScreenedParty.Role.SOCIO, "JOAO DA SILVA", "12345678900");
+    ScreeningHit hit =
+        new ScreeningHit(
+            MatchType.PEP, MatchBasis.NAME, socioComPii, "CGU", "JOAO DA SILVA", "detalhe");
+
+    Object valor = FieldCatalog.V1.find("screening.hits[].party").orElseThrow().resolve(hit);
+
+    assertThat(valor).isEqualTo(ScreenedParty.Role.SOCIO);
+    assertThat(String.valueOf(valor)).doesNotContain("JOAO DA SILVA").doesNotContain("12345678900");
   }
 
   @Test
