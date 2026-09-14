@@ -78,6 +78,17 @@ class RiskPolicyRepositoryImpl implements RiskPolicyRepository {
     e.setStatus(PolicyStatus.ARCHIVED);
     e.setArchivedAt(when);
     jpa.save(e);
+    // Flush aqui não é otimização opcional -- é requisito do índice único parcial
+    // `uq_risk_policies_uma_ativa` (uma ACTIVE por tenant/domínio, e um índice PARCIAL não pode
+    // ser DEFERRABLE no Postgres). RiskPolicyService#activate arquiva a ativa atual e ativa a
+    // nova na MESMA transação; as duas são mutações de entidade e o SQL só sai no flush, e a
+    // ordem de flush do Hibernate dentro do mesmo contexto de persistência não segue
+    // necessariamente a ordem de chamada do código. Sem forçar este flush antes de o chamador
+    // seguir para o `activate`, o UPDATE que ativa a nova linha pode chegar ao banco antes do
+    // UPDATE que arquiva a antiga -- e o índice rejeita com razão, porque naquele instante
+    // existiriam duas ACTIVE de verdade. Não remover por "parecer redundante": é a ordem de
+    // chegada ao banco que este índice exige, não a ordem lógica no código Java.
+    jpa.flush();
   }
 
   private RiskPolicyEntity requireById(UUID id) {

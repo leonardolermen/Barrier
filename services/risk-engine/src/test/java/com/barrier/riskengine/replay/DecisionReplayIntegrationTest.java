@@ -270,23 +270,30 @@ class DecisionReplayIntegrationTest {
 
   @Test
   void dossie_reporta_a_versao_da_politica_que_decidiu() {
-    // O cenário "parceiro editou a política entre a decisão e o replay" (os dois eixos
-    // divergindo) já está provado com precisão em DecisionReplayServiceTest, com os dois lados
-    // sob controle do teste. Aqui a única coisa que falta provar é que o campo atravessa o
-    // HTTP/JSON de ponta a ponta -- por isso uma única versão, estável, é suficiente.
     String tenantId = "politica-parceiro-versoes";
     seedTenant(tenantId);
-    int versaoAtivada = ativaPoliticaComFatorCustom(tenantId);
+    int versao1 = ativaPoliticaComFatorCustom(tenantId);
 
     RestClient client = clientDo(tenantId);
-    String id = submete(client, "111.444.777-35", "Cliente Com Politica Estavel");
+    String id = submete(client, "111.444.777-35", "Cliente Antes Da Edicao");
     processaAteConcluir(client, id);
+
+    // O parceiro edita a política depois da decisão: a nova versão arquiva a anterior. Antes
+    // corrigido em RiskPolicyRepositoryImpl (Task 10, achado escrevendo este teste), ativar uma
+    // segunda versão para o mesmo tenant contra o banco real quebrava com
+    // DataIntegrityViolationException em uq_risk_policies_uma_ativa -- ver o comentário em
+    // RiskPolicyRepositoryImpl#archive.
+    int versao2 = ativaPoliticaComFatorCustom(tenantId);
+    assertThat(versao2).isGreaterThan(versao1);
 
     ReplayResponse resposta = replay(client, id, "CURRENT_ENGINE");
 
+    // Mesma regra, mesmo peso -- só o número da versão mudou. O desfecho não mudou (o parceiro
+    // só reeditou algo equivalente), mas o dossiê ainda assim reporta os dois números: os dois
+    // eixos são independentes, e um não bumped não precisa acompanhar o outro.
     assertThat(resposta.verdict()).isEqualTo("SAME_DECISION");
-    assertThat(resposta.recorded().policyVersion()).isEqualTo(versaoAtivada);
-    assertThat(resposta.replayed().policyVersion()).isEqualTo(versaoAtivada);
+    assertThat(resposta.recorded().policyVersion()).isEqualTo(versao1);
+    assertThat(resposta.replayed().policyVersion()).isEqualTo(versao2);
   }
 
   @Test
