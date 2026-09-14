@@ -18,6 +18,7 @@ import com.barrier.riskengine.riskpolicy.domain.tree.Operator;
 import java.time.Period;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 
 class PolicyCompilerTest {
@@ -210,6 +211,41 @@ class PolicyCompilerTest {
   }
 
   /**
+   * Achado da revisão final: {@code validarCampoConhecido} só conferia {@code field.id()} contra
+   * o catálogo, e o resto da compilação seguia confiando em {@code type}/{@code exposure}/{@code
+   * parentListId} do objeto recebido. Aqui o id é real (é o de um campo de elemento de verdade),
+   * mas o objeto forja {@code parentListId = null} -- ou seja, mente que não é campo de elemento.
+   * Com a validação antiga, {@code field.isElementField()} confiava nessa mentira e devolvia
+   * {@code false}: a trava de escopo do {@code AnyOf} nunca rodava, e a árvore compilava mesmo
+   * usando o campo fora de qualquer {@code AnyOf}. A validação corrigida resolve pelo catálogo e
+   * usa a instância canônica (que sabe seu {@code parentListId} de verdade) para todo o resto da
+   * compilação -- o forjado nunca chega a ser consultado de novo.
+   */
+  @Test
+  void trava_3_campo_forjado_e_validado_pela_instancia_do_catalogo_nao_pela_recebida() {
+    PolicyField elementoComParentListIdForjado =
+        new PolicyField(
+            "company.partners[].foreign",
+            PolicyFieldType.BOOLEAN,
+            ContextInput.COMPANY,
+            EvidenceExposure.BY_VALUE,
+            null, // forjado: o real e' "company.partners"
+            o -> null);
+    Condition foraDoAnyOf =
+        new Condition.Comparison(elementoComParentListIdForjado, Operator.EQ, Literal.bool(true));
+
+    assertThatThrownBy(
+            () ->
+                compiler.compile(
+                    List.of(
+                        new PolicyRule(
+                            "CUSTOM_FORJADO", "f", foraDoAnyOf, 1, Severity.LOW, null))))
+        .isInstanceOf(PolicyCompilationException.class)
+        .hasMessageContaining("company.partners[].foreign")
+        .hasMessageContaining("AnyOf");
+  }
+
+  /**
    * Comparação nunca é sobre a lista inteira -- é isso que o {@code AnyOf} existe para resolver.
    */
   @Test
@@ -253,6 +289,37 @@ class PolicyCompilerTest {
         .isInstanceOf(PolicyCompilationException.class)
         .hasMessageContaining("company.openingDate")
         .hasMessageContaining("LIST");
+  }
+
+  /**
+   * Trava 0 (achado da revisão final, fora das quatro do desenho §5.5): {@code MAX_NODES}/
+   * {@code MAX_DEPTH} limitam uma árvore, não quantas árvores uma política empilha. Sem cache
+   * ({@code CustomRuleSourceImpl.forContext} desserializa e avalia toda árvore em toda avaliação),
+   * uma política com regras demais multiplica o custo por avaliação sem limite -- cada regra aqui
+   * é minúscula e válida sozinha, e ainda assim o conjunto tem que ser recusado pela contagem.
+   */
+  @Test
+  void trava_0_numero_de_regras_acima_do_teto_nao_compila() {
+    List<PolicyRule> muitas =
+        IntStream.rangeClosed(1, PolicyCompiler.MAX_RULES + 1)
+            .mapToObj(i -> regra("CUSTOM_REGRA_" + i, 10))
+            .toList();
+
+    assertThatThrownBy(() -> compiler.compile(muitas))
+        .isInstanceOf(PolicyCompilationException.class)
+        .hasMessageContaining(String.valueOf(PolicyCompiler.MAX_RULES))
+        .hasMessageContaining("regras");
+  }
+
+  /** No teto exato, a política ainda compila -- só o excedente é recusado. */
+  @Test
+  void trava_0_numero_de_regras_no_teto_compila() {
+    List<PolicyRule> noTeto =
+        IntStream.rangeClosed(1, PolicyCompiler.MAX_RULES)
+            .mapToObj(i -> regra("CUSTOM_REGRA_" + i, 10))
+            .toList();
+
+    assertThatCode(() -> compiler.compile(noTeto)).doesNotThrowAnyException();
   }
 
   /**

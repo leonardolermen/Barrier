@@ -16,8 +16,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Compila as {@link PolicyRule} de uma política de parceiro, aplicando as quatro travas do piso
- * regulatório (desenho, §5.5). Política que viola qualquer uma não compila — e, portanto, não
- * pode ser ativada.
+ * regulatório (desenho, §5.5) e a trava 0 de custo total, que o desenho não previu. Política que
+ * viola qualquer uma não compila — e, portanto, não pode ser ativada.
  *
  * <p><b>Trava 1 é a que sustenta o produto inteiro.</b> {@code ScoreAggregation} já soma scores e
  * reduz recomendações com {@code RiskRecommendation::strongest} — os dois são monotônicos. O
@@ -30,6 +30,12 @@ import org.springframework.stereotype.Component;
  * RegulatoryRiskRules}; árvore só sobre campo do catálogo, com operador e literal válidos para o
  * tipo do campo, e campo de elemento só dentro do {@code AnyOf} da sua própria lista; teto de
  * profundidade e de número de nós para o custo de avaliação ficar limitado.
+ *
+ * <p><b>Trava 0 fecha uma lacuna diferente das quatro: quantas árvores, não o que cada árvore diz.</b>
+ * {@code MAX_NODES}/{@code MAX_DEPTH} bastam para uma política com poucas regras, mas nada somava
+ * o custo entre regras — uma política com milhares de árvores válidas, cada uma dentro do teto,
+ * ainda multiplicaria o custo de avaliação sem limite, e sem cache (ver {@code
+ * CustomRuleSourceImpl}) isso é gasto por avaliação, não por ativação.
  */
 @Component
 public class PolicyCompiler {
@@ -39,6 +45,23 @@ public class PolicyCompiler {
 
   /** Número máximo de nós ({@code Condition}) em uma árvore. */
   public static final int MAX_NODES = 200;
+
+  /**
+   * Número máximo de {@link PolicyRule} numa única política.
+   *
+   * <p>{@code MAX_NODES}/{@code MAX_DEPTH} limitam <b>uma</b> árvore; nada limitava quantas árvores
+   * uma política podia empilhar. Isso importa porque não há cache (ver {@code
+   * CustomRuleSourceImpl}): {@code rules_json} é desserializado e <b>toda</b> árvore é avaliada em
+   * <b>toda</b> avaliação, no semáforo de workers e no pool de conexões compartilhados — o raio da
+   * explosão é o pipeline multi-tenant inteiro, não só o parceiro que escreveu a política.
+   *
+   * <p>50 é o teto: no pior caso (50 regras × 200 nós) são 10.000 nós avaliados por avaliação, o
+   * mesmo teto por avaliação que já existia implicitamente por árvore, só que agora explícito por
+   * política. Nenhum exemplo do desenho (§11) passa de 3 regras por política — um time de risco de
+   * parceiro calibra dezenas de sinais, não milhares; quem precisar de mais do que isso está
+   * modelando errado (regra deveria compor condições numa árvore, não multiplicar regras).
+   */
+  public static final int MAX_RULES = 50;
 
   private static final String CUSTOM_PREFIX = "CUSTOM_";
   private static final Pattern CODE_PATTERN = Pattern.compile("^CUSTOM_[A-Z0-9_]+$");
@@ -55,11 +78,30 @@ public class PolicyCompiler {
    * compilam.
    */
   public List<PolicyRule> compile(List<PolicyRule> rules) {
+    checarNumeroDeRegras(rules);
     Set<String> codigosVistos = new HashSet<>();
     for (PolicyRule rule : rules) {
       compileOne(rule, codigosVistos);
     }
     return List.copyOf(rules);
+  }
+
+  // ---------------------------------------------------------------------
+  // Trava 0: teto de regras por politica -- antes do laco por regra, de proposito: uma politica
+  // com regras demais recusa pela contagem, nao pela primeira regra invalida (ou nunca, se todas
+  // forem validas) lá no meio de uma lista de milhares.
+  // ---------------------------------------------------------------------
+
+  private void checarNumeroDeRegras(List<PolicyRule> rules) {
+    if (rules.size() > MAX_RULES) {
+      throw new PolicyCompilationException(
+          "politica com "
+              + rules.size()
+              + " regras, acima do teto "
+              + MAX_RULES
+              + " -- trava 0: numero de regras da politica (sem cache, cada avaliacao roda a"
+              + " arvore de toda regra ativa; sem este teto o custo por avaliacao e ilimitado)");
+    }
   }
 
   private void compileOne(PolicyRule rule, Set<String> codigosVistos) {
@@ -151,8 +193,7 @@ public class PolicyCompiler {
   }
 
   private void validarAnyOf(String code, Condition.AnyOf anyOf) {
-    PolicyField listField = anyOf.listField();
-    validarCampoConhecido(code, listField);
+    PolicyField listField = validarCampoConhecido(code, anyOf.listField());
     if (listField.type() != PolicyFieldType.LIST) {
       throw new PolicyCompilationException(
           "regra '"
@@ -166,8 +207,7 @@ public class PolicyCompiler {
 
   private void validarComparison(
       String code, Condition.Comparison comparison, String listaEmEscopo) {
-    PolicyField field = comparison.field();
-    validarCampoConhecido(code, field);
+    PolicyField field = validarCampoConhecido(code, comparison.field());
 
     if (field.type() == PolicyFieldType.LIST) {
       throw new PolicyCompilationException(
@@ -242,17 +282,31 @@ public class PolicyCompiler {
     }
   }
 
-  private void validarCampoConhecido(String code, PolicyField field) {
-    if (catalog.find(field.id()).isEmpty()) {
-      throw new PolicyCompilationException(
-          "regra '"
-              + code
-              + "': campo '"
-              + field.id()
-              + "' nao existe no catalogo de politica (versao "
-              + catalog.version()
-              + ") -- trava 3: arvore invalida");
-    }
+  /**
+   * Resolve pelo catálogo e devolve a instância canônica -- nunca o {@code field} recebido.
+   *
+   * <p>Antes esta validação só conferia {@code field.id()} contra o catálogo e todo o resto da
+   * compilação seguia usando o objeto recebido, confiando em {@code type}/{@code exposure}/{@code
+   * parentListId} que ele carrega. Hoje isso é seguro porque todo campo vem de {@link
+   * FieldCatalog#find} e o formato de fio (JSON da API) não tem onde carregar um {@code
+   * PolicyField} forjado -- mas era a última porta aberta para quem monta a árvore em processo
+   * (a mesma classe de defesa do fantasma em {@code trava_3_campo_desconhecido_no_catalogo_nao_
+   * compila}, um passo antes: lá o id nem existe; aqui o id existe mas o objeto podia mentir sobre
+   * o resto).
+   */
+  private PolicyField validarCampoConhecido(String code, PolicyField field) {
+    return catalog
+        .find(field.id())
+        .orElseThrow(
+            () ->
+                new PolicyCompilationException(
+                    "regra '"
+                        + code
+                        + "': campo '"
+                        + field.id()
+                        + "' nao existe no catalogo de politica (versao "
+                        + catalog.version()
+                        + ") -- trava 3: arvore invalida"));
   }
 
   /**
