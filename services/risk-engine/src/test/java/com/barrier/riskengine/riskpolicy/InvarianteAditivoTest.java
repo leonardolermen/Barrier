@@ -312,6 +312,54 @@ class InvarianteAditivoTest {
     }
   }
 
+  /**
+   * Caso negativo deliberado, para provar que {@link #politica_nunca_enfraquece_a_decisao} e as
+   * outras políticas da matriz não são vácuas por falta de score negativo: <b>nenhuma</b> das
+   * políticas de {@link #politicas()} carrega score negativo (todas passam por {@link
+   * PolicyCompiler#compile}, que recusa isso), então removê-lo do compilador não mudaria nada
+   * naquele teste — a mutação só é pega por {@code
+   * o_compilador_e_a_unica_porta_e_ela_recusa_score_negativo}, que prova que o compilador recusa
+   * <b>compilar</b> a política, não que o motor <b>recusaria avaliá-la</b> se ela chegasse lá.
+   *
+   * <p>Aqui o {@link CustomPolicyRiskRule} é construído <b>à mão</b>, pulando {@link
+   * PolicyCompiler} inteiro — o mesmo bypass que um segundo caminho de escrita em {@code
+   * risk_policies} teria (ver {@code apenas_riskpolicyservice_escreve_em_risk_policy_repository}
+   * no {@code LayeredArchitectureTest}). A recomendação não pode ser {@code null}: {@code
+   * RiskResult.triggered()} exige {@code score > 0 || recommendation != null}, e um score
+   * negativo com recomendação nula nem dispararia — não entraria na soma, e não provaria nada
+   * sobre monotonicidade. Com recomendação não nula a regra dispara, o score negativo entra na
+   * soma de {@code ScoreAggregation}, e o invariante <b>quebra</b> — é isso que a trava 1 do
+   * compilador existe para impedir antes de a política se tornar avaliável.
+   */
+  @Test
+  void sem_o_compilador_regra_de_score_negativo_quebra_o_invariante_bypass_deliberado() {
+    Condition sempre =
+        new Condition.Comparison(campo("identity.status"), Operator.IS_NOT_NULL, Literal.none());
+    PolicyRule afrouxadoraNaoCompilada =
+        new PolicyRule(
+            "CUSTOM_BYPASS_COMPILADOR",
+            "bypassa a trava 1 construindo o RiskRule direto",
+            sempre,
+            -500,
+            Severity.LOW,
+            RiskRecommendation.APPROVE);
+    RiskRule regraCrua = new CustomPolicyRiskRule(afrouxadoraNaoCompilada, evaluator);
+    CustomRuleSource source = ctx -> new CustomRules(1, List.of(regraCrua));
+    RiskScoringService comBypass =
+        new RiskScoringService(
+            regrasDoMotor(), REPOSITORIO_NAO_USADO, SEMPRE_ATIVO, Optional.of(source));
+
+    RiskContext contexto = pfLimpa();
+    RiskDecision sem = motorSemPolitica().evaluate(contexto);
+    RiskDecision com = comBypass.evaluate(contexto);
+
+    assertThat(com.totalScore())
+        .as(
+            "sem o compilador, uma regra de score negativo reduz o total abaixo do que era sem"
+                + " politica nenhuma -- e exatamente isso que a trava 1 existe para impedir")
+        .isLessThan(sem.totalScore());
+  }
+
   @Test
   void nenhuma_regra_custom_apaga_fator_do_motor() {
     RiskScoringService semPolitica = motorSemPolitica();
