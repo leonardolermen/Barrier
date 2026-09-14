@@ -111,11 +111,34 @@ public class ConditionEvaluator {
     Operator op = comparison.op();
     Literal literal = comparison.value();
 
-    boolean matched = valor == null ? op == Operator.IS_NULL : compara(valor, op, literal, context);
+    boolean matched =
+        valor == null
+            ? op == Operator.IS_NULL
+            : comparaComFalhaFechada(valor, op, literal, context);
     if (!matched) {
       return NAO_CASOU;
     }
     return new ClauseEvaluation(true, List.of(evidencia(field, op, literal, valor)));
+  }
+
+  /**
+   * {@code compara} assume que Task 4 já recusou par campo/operador/literal incompatível — hoje
+   * nada garante isso em runtime (o compilador ainda não existe), e um tipo incompatível vira
+   * {@code ClassCastException}/{@code NumberFormatException} em vez de falso. Essas exceções
+   * carregam o valor cru na mensagem (ex.: {@code "For input string: \"<valor>\""}), o que para um
+   * campo {@code OUTCOME_ONLY} vazaria por log exatamente o que a exposição existe para reter.
+   *
+   * <p>Valor nulo já devolve falso, campo {@code LIST} já devolve falso — este é o mesmo
+   * comportamento para o terceiro jeito de a comparação não fazer sentido. Sem log: nem a exceção
+   * nem o valor, porque logar a exceção é logar o valor.
+   */
+  private boolean comparaComFalhaFechada(
+      Object valor, Operator op, Literal literal, RiskContext context) {
+    try {
+      return compara(valor, op, literal, context);
+    } catch (RuntimeException incompativel) {
+      return false;
+    }
   }
 
   private boolean compara(Object valor, Operator op, Literal literal, RiskContext context) {

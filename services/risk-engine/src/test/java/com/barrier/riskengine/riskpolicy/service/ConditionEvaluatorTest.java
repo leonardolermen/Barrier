@@ -97,6 +97,49 @@ class ConditionEvaluatorTest {
   }
 
   @Test
+  void not_anyof_funciona_como_noneof() {
+    // NoneOf não existe como nó próprio -- é Not(AnyOf(...)). "Nenhum sócio estrangeiro."
+    Condition algumEstrangeiro =
+        new Condition.AnyOf(
+            FieldCatalog.V1.find("company.partners").orElseThrow(),
+            comparacao("company.partners[].foreign", Operator.EQ, Literal.bool(true)));
+    Condition nenhumEstrangeiro = new Condition.Not(algumEstrangeiro);
+
+    RiskContext comHolding =
+        comEmpresa(
+            LocalDate.of(2020, 1, 1), new CompanyProfile.Partner("ACME BV", true, true, "Sócio"));
+    RiskContext soPessoaFisica =
+        comEmpresa(
+            LocalDate.of(2020, 1, 1), new CompanyProfile.Partner("Fulano", false, false, "Sócio"));
+
+    assertThat(evaluator.evaluate(nenhumEstrangeiro, comHolding).matched()).isFalse();
+    assertThat(evaluator.evaluate(nenhumEstrangeiro, soPessoaFisica).matched()).isTrue();
+  }
+
+  @Test
+  void comparison_sobre_campo_lista_e_falso_e_nao_estoura() {
+    // Comparison sobre campo LIST é inválida (Task 4 recusa na compilação); aqui vira falso, no
+    // mesmo espírito de campo ausente. Todos os outros testes de lista passam por AnyOf -- este é
+    // o único que exercita o Comparison direto sobre um campo LIST.
+    Condition c = comparacao("company.partners", Operator.EQ, Literal.none());
+
+    assertThat(evaluator.evaluate(c, comEmpresa(LocalDate.of(2020, 1, 1))).matched()).isFalse();
+  }
+
+  @Test
+  void comparacao_com_tipo_incompativel_falha_fechada_em_vez_de_estourar() {
+    // A compilação da Task 4 ainda não existe para recusar isto antes da avaliação -- hoje nada
+    // impede montar uma Comparison com par campo/operador/literal incompatível. Sem falha
+    // fechada, LT sobre um campo STRING estouraria NumberFormatException com o valor cru na
+    // mensagem (aqui "6499-9/99", mas para um campo OUTCOME_ONLY seria o dado que a exposição
+    // existe para reter).
+    Condition c =
+        comparacao("company.cnaeCode", Operator.LT, Literal.number(new BigDecimal("100")));
+
+    assertThat(evaluator.evaluate(c, comEmpresa(LocalDate.of(2020, 1, 1))).matched()).isFalse();
+  }
+
+  @Test
   void campo_ausente_nao_casa_e_nao_estoura() {
     RiskContext semEmpresa = new RiskContext("a-1", "t-1", null, null, null, null, null, AGORA);
     Condition c =
@@ -132,7 +175,11 @@ class ConditionEvaluatorTest {
   }
 
   @Test
-  void so_comparacao_verdadeira_entra_na_evidencia() {
+  void or_nao_da_curto_circuito_evidencia_dos_verdadeiros_aparece_mesmo_apos_um_falso() {
+    // Um par (verdadeiro, falso) não prova ausência de curto-circuito: como só comparação
+    // verdadeira gera evidência, esse par passaria igual com ou sem curto-circuito. Aqui há dois
+    // operandos verdadeiros (1º e 3º) intercalados por um falso (2º); se o Or parasse no primeiro
+    // falso, a evidência do terceiro -- que só existe depois dele na lista -- nunca apareceria.
     Condition c =
         new Condition.Or(
             List.of(
@@ -140,12 +187,17 @@ class ConditionEvaluatorTest {
                     "company.openingDate",
                     Operator.WITHIN_LAST,
                     Literal.duration(Period.ofMonths(6))),
-                comparacao("company.cnaeCode", Operator.EQ, Literal.text("9999-9/99"))));
+                comparacao("company.cnaeCode", Operator.EQ, Literal.text("9999-9/99")),
+                comparacao("company.cnaeCode", Operator.EQ, Literal.text("6499-9/99"))));
 
     var resultado = evaluator.evaluate(c, comEmpresa(LocalDate.of(2026, 7, 1)));
 
     assertThat(resultado.matched()).isTrue();
-    assertThat(resultado.evidences()).noneSatisfy(e -> assertThat(e).contains("cnaeCode"));
+    assertThat(resultado.evidences()).hasSize(2);
+    assertThat(resultado.evidences())
+        .anySatisfy(e -> assertThat(e).contains("company.openingDate"))
+        .anySatisfy(e -> assertThat(e).contains("company.cnaeCode").contains("6499-9/99"));
+    assertThat(resultado.evidences()).noneSatisfy(e -> assertThat(e).contains("9999-9/99"));
   }
 
   @ParameterizedTest(name = "{0}")
