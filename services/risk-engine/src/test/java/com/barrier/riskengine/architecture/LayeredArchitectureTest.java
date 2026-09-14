@@ -1,8 +1,10 @@
 package com.barrier.riskengine.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.barrier.riskengine.riskpolicy.repository.interfaces.RiskPolicyRepository;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
@@ -133,4 +135,31 @@ public class LayeredArchitectureTest {
           .should()
           .dependOnClassesThat()
           .resideInAPackage("..client..");
+
+  /**
+   * O invariante aditivo (Task 9, {@code InvarianteAditivoTest}) só se sustenta porque {@code
+   * PolicyCompiler} é a única porta de entrada para uma política virar regra ativa — e isso, sem
+   * esta regra, era convenção de código, não estrutura: nada impedia um segundo caminho de escrita
+   * em {@code risk_policies} que não passasse por {@code RiskPolicyService#createDraft}. Um
+   * segundo caminho desses derrubaria o invariante em silêncio — o teste do invariante continuaria
+   * verde, porque ele só compara decisões produzidas por políticas que já passaram pelo
+   * compilador.
+   *
+   * <p>Só a <b>escrita</b> é restrita. {@code findActive}/{@code findByTenantAndVersion}/{@code
+   * listByTenant}/{@code nextVersion} ficam livres — {@code CustomRuleSourceImpl} chama {@code
+   * findActive} a cada avaliação, e é assim que política armazenada alcança decisão. Os métodos
+   * mutantes ({@code create}, {@code activate}, {@code archive}) só podem ser chamados por {@code
+   * RiskPolicyService}, o único ponto que compila a política antes de persistir.
+   */
+  @ArchTest
+  static final ArchRule apenas_riskpolicyservice_escreve_em_risk_policy_repository =
+      methods()
+          .that()
+          .areDeclaredIn(RiskPolicyRepository.class)
+          .and()
+          .haveNameMatching("create|activate|archive")
+          .should()
+          .onlyBeCalled()
+          .byClassesThat()
+          .haveSimpleName("RiskPolicyService");
 }
