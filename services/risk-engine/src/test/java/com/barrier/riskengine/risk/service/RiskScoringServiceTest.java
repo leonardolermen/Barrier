@@ -3,6 +3,7 @@ package com.barrier.riskengine.risk.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.identity.domain.CompanyProfile;
@@ -40,6 +41,7 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -523,5 +525,21 @@ class RiskScoringServiceTest {
     assertThat(d.evaluated())
         .extracting(EvaluatedRule::ruleCode)
         .contains("IDENTITY", "SANCTION", "PEP", "CORPORATE_STRUCTURE", "CUSTOM_TESTE");
+  }
+
+  /**
+   * Fixa a relação que o replay depende de ({@code RiskScore.from}): {@code scoredAt} é o
+   * {@code referenceInstant} do {@code RiskContext} que produziu a decisão, não o instante em que
+   * a linha foi persistida. {@code QUANDO} aqui é fixo e no passado -- se {@code from} voltasse a
+   * usar {@code Instant.now()}, este teste veria {@code scoredAt} no presente, muito depois de
+   * {@code QUANDO}, e falharia.
+   */
+  @Test
+  void scoredAtEOReferenceInstantDoContextoNaoOInstanteDePersistencia() {
+    service.score(context(IdentityStatus.VERIFIED));
+
+    ArgumentCaptor<RiskScore> captor = ArgumentCaptor.forClass(RiskScore.class);
+    verify(repository).save(captor.capture());
+    assertThat(captor.getValue().scoredAt()).isEqualTo(QUANDO);
   }
 }
