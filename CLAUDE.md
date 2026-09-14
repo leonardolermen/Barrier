@@ -1018,9 +1018,9 @@ ativa política no escuro), depois o backlog de compliance (COAF/SISCOAF, reten�
 criptografia em repouso, UBO além do 1º grau, bureau real de CPF) — ver
 [docs/product/backlog.md](docs/product/backlog.md).
 
-Build validado 2026-09-14: `./mvnw test` verde (<CONTAGEM> testes no total — risk-engine +
-webhook-api + commons —, 0 falhas, inclui integração com Testcontainers). **Precisa de Docker
-rodando** —
+Build validado 2026-09-14: `./mvnw test` verde (835 testes na risk-engine + 69 na webhook-api + 32
+no commons — **936 no total**, 0 falhas, 0 erros, inclui integração com Testcontainers). **Precisa
+de Docker rodando** —
 sem ele os testes de integração erram com `Can't get Docker image` e a suíte fica verde só na
 aparência. Se o Docker Desktop travar em `initializing Inference manager`, o motivo são sockets
 órfãos indeletáveis no diretório `Docker/run` do AppData local: renomeie o diretório (apagar não
