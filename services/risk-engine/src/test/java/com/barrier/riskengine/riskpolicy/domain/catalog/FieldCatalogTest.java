@@ -46,6 +46,16 @@ class FieldCatalogTest {
   }
 
   @Test
+  void campo_lista_resolve_para_lista_vazia_em_vez_de_nulo_quando_insumo_ausente() {
+    RiskContext semInsumo = new RiskContext("a-1", "t-1", null, null, null, null, null, QUANDO);
+
+    assertThat(FieldCatalog.V1.find("company.partners").orElseThrow().resolve(semInsumo))
+        .isEqualTo(List.of());
+    assertThat(FieldCatalog.V1.find("screening.hits").orElseThrow().resolve(semInsumo))
+        .isEqualTo(List.of());
+  }
+
+  @Test
   void campos_de_pii_direto_nao_estao_no_catalogo() {
     List<String> proibidos =
         List.of(
