@@ -7,6 +7,9 @@ import com.barrier.riskengine.assessment.domain.assessment.AssessmentStateExcept
 import com.barrier.riskengine.assurance.domain.AssuranceDisabledException;
 import com.barrier.riskengine.assurance.domain.DocumentGateNotSatisfiedException;
 import com.barrier.riskengine.replay.domain.DecisionNotReplayableException;
+import com.barrier.riskengine.riskpolicy.domain.RiskPolicyNotFoundException;
+import com.barrier.riskengine.riskpolicy.service.PolicyCompilationException;
+import com.barrier.riskengine.riskpolicy.service.PolicyStateException;
 import com.barrier.riskengine.subject.domain.SubjectNotFoundException;
 import com.barrier.riskengine.tenant.domain.UnknownTenantException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -20,12 +23,26 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 class ProblemExceptionHandler {
 
-  @ExceptionHandler({AssessmentNotFoundException.class, SubjectNotFoundException.class})
+  @ExceptionHandler({
+    AssessmentNotFoundException.class,
+    SubjectNotFoundException.class,
+    RiskPolicyNotFoundException.class
+  })
   ProblemDetail handleNotFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
 
-  @ExceptionHandler({InvalidDocumentException.class, IllegalArgumentException.class})
+  /**
+   * {@code PolicyCompilationException} entra aqui e não num handler próprio: a mensagem já vem
+   * formatada de quem a lança (código da regra, campo, operador e trava violada -- ver o
+   * Javadoc da própria exceção), e este handler já devolve {@code e.getMessage()} como está.
+   * Duplicar o handler só para trocar o tipo aceito não ganharia nada.
+   */
+  @ExceptionHandler({
+    InvalidDocumentException.class,
+    IllegalArgumentException.class,
+    PolicyCompilationException.class
+  })
   ProblemDetail handleBadRequest(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
@@ -59,7 +76,8 @@ class ProblemExceptionHandler {
   @ExceptionHandler({
     AssessmentStateException.class,
     AssuranceDisabledException.class,
-    DecisionNotReplayableException.class
+    DecisionNotReplayableException.class,
+    PolicyStateException.class
   })
   ProblemDetail handleConflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());

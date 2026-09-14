@@ -9,6 +9,7 @@ import com.barrier.riskengine.riskpolicy.domain.PolicyDomain;
 import com.barrier.riskengine.riskpolicy.domain.PolicyRule;
 import com.barrier.riskengine.riskpolicy.domain.PolicyStatus;
 import com.barrier.riskengine.riskpolicy.domain.RiskPolicy;
+import com.barrier.riskengine.riskpolicy.domain.RiskPolicyNotFoundException;
 import com.barrier.riskengine.riskpolicy.domain.catalog.FieldCatalog;
 import com.barrier.riskengine.riskpolicy.domain.tree.Condition;
 import com.barrier.riskengine.riskpolicy.domain.tree.Literal;
@@ -108,9 +109,40 @@ class RiskPolicyServiceTest {
   }
 
   @Test
-  void activate_versao_inexistente_lanca_nao_encontrado() {
+  void activate_versao_inexistente_lanca_excecao_de_dominio() {
     assertThatThrownBy(() -> service.activate(TENANT, 999, "supervisor@parceiro"))
-        .isInstanceOf(NoSuchElementException.class);
+        .isInstanceOf(RiskPolicyNotFoundException.class);
+  }
+
+  /**
+   * Mesmo {@code require} que {@code activate} -- cobre o segundo caller, para a correção não
+   * valer só para metade do caminho que a motivou.
+   */
+  @Test
+  void archive_versao_inexistente_lanca_excecao_de_dominio() {
+    assertThatThrownBy(() -> service.archive(TENANT, 999))
+        .isInstanceOf(RiskPolicyNotFoundException.class);
+  }
+
+  @Test
+  void get_versao_inexistente_lanca_excecao_de_dominio() {
+    assertThatThrownBy(() -> service.get(TENANT, 999))
+        .isInstanceOf(RiskPolicyNotFoundException.class);
+  }
+
+  @Test
+  void get_devolve_a_versao_pedida() {
+    RiskPolicy v1 = criarDraft("CUSTOM_A");
+
+    assertThat(service.get(TENANT, v1.version())).isEqualTo(v1);
+  }
+
+  @Test
+  void list_devolve_as_versoes_do_tenant() {
+    RiskPolicy v1 = criarDraft("CUSTOM_A");
+    RiskPolicy v2 = criarDraft("CUSTOM_B");
+
+    assertThat(service.list(TENANT)).containsExactlyInAnyOrder(v1, v2);
   }
 
   @Test

@@ -4,11 +4,11 @@ import com.barrier.riskengine.riskpolicy.domain.PolicyDomain;
 import com.barrier.riskengine.riskpolicy.domain.PolicyRule;
 import com.barrier.riskengine.riskpolicy.domain.PolicyStatus;
 import com.barrier.riskengine.riskpolicy.domain.RiskPolicy;
+import com.barrier.riskengine.riskpolicy.domain.RiskPolicyNotFoundException;
 import com.barrier.riskengine.riskpolicy.domain.catalog.FieldCatalog;
 import com.barrier.riskengine.riskpolicy.repository.interfaces.RiskPolicyRepository;
 import java.time.Instant;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,6 +59,22 @@ public class RiskPolicyService {
     return repository.create(draft);
   }
 
+  /** Lista as versões do tenant, na ordem em que foram criadas. */
+  @Transactional(readOnly = true)
+  public List<RiskPolicy> list(String tenantId) {
+    return repository.listByTenant(tenantId);
+  }
+
+  /**
+   * Lê uma versão do tenant. Escopado pelo mesmo {@code require} que {@link #activate} e
+   * {@link #archive} usam: versão inexistente e versão de outro tenant são a mesma entrada para
+   * quem chama, {@link RiskPolicyNotFoundException} -- 404, nunca 403.
+   */
+  @Transactional(readOnly = true)
+  public RiskPolicy get(String tenantId, int version) {
+    return require(tenantId, version);
+  }
+
   @Transactional
   public RiskPolicy activate(String tenantId, int version, String activatedBy) {
     RiskPolicy policy = require(tenantId, version);
@@ -103,12 +119,16 @@ public class RiskPolicyService {
     return policy.archive(when);
   }
 
+  /**
+   * Resolve {@code (tenantId, version)} contra o repositório -- caminho que {@link #activate} e
+   * {@link #archive} percorrem primeiro, antes de qualquer verificação de estado. Antes lançava
+   * {@code NoSuchElementException} cru, que o {@code ProblemExceptionHandler} não mapeia: uma
+   * versão inexistente (o caso normal de um retry ou de um id digitado errado) virava 500 em vez
+   * de 404.
+   */
   private RiskPolicy require(String tenantId, int version) {
     return repository
         .findByTenantAndVersion(tenantId, version)
-        .orElseThrow(
-            () ->
-                new NoSuchElementException(
-                    "Política não encontrada: tenant '" + tenantId + "', versão " + version));
+        .orElseThrow(() -> new RiskPolicyNotFoundException(tenantId, version));
   }
 }
