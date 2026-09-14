@@ -24,6 +24,9 @@ import com.barrier.riskengine.risk.domain.model.RiskResult;
 import com.barrier.riskengine.risk.domain.model.RiskScore;
 import com.barrier.riskengine.risk.domain.model.RuleOutcome;
 import com.barrier.riskengine.risk.rule.context.ContextInput;
+import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRuleSource;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRules;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.risk.service.RiskScoreQueryService;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
@@ -37,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -81,8 +85,15 @@ public class DecisionReplayService {
   private final RiskScoringService scoringService;
   private final RiskRuleRegistryService registryService;
   private final TenantRiskConfigAdminService configService;
+  private final Optional<CustomRuleSource> customRuleSource;
   private final Map<String, Set<ContextInput>> requisitosPorRegra;
 
+  /**
+   * {@code Optional<CustomRuleSource>}, mesmo padrão de {@code RiskScoringService}: a única
+   * implementação vive em {@code riskpolicy} e pode não existir neste ponto da entrega. Ausente
+   * resolve para {@link CustomRules#NONE} em {@link #requisitosIncluindoCustom} — tenant sem
+   * política simplesmente não contribui nenhum requisito extra.
+   */
   public DecisionReplayService(
       AssessmentService assessments,
       RiskScoreQueryService riskScores,
@@ -91,7 +102,8 @@ public class DecisionReplayService {
       RiskScoringService scoringService,
       RiskRuleRegistryService registryService,
       TenantRiskConfigAdminService configService,
-      List<RiskRule> rules) {
+      List<RiskRule> rules,
+      Optional<CustomRuleSource> customRuleSource) {
     this.assessments = assessments;
     this.riskScores = riskScores;
     this.screenings = screenings;
@@ -99,8 +111,11 @@ public class DecisionReplayService {
     this.scoringService = scoringService;
     this.registryService = registryService;
     this.configService = configService;
+    this.customRuleSource = customRuleSource;
     // Um mapa código → insumos declarados. É o que permite marcar uma regra como NOT_REPLAYABLE em
-    // vez de reportar o "não disparou" que ela devolveria rodando sobre insumo ausente.
+    // vez de reportar o "não disparou" que ela devolveria rodando sobre insumo ausente. Só cobre
+    // regras de código (beans, fixas): regra custom não é bean -- varia por tenant e por versão de
+    // política -- e por isso não entra aqui; ver requisitosIncluindoCustom.
     this.requisitosPorRegra =
         rules.stream()
             .collect(
@@ -156,11 +171,21 @@ public class DecisionReplayService {
 
     boolean trilhaCompleta = !score.evaluated().isEmpty();
     List<ReplayedRule> rules =
-        compara(gravadas, atual.evaluated(), rebuilt.unreliable(), trilhaCompleta, politicas);
+        compara(
+            gravadas,
+            atual.evaluated(),
+            rebuilt.unreliable(),
+            trilhaCompleta,
+            politicas,
+            requisitosIncluindoCustom(rebuilt.context()));
 
     ReplayedDecision replayed =
         new ReplayedDecision(
-            atual.level(), atual.totalScore(), atual.recommendation(), atual.engineVersion());
+            atual.level(),
+            atual.totalScore(),
+            atual.recommendation(),
+            atual.engineVersion(),
+            atual.policyVersion());
     return new DecisionReplay(
         id.asString(), mode, veredito(arithmetic, gaps, rules, mode), recorded, replayed,
         arithmetic, rules, gaps);
@@ -177,10 +202,34 @@ public class DecisionReplayService {
         score.totalScore(),
         score.recommendation(),
         score.engineVersion(),
+        score.policyVersion(),
         score.scoredAt(),
         score.identityCheckId(),
         score.screeningResultId(),
         versoes);
+  }
+
+  /**
+   * {@link #requisitosPorRegra} mais o {@code requires()} de cada regra da política <b>ativa
+   * agora</b> para este tenant, derivado da própria árvore ({@code ContextInputDerivation}) por
+   * {@code CustomPolicyRiskRule}.
+   *
+   * <p>Não pode ser precomputado no construtor como o mapa de código: a política ativa varia por
+   * tenant e pode mudar entre uma decisão e o replay dela — é precisamente essa variação que
+   * {@link ReplayedDecision#policyVersion()} existe para reportar. Sem esta derivação, uma regra
+   * custom que lê {@code company.*} numa avaliação de PJ nunca seria marcada
+   * {@code NOT_REPLAYABLE}: {@code CompanyProfile} é transiente (ver {@code
+   * GapKind#COMPANY_NOT_PERSISTED}), mas o código de regra custom nunca está no mapa fixo, então a
+   * checagem de insumo ausente silenciosamente não se aplicaria a ela.
+   */
+  private Map<String, Set<ContextInput>> requisitosIncluindoCustom(RiskContext context) {
+    Map<String, Set<ContextInput>> combinados = new LinkedHashMap<>(requisitosPorRegra);
+    customRuleSource
+        .map(source -> source.forContext(context))
+        .map(CustomRules::rules)
+        .orElse(List.of())
+        .forEach(regra -> combinados.put(regra.code(), regra.requires()));
+    return combinados;
   }
 
   /**
@@ -260,7 +309,8 @@ public class DecisionReplayService {
       List<EvaluatedRule> atuais,
       Set<ContextInput> naoConfiaveis,
       boolean trilhaCompleta,
-      Map<String, RulePolicy> politicas) {
+      Map<String, RulePolicy> politicas,
+      Map<String, Set<ContextInput>> requisitosPorRegra) {
 
     Map<String, EvaluatedRule> porCodigoAtual =
         atuais.stream()

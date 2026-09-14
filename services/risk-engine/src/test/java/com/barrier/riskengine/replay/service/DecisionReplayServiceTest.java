@@ -31,6 +31,8 @@ import com.barrier.riskengine.risk.domain.model.RiskScore;
 import com.barrier.riskengine.risk.domain.model.RuleOutcome;
 import com.barrier.riskengine.risk.rule.context.ContextInput;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRuleSource;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRules;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import com.barrier.riskengine.risk.service.RiskScoreQueryService;
 import com.barrier.riskengine.risk.service.RiskScoringService;
@@ -66,6 +68,7 @@ class DecisionReplayServiceTest {
   @Mock RiskScoringService scoringService;
   @Mock RiskRuleRegistryService registryService;
   @Mock TenantRiskConfigAdminService configService;
+  @Mock CustomRuleSource customRuleSource;
 
   private DecisionReplayService service;
 
@@ -100,9 +103,13 @@ class DecisionReplayServiceTest {
             scoringService,
             registryService,
             configService,
-            List.of(regra("PEP", ContextInput.SCREENING), regra("NEW_COMPANY", ContextInput.COMPANY)));
+            List.of(regra("PEP", ContextInput.SCREENING), regra("NEW_COMPANY", ContextInput.COMPANY)),
+            Optional.of(customRuleSource));
     lenient().when(assessments.get(ID, TENANT)).thenReturn(avaliacao());
     lenient().when(screenings.findById(any())).thenReturn(Optional.empty());
+    // Tenant sem política custom por padrão: os testes que não são sobre política ativam a fonte
+    // só quando precisam, no mesmo espírito de CustomRuleSource#NONE.
+    lenient().when(customRuleSource.forContext(any())).thenReturn(CustomRules.NONE);
     // Política conhecida por padrão: os testes deste arquivo são sobre o replay, não sobre autoria.
     lenient()
         .when(registryService.stateAsOf(any(), any()))
@@ -414,5 +421,188 @@ class DecisionReplayServiceTest {
     DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
 
     assertThat(replay.verdict()).isEqualTo(ReplayVerdict.DEGRADED);
+  }
+
+  // ---------- Política custom: dois eixos de versão ----------
+
+  private static RiskScore scoreComPolicyVersion(Integer policyVersion) {
+    RiskResult pep = disparou("PEP", 300);
+    return new RiskScore(
+        UUID.randomUUID(),
+        ID.asString(),
+        RiskLevel.MEDIUM,
+        300,
+        RiskRecommendation.REVIEW,
+        List.of(pep),
+        List.of(
+            EvaluatedRule.triggered("PEP", pep, Map.of()),
+            EvaluatedRule.passed("NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        "barrier-risk-rules/1.9.0",
+        policyVersion,
+        Instant.now());
+  }
+
+  @Test
+  void dossie_reporta_a_versao_da_politica_que_decidiu() {
+    when(riskScores.latestFor(ID.asString())).thenReturn(Optional.of(scoreComPolicyVersion(3)));
+
+    // AS_DECIDED: só o eixo "como decidido" existe -- não há reexecução, então não há "hoje".
+    DecisionReplay comoDecidido = service.replay(ID, TENANT, ReplayMode.AS_DECIDED);
+    assertThat(comoDecidido.recordedDecision().policyVersion()).isEqualTo(3);
+    assertThat(comoDecidido.replayedDecision()).isNull();
+
+    // CURRENT_ENGINE: os dois eixos aparecem, e podem divergir -- o parceiro editou a política
+    // entre a decisão e o replay, e isso é visível sem se disfarçar de mudança de motor.
+    when(rebuilder.rebuild(any(), any())).thenReturn(semLacuna());
+    RiskResult pep = disparou("PEP", 300);
+    when(scoringService.evaluate(any()))
+        .thenReturn(
+            new RiskDecision(
+                RiskLevel.MEDIUM,
+                RiskRecommendation.REVIEW,
+                300,
+                List.of(pep),
+                List.of(
+                    EvaluatedRule.triggered("PEP", pep, Map.of()),
+                    EvaluatedRule.passed(
+                        "NEW_COMPANY", RiskResult.notApplicable("NEW_COMPANY"), Map.of())),
+                "barrier-risk-rules/1.9.0",
+                5));
+
+    DecisionReplay hoje = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
+    assertThat(hoje.recordedDecision().policyVersion()).isEqualTo(3);
+    assertThat(hoje.replayedDecision().policyVersion()).isEqualTo(5);
+  }
+
+  @Test
+  void current_engine_separa_mudanca_de_motor_de_mudanca_de_politica() {
+    // Decidido com a política v1: só PEP, sem regra custom nenhuma.
+    RiskResult pep = disparou("PEP", 300);
+    when(riskScores.latestFor(ID.asString()))
+        .thenReturn(
+            Optional.of(
+                new RiskScore(
+                    UUID.randomUUID(),
+                    ID.asString(),
+                    RiskLevel.MEDIUM,
+                    300,
+                    RiskRecommendation.REVIEW,
+                    List.of(pep),
+                    List.of(EvaluatedRule.triggered("PEP", pep, Map.of())),
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    "barrier-risk-rules/1.9.0",
+                    1,
+                    Instant.now())));
+    when(rebuilder.rebuild(any(), any())).thenReturn(semLacuna());
+
+    // Hoje: o parceiro ativou a v2, que acrescentou CUSTOM_NOVA_REGRA -- mesmo ENGINE_VERSION.
+    RiskResult custom = disparou("CUSTOM_NOVA_REGRA", 50);
+    when(scoringService.evaluate(any()))
+        .thenReturn(
+            new RiskDecision(
+                RiskLevel.MEDIUM,
+                RiskRecommendation.REVIEW,
+                350,
+                List.of(pep, custom),
+                List.of(
+                    EvaluatedRule.triggered("PEP", pep, Map.of()),
+                    EvaluatedRule.triggered("CUSTOM_NOVA_REGRA", custom, Map.of())),
+                "barrier-risk-rules/1.9.0",
+                2));
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
+
+    // O motor não mudou -- é a política que mudou, e o dossiê tem de mostrar os dois eixos
+    // separadamente para a diferença ficar atribuível a quem de fato a causou.
+    assertThat(replay.recordedDecision().engineVersion())
+        .isEqualTo(replay.replayedDecision().engineVersion());
+    assertThat(replay.recordedDecision().policyVersion()).isEqualTo(1);
+    assertThat(replay.replayedDecision().policyVersion()).isEqualTo(2);
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.DIFFERENT_DECISION);
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("CUSTOM_NOVA_REGRA"))
+        .singleElement()
+        .extracting(ReplayedRule::comparison)
+        .isEqualTo(RuleComparison.ADDED);
+    // PEP, a regra de código, não mudou -- a diferença é inteira da regra no namespace do
+    // parceiro (trava de compilação §5.5: CUSTOM_ é exclusivo dele).
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("PEP"))
+        .singleElement()
+        .extracting(ReplayedRule::comparison)
+        .isEqualTo(RuleComparison.SAME);
+  }
+
+  @Test
+  void regra_custom_que_le_company_em_pj_vira_nao_replayavel() {
+    // CompanyProfile é transiente (GapKind.COMPANY_NOT_PERSISTED): uma regra custom que lê
+    // ContextInput.COMPANY não pode ser reexecutada honestamente sobre uma decisão de PJ, mas o
+    // código dela nunca está no mapa fixo derivado das regras de código -- só a derivação a
+    // partir da política ativa (CustomRuleSource) alcança isto.
+    RiskRule regraCustomDeCompany = regra("CUSTOM_QSA_ESTRANGEIRO", ContextInput.COMPANY);
+    RiskResult pep = disparou("PEP", 300);
+    RiskScore gravado =
+        score(
+            List.of(pep),
+            List.of(
+                EvaluatedRule.triggered("PEP", pep, Map.of()),
+                EvaluatedRule.passed(
+                    "CUSTOM_QSA_ESTRANGEIRO",
+                    RiskResult.notApplicable("CUSTOM_QSA_ESTRANGEIRO"),
+                    Map.of())),
+            300,
+            RiskLevel.MEDIUM,
+            RiskRecommendation.REVIEW);
+    when(riskScores.latestFor(ID.asString())).thenReturn(Optional.of(gravado));
+    when(rebuilder.rebuild(any(), any()))
+        .thenReturn(
+            new RebuiltContext(
+                new RiskContext(ID.asString(), TENANT, null, null, null, null, null, QUANDO),
+                Set.of(ContextInput.COMPANY),
+                List.of(
+                    ReconstructionGap.of(
+                        GapKind.COMPANY_NOT_PERSISTED, ContextInput.COMPANY, "transiente"))));
+    when(customRuleSource.forContext(any()))
+        .thenReturn(new CustomRules(2, List.of(regraCustomDeCompany)));
+    when(scoringService.evaluate(any()))
+        .thenReturn(
+            new RiskDecision(
+                RiskLevel.MEDIUM,
+                RiskRecommendation.REVIEW,
+                300,
+                List.of(pep),
+                List.of(
+                    EvaluatedRule.triggered("PEP", pep, Map.of()),
+                    EvaluatedRule.passed(
+                        "CUSTOM_QSA_ESTRANGEIRO",
+                        RiskResult.notApplicable("CUSTOM_QSA_ESTRANGEIRO"),
+                        Map.of())),
+                "barrier-risk-rules/1.9.0",
+                2));
+
+    DecisionReplay replay = service.replay(ID, TENANT, ReplayMode.CURRENT_ENGINE);
+
+    assertThat(replay.verdict()).isEqualTo(ReplayVerdict.DEGRADED);
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("CUSTOM_QSA_ESTRANGEIRO"))
+        .singleElement()
+        .satisfies(
+            r -> {
+              assertThat(r.comparison()).isEqualTo(RuleComparison.NOT_REPLAYABLE);
+              assertThat(r.missingInputs()).containsExactly(ContextInput.COMPANY);
+              assertThat(r.replayedOutcome())
+                  .as("resultado sobre insumo ausente não sai, custom ou de código")
+                  .isNull();
+            });
+    // A regra de código, cujo insumo é reconstruível, continua comparável -- a degradação é
+    // por regra, não global.
+    assertThat(replay.rules())
+        .filteredOn(r -> r.ruleCode().equals("PEP"))
+        .singleElement()
+        .extracting(ReplayedRule::comparison)
+        .isEqualTo(RuleComparison.SAME);
   }
 }

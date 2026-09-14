@@ -58,6 +58,19 @@ não ignorá-lo:
   PLD-FT. A forma regulatória de "flexibilidade por parceiro" é política versionada com vigência,
   autoria e replay, não editor de regra
   ([plano-auditoria](plano-auditoria-2026-08-18.md#por-que-não-regras-customizáveis-pelo-parceiro)).
+  ⚠️ **Reaberta com argumento em 2026-09-14, não invalidada.** O racional acima segue valendo por
+  completo para regra **subtrativa** — continua sendo exatamente o botão que este arquivo recusou. O
+  que mudou foi o escopo da pergunta: existe uma forma de "regra do parceiro" que não afrouxa nada?
+  O argumento — decisão 1 do brainstorming, § 3 de
+  [docs/superpowers/specs/2026-09-13-politica-de-risco-custom-por-parceiro-design.md](../../superpowers/specs/2026-09-13-politica-de-risco-custom-por-parceiro-design.md) —
+  é que uma regra **só aditiva** (soma score, força REVIEW ou força REJECT; nunca remove, rebaixa ou
+  zera fator do motor, e o piso de `RegulatoryRiskRules` fica intocável por construção, com quatro
+  travas de compilação provando isso) não é o botão que a recusa original mirava: não existe direção
+  de dano, porque a única direção possível é endurecer. É esse recorte estreito, não uma reversão do
+  racional, que abriu o P1 do "Risk Control Plane" (módulo `riskpolicy`, ver
+  [docs/product/backlog.md](../../product/backlog.md)) — e é por isso que a recusa acima **continua
+  registrada, não apagada**: ela é o motivo pelo qual a solução é aditiva-only com piso regulatório,
+  em vez de um editor de regra livre.
 - **Regra-como-dado editável em runtime** — sacrificaria `ENGINE_VERSION` e a trilha reproduzível
   ([fila-origem, F8](fila-origem.md)).
 - **Schema registry** — entra quando o produtor deixar de ser único, ou na primeira quebra real a

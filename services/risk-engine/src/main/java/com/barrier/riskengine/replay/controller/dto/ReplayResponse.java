@@ -30,20 +30,36 @@ public record ReplayResponse(
     List<RuleDto> rules,
     List<GapDto> gaps) {
 
-  /** O que foi decidido, e com base em qual evidência. */
+  /**
+   * O que foi decidido, e com base em qual evidência.
+   *
+   * @param policyVersion versão da política custom do tenant como decidido; {@code null} sem
+   *     política ativa então
+   */
   public record RecordedDecisionDto(
       RiskLevel level,
       int score,
       RiskRecommendation recommendation,
       String engineVersion,
+      Integer policyVersion,
       Instant decidedAt,
       UUID identityCheckId,
       UUID screeningResultId,
       Map<String, String> watchlistVersions) {}
 
-  /** O que o motor de hoje conclui sobre a mesma evidência; ausente no modo {@code AS_DECIDED}. */
+  /**
+   * O que o motor de hoje conclui sobre a mesma evidência; ausente no modo {@code AS_DECIDED}.
+   *
+   * @param policyVersion versão da política custom ativa do tenant agora — dois eixos de versão
+   *     (motor e política), cada um "como decidido" e "hoje", é o que torna a diferença entre os
+   *     dois atribuível em vez de aparecer como o motor tendo mudado de opinião
+   */
   public record ReplayedDecisionDto(
-      RiskLevel level, int score, RiskRecommendation recommendation, String engineVersion) {}
+      RiskLevel level,
+      int score,
+      RiskRecommendation recommendation,
+      String engineVersion,
+      Integer policyVersion) {}
 
   /**
    * Reconferência da aritmética: soma, banda e recomendação recalculadas a partir dos resultados

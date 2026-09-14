@@ -118,17 +118,17 @@ alerta do módulo `monitoring` circule em canal com controle de acesso mais frac
 | Campo | Tipo | Insumo | Evidência |
 |---|---|---|---|
 | `identity.status` | ENUM `IdentityStatus` | IDENTITY | BY_VALUE |
-| `identity.documentType` | ENUM | IDENTITY | BY_VALUE |
+| `identity.documentType` | STRING | IDENTITY | BY_VALUE |
 | `identity.provider` | STRING | IDENTITY | BY_VALUE |
 | `screening.status` | ENUM `ScreeningStatus` | SCREENING | BY_VALUE |
-| `screening.hits[]` | LIST | SCREENING | — |
+| `screening.hits` | LIST | SCREENING | — (LIST nunca é BY_VALUE) |
 | `screening.hits[].type` | ENUM `MatchType` | SCREENING | BY_VALUE |
 | `screening.hits[].basis` | ENUM `MatchBasis` | SCREENING | BY_VALUE |
-| `screening.hits[].party` | ENUM `ScreenedParty` | SCREENING | BY_VALUE |
+| `screening.hits[].party` | ENUM `ScreenedParty.Role` | SCREENING | BY_VALUE |
 | `screening.hits[].source` | STRING | SCREENING | BY_VALUE |
 | `company.openingDate` | DATE | COMPANY | BY_VALUE |
 | `company.cnaeCode` | STRING | COMPANY | BY_VALUE |
-| `company.partners[]` | LIST | COMPANY | — |
+| `company.partners` | LIST | COMPANY | — (LIST nunca é BY_VALUE) |
 | `company.partners[].legalEntity` | BOOLEAN | COMPANY | BY_VALUE |
 | `company.partners[].foreign` | BOOLEAN | COMPANY | BY_VALUE |
 | `company.partners[].qualification` | STRING | COMPANY | BY_VALUE |

@@ -8,7 +8,17 @@ import com.barrier.riskengine.assessment.controller.dto.SubmitAssessmentRequest;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assessment.service.AssessmentProcessor;
 import com.barrier.riskengine.replay.controller.dto.ReplayResponse;
+import com.barrier.riskengine.risk.domain.enums.Severity;
+import com.barrier.riskengine.riskpolicy.domain.PolicyDomain;
+import com.barrier.riskengine.riskpolicy.domain.PolicyRule;
+import com.barrier.riskengine.riskpolicy.domain.RiskPolicy;
+import com.barrier.riskengine.riskpolicy.domain.catalog.FieldCatalog;
+import com.barrier.riskengine.riskpolicy.domain.tree.Condition;
+import com.barrier.riskengine.riskpolicy.domain.tree.Literal;
+import com.barrier.riskengine.riskpolicy.domain.tree.Operator;
+import com.barrier.riskengine.riskpolicy.service.RiskPolicyService;
 import com.barrier.riskengine.tenant.service.ApiKeyService;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +66,7 @@ class DecisionReplayIntegrationTest {
   @Autowired AssessmentProcessor processor;
   @Autowired ApiKeyService apiKeyService;
   @Autowired JdbcTemplate jdbc;
+  @Autowired RiskPolicyService riskPolicyService;
 
   private RestClient clientDo(String tenantId) {
     String chave = apiKeyService.issue(tenantId, "replay-it").presentedValue();
@@ -63,6 +74,34 @@ class DecisionReplayIntegrationTest {
         .baseUrl("http://localhost:" + port)
         .defaultHeader("Authorization", "Bearer " + chave)
         .build();
+  }
+
+  private void seedTenant(String tenantId) {
+    jdbc.update(
+        "INSERT INTO tenants (id, name, active) VALUES (?, ?, true) ON CONFLICT (id) DO NOTHING",
+        tenantId,
+        tenantId);
+  }
+
+  /**
+   * Cria e ativa uma versão de política com uma única regra que só pontua sobre {@code
+   * identity.status} -- o mínimo que produz um fator {@code CUSTOM_} de verdade em {@code
+   * evaluated_json} sem depender de bureau de PJ nenhum.
+   */
+  private int ativaPoliticaComFatorCustom(String tenantId) {
+    Condition identidadeVerificada =
+        new Condition.Comparison(
+            FieldCatalog.V1.find("identity.status").orElseThrow(),
+            Operator.EQ,
+            Literal.text("VERIFIED"));
+    PolicyRule regra =
+        new PolicyRule(
+            "CUSTOM_IDENTIDADE_OK", "identidade verificada", identidadeVerificada, 10, Severity.LOW, null);
+    RiskPolicy criada =
+        riskPolicyService.createDraft(
+            tenantId, PolicyDomain.ONBOARDING, List.of(regra), "teste-replay@barrier");
+    riskPolicyService.activate(tenantId, criada.version(), "teste-replay@barrier");
+    return criada.version();
   }
 
   private String submete(RestClient client, String documento, String nome) {
@@ -198,6 +237,56 @@ class DecisionReplayIntegrationTest {
             e ->
                 assertThat(((HttpClientErrorException) e).getStatusCode())
                     .isEqualTo(HttpStatus.NOT_FOUND));
+  }
+
+  @Test
+  void as_decided_permanece_integro_com_fator_custom() {
+    String tenantId = "politica-parceiro-as-decided";
+    seedTenant(tenantId);
+    int versaoAtivada = ativaPoliticaComFatorCustom(tenantId);
+
+    RestClient client = clientDo(tenantId);
+    String id = submete(client, "111.444.777-35", "Cliente Com Politica");
+    processaAteConcluir(client, id);
+
+    ReplayResponse resposta = replay(client, id, "AS_DECIDED");
+
+    assertThat(resposta.arithmetic().consistent())
+        .as(
+            "o fator custom soma no mesmo evaluated_json e passa pela mesma agregação -- a "
+                + "reconferência tem de fechar como para qualquer regra de código")
+        .isTrue();
+    assertThat(resposta.recorded().policyVersion()).isEqualTo(versaoAtivada);
+    assertThat(resposta.rules())
+        .filteredOn(r -> r.ruleCode().equals("CUSTOM_IDENTIDADE_OK"))
+        .singleElement()
+        .satisfies(
+            r -> {
+              assertThat(r.recordedOutcome()).isEqualTo("TRIGGERED");
+              // AS_DECIDED não reexecuta nada, custom ou de código.
+              assertThat(r.comparison()).isEqualTo("NOT_COMPARED");
+            });
+  }
+
+  @Test
+  void dossie_reporta_a_versao_da_politica_que_decidiu() {
+    // O cenário "parceiro editou a política entre a decisão e o replay" (os dois eixos
+    // divergindo) já está provado com precisão em DecisionReplayServiceTest, com os dois lados
+    // sob controle do teste. Aqui a única coisa que falta provar é que o campo atravessa o
+    // HTTP/JSON de ponta a ponta -- por isso uma única versão, estável, é suficiente.
+    String tenantId = "politica-parceiro-versoes";
+    seedTenant(tenantId);
+    int versaoAtivada = ativaPoliticaComFatorCustom(tenantId);
+
+    RestClient client = clientDo(tenantId);
+    String id = submete(client, "111.444.777-35", "Cliente Com Politica Estavel");
+    processaAteConcluir(client, id);
+
+    ReplayResponse resposta = replay(client, id, "CURRENT_ENGINE");
+
+    assertThat(resposta.verdict()).isEqualTo("SAME_DECISION");
+    assertThat(resposta.recorded().policyVersion()).isEqualTo(versaoAtivada);
+    assertThat(resposta.replayed().policyVersion()).isEqualTo(versaoAtivada);
   }
 
   @Test

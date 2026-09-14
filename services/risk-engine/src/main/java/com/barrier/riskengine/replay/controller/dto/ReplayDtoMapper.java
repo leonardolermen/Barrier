@@ -40,6 +40,7 @@ public final class ReplayDtoMapper {
         recorded.score(),
         recorded.recommendation(),
         recorded.engineVersion(),
+        recorded.policyVersion(),
         recorded.decidedAt(),
         recorded.identityCheckId(),
         recorded.screeningResultId(),
@@ -50,7 +51,11 @@ public final class ReplayDtoMapper {
     return replayed == null
         ? null
         : new ReplayResponse.ReplayedDecisionDto(
-            replayed.level(), replayed.score(), replayed.recommendation(), replayed.engineVersion());
+            replayed.level(),
+            replayed.score(),
+            replayed.recommendation(),
+            replayed.engineVersion(),
+            replayed.policyVersion());
   }
 
   private static ReplayResponse.ArithmeticDto toDto(ArithmeticCheck check) {
