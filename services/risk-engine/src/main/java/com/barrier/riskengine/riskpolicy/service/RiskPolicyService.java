@@ -1,0 +1,99 @@
+package com.barrier.riskengine.riskpolicy.service;
+
+import com.barrier.riskengine.riskpolicy.domain.PolicyDomain;
+import com.barrier.riskengine.riskpolicy.domain.PolicyRule;
+import com.barrier.riskengine.riskpolicy.domain.PolicyStatus;
+import com.barrier.riskengine.riskpolicy.domain.RiskPolicy;
+import com.barrier.riskengine.riskpolicy.domain.catalog.FieldCatalog;
+import com.barrier.riskengine.riskpolicy.repository.interfaces.RiskPolicyRepository;
+import java.time.Instant;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Ciclo de vida de {@link RiskPolicy}: {@code DRAFT -> ACTIVE -> ARCHIVED}.
+ *
+ * <p>{@link #activate} é o método sensível: arquiva a {@code ACTIVE} atual do domínio (se houver) e
+ * ativa a versão pedida <b>na mesma transação</b> — uma parada no meio não pode deixar o tenant sem
+ * nenhuma política ativa nem com duas. A garantia de que só uma ACTIVE existe por (tenant, domínio)
+ * não é só isto: é o índice único parcial em {@code risk_policies} (migration V049), que vale mesmo
+ * quando duas réplicas tentam ativar ao mesmo tempo sem passar pela mesma instância deste serviço.
+ */
+@Service
+public class RiskPolicyService {
+
+  private final RiskPolicyRepository repository;
+  private final PolicyCompiler compiler;
+
+  public RiskPolicyService(RiskPolicyRepository repository, PolicyCompiler compiler) {
+    this.repository = repository;
+    this.compiler = compiler;
+  }
+
+  /**
+   * Compila as regras (Task 4) antes de gravar -- uma {@code RiskPolicy} persistida já passou pelo
+   * piso regulatório. {@code catalogVersion} grava a versão do {@link FieldCatalog} vigente agora,
+   * para que a política continue interpretável quando o catálogo crescer.
+   */
+  @Transactional
+  public RiskPolicy createDraft(
+      String tenantId, PolicyDomain domain, List<PolicyRule> rules, String createdBy) {
+    List<PolicyRule> compiladas = compiler.compile(rules);
+    RiskPolicy draft =
+        new RiskPolicy(
+            UUID.randomUUID(),
+            tenantId,
+            domain,
+            repository.nextVersion(tenantId),
+            PolicyStatus.DRAFT,
+            FieldCatalog.VERSION,
+            compiladas,
+            createdBy,
+            Instant.now(),
+            null,
+            null,
+            null);
+    return repository.create(draft);
+  }
+
+  @Transactional
+  public RiskPolicy activate(String tenantId, int version, String activatedBy) {
+    RiskPolicy policy = require(tenantId, version);
+    if (policy.status() != PolicyStatus.DRAFT) {
+      throw new PolicyStateException(
+          "versão "
+              + version
+              + " do tenant '"
+              + tenantId
+              + "' não está em DRAFT (status atual: "
+              + policy.status()
+              + ") -- só uma versão DRAFT pode ser ativada");
+    }
+    Instant when = Instant.now();
+    repository
+        .findActive(tenantId, policy.domain())
+        .ifPresent(atual -> repository.archive(atual.id(), when));
+    repository.activate(policy.id(), activatedBy, when);
+    return policy.activate(activatedBy, when);
+  }
+
+  @Transactional
+  public RiskPolicy archive(String tenantId, int version) {
+    RiskPolicy policy = require(tenantId, version);
+    Instant when = Instant.now();
+    repository.archive(policy.id(), when);
+    return policy.archive(when);
+  }
+
+  private RiskPolicy require(String tenantId, int version) {
+    return repository
+        .findByTenantAndVersion(tenantId, version)
+        .orElseThrow(
+            () ->
+                new NoSuchElementException(
+                    "Política não encontrada: tenant '" + tenantId + "', versão " + version));
+  }
+}
