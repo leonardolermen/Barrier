@@ -4,7 +4,6 @@ import com.barrier.riskengine.riskpolicy.domain.PolicyDomain;
 import com.barrier.riskengine.riskpolicy.domain.PolicyStatus;
 import com.barrier.riskengine.riskpolicy.domain.RiskPolicy;
 import com.barrier.riskengine.riskpolicy.domain.RiskPolicyNotFoundException;
-import com.barrier.riskengine.riskpolicy.repository.interfaces.RiskPolicyJpaRepository;
 import com.barrier.riskengine.riskpolicy.repository.interfaces.RiskPolicyRepository;
 import java.time.Instant;
 import java.util.List;
