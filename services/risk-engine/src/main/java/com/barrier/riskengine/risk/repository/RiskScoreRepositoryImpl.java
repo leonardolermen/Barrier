@@ -39,6 +39,7 @@ class RiskScoreRepositoryImpl implements RiskScoreRepository {
     e.setIdentityCheckId(score.identityCheckId());
     e.setScreeningResultId(score.screeningResultId());
     e.setEngineVersion(score.engineVersion());
+    e.setPolicyVersion(score.policyVersion());
     e.setScoredAt(score.scoredAt());
     return toDomain(jpa.save(e));
   }
@@ -67,6 +68,7 @@ class RiskScoreRepositoryImpl implements RiskScoreRepository {
         e.getIdentityCheckId(),
         e.getScreeningResultId(),
         e.getEngineVersion(),
+        e.getPolicyVersion(),
         e.getScoredAt());
   }
 }

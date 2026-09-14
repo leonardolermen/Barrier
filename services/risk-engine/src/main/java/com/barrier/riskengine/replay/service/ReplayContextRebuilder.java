@@ -43,9 +43,13 @@ import org.springframework.stereotype.Service;
  *       nulo na decisão também, e reportar uma lacuna que não existe treina o leitor a ignorar o
  *       campo.
  *   <li><b>cadastro</b> — {@code subject_profiles} não tem histórico, mas tem {@code updated_at}: se
- *       o cadastro não foi tocado depois da decisão, o que se lê hoje <b>é</b> o que a decisão viu, e
- *       não há lacuna. É o que mantém {@code SAME_DECISION} alcançável no caso comum em vez de
- *       transformar todo replay em "degradado".
+ *       o cadastro não foi tocado depois de {@code assessment.completedAt()} (quando esta decisão
+ *       terminou de ser persistida, já com o enriquecimento do bureau desta mesma avaliação
+ *       aplicado), o que se lê hoje <b>é</b> o que a decisão viu, e não há lacuna. Não é
+ *       {@code score.scoredAt()}: este é o {@code referenceInstant}, capturado antes dos
+ *       round-trips de bureau, e o próprio enriquecimento desta avaliação sempre grava depois
+ *       dele — comparar contra ele marcaria toda decisão como lacuna. É o que mantém {@code
+ *       SAME_DECISION} alcançável no caso comum em vez de transformar todo replay em "degradado".
  *   <li><b>assurance</b> — lacuna sempre que existe qualquer verificação, porque
  *       {@code AssuranceSummary.biometricAttempts} é contagem sobre janela que termina <b>agora</b>.
  *       Sem verificação nenhuma o resumo é trivialmente o mesmo (os checks são acervo, não são
@@ -116,7 +120,16 @@ public class ReplayContextRebuilder {
     Optional<SubjectProfile> declarado = profiles.findDeclared(subjectId, assessment.tenantId());
     SubjectProfile profile =
         declarado.orElseGet(() -> SubjectProfile.blank(subjectId, assessment.tenantId()));
-    if (declarado.isPresent() && changedAfter(profile.updatedAt(), score.scoredAt())) {
+    // assessment.completedAt(), não score.scoredAt(): desde a correção de RiskScore.from,
+    // scoredAt é o referenceInstant -- capturado ANTES dos round-trips de bureau -- e o
+    // enriquecimento de cadastro que a PRÓPRIA avaliação faz (AssessmentProcessor persiste o que
+    // o bureau devolveu antes de ler o profile e pontuar) sempre grava updatedAt depois disso.
+    // Comparar contra scoredAt marcaria o enriquecimento desta mesma decisão como lacuna --
+    // "cadastro mudou depois" seria verdade no relógio e mentira no que a decisão viu, já que ela
+    // viu exatamente esse cadastro enriquecido. completedAt (gravado por Assessment.complete()
+    // junto com o resto do desfecho, depois do enriquecimento e da pontuação) é o limite certo:
+    // só o que mudou DEPOIS de a decisão estar persistida é lacuna de verdade.
+    if (declarado.isPresent() && changedAfter(profile.updatedAt(), assessment.completedAt())) {
       unreliable.add(ContextInput.PROFILE);
       gaps.add(
           ReconstructionGap.of(
@@ -145,7 +158,11 @@ public class ReplayContextRebuilder {
             screening,
             null, // sempre: ver COMPANY_NOT_PERSISTED
             profile,
-            assuranceSummary);
+            assuranceSummary,
+            // instante da decisão, nunca Instant.now() -- RiskScore.from grava context.referenceInstant()
+            // em scoredAt (capturado antes dos round-trips de bureau), então este valor é o mesmo
+            // "agora" que a decisão original usou, não o instante em que a linha foi persistida.
+            score.scoredAt());
     return new RebuiltContext(context, unreliable, gaps);
   }
 

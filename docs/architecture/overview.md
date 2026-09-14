@@ -80,7 +80,7 @@ da Risk Engine API; os demais entram nas fases seguintes.
 | **Risk scoring**     | Motor de regras (Strategy): score 0–1000, nível e recomendação; registry liga/desliga regra sem deploy | ✅ módulo da Risk Engine |
 | **Tenant / Config**  | Resolução de tenant + overrides de parâmetro de risco por parceiro | ✅ módulo da Risk Engine |
 | **Webhook API**      | Callback assíncrono ao cliente com HMAC, retry e idempotência   | ✅ deployable próprio       |
-| **Case management**  | Revisão manual (EDD) via `POST /decision`; fila de analistas dedicada segue fase 2 | 🟡 parcial |
+| **Case management**  | Revisão manual (EDD) via `POST /decision` + módulo `mesa`: filas nomeadas, atribuição, ações append-only e SLA pausável (V043) | ✅ módulo da Risk Engine; sem UI |
 | **Audit & compliance** | Trilha imutável, retenção, evidência regulatória              | ⏳ fase 2                   |
 
 ## Estilo interno de cada serviço (camadas clássicas)
@@ -113,8 +113,10 @@ Referência do padrão de camadas na visão-alvo de longo prazo (microserviços)
   Garante "gravou = publicou", sem *dual-write*.
 - **Idempotência** — consumidores tratam entrega repetida (Kafka é *at-least-once*). A
   Webhook API desduplica por `eventId` (constraint UNIQUE em `deliveries`).
-- **Correlação** — `assessmentId` viaja em todos os eventos como *correlation id*,
-  alimentando auditoria e *tracing*.
+- **Correlação** — o `EventEnvelope` carrega `assessmentId` (id do **agregado** de cada evento,
+  nome histórico — nem sempre uma avaliação) e `correlationId` como campos separados;
+  [event-catalog.md](event-catalog.md) documenta a distinção e a chave de partição de cada
+  tópico.
 
 ## Infraestrutura de desenvolvimento
 

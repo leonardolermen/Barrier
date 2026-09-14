@@ -12,6 +12,7 @@ import com.barrier.riskengine.risk.rule.context.RiskContext;
 import com.barrier.riskengine.screening.domain.ScreeningResult;
 import com.barrier.riskengine.tenant.config.service.TenantRiskConfigService;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -22,6 +23,7 @@ class PjRiskRulesTest {
 
   private static final Clock FIXED =
       Clock.fixed(LocalDate.of(2026, 7, 8).atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
 
   /** Sem overrides: toda leitura de config cai no default passado pelo caller. */
   private static final TenantRiskConfigService NO_OVERRIDE =
@@ -46,7 +48,8 @@ class PjRiskRulesTest {
         ScreeningResult.of("aid", List.of()),
         company,
         null,
-        null);
+        null,
+        QUANDO);
   }
 
   private CompanyProfile company(LocalDate opening, String cnae, List<Partner> partners) {
@@ -126,7 +129,8 @@ class PjRiskRulesTest {
             ScreeningResult.of("aid", List.of()),
             company(LocalDate.of(2010, 1, 1), "6619302", List.of()),
             null,
-            null);
+            null,
+            QUANDO);
 
     RiskResult r = rule.evaluate(acmeContext);
 
@@ -163,7 +167,8 @@ class PjRiskRulesTest {
             ScreeningResult.of("aid", List.of()),
             company(LocalDate.of(2010, 1, 1), "9999999", List.of()),
             null,
-            null);
+            null,
+            QUANDO);
 
     // CNAE do default ("6619302") continua funcionando para outros tenants
     assertThat(

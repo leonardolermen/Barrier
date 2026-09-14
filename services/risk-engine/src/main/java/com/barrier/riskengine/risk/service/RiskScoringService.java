@@ -10,8 +10,12 @@ import com.barrier.riskengine.risk.registry.domain.RegulatoryRiskRules;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import com.barrier.riskengine.risk.repository.interfaces.RiskScoreRepository;
 import com.barrier.riskengine.risk.rule.context.RiskContext;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRuleSource;
+import com.barrier.riskengine.risk.rule.interfaces.CustomRules;
 import com.barrier.riskengine.risk.rule.interfaces.RiskRule;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,12 +37,25 @@ import org.springframework.stereotype.Service;
  *
  * <p>{@code ENGINE_VERSION} deve ser incrementado a cada mudança de regra ou peso, preservando
  * o histórico das decisões tomadas por versões anteriores.
+ *
+ * <p>Regras custom entram no mesmo stream e portanto passam pelo mesmo {@code
+ * activeOrLogSuppressed}. Isso é inofensivo e não precisa de caso especial: o registry é
+ * fail-open (regra sem linha fica ativa, porque ele é kill switch e vigência, não allowlist) e
+ * código de regra custom nunca terá linha lá. O kill switch de política custom é arquivar a
+ * versão ativa do tenant.
  */
 @Service
 public class RiskScoringService {
 
   private static final Logger log = LoggerFactory.getLogger(RiskScoringService.class);
 
+  // 1.9.0: o motor ganhou uma segunda fonte de regras (CustomRuleSource): a política escrita pelo
+  // parceiro entra no mesmo stream das regras de código e passa pela mesma ScoreAggregation.
+  // Regra custom só endurece — a monotonicidade já existia (soma de score + reduce com
+  // RiskRecommendation::strongest) e é preservada pela trava de score não negativo do
+  // PolicyCompiler. Nenhuma regra nem peso de código mudou, mas uma decisão tomada nesta versão
+  // pode conter fator que a anterior não conseguia produzir, e não subir mentiria na auditoria.
+  //
   // 1.8.0: CorporateStructureCoverageRiskRule (regulatória) força REVIEW quando o bureau confirma
   // a PJ mas o CompanyProfile chega sem QSA (basic_data da BigBoost não traz sócios) — antes,
   // sócio sancionado numa PJ atendida por esse bureau não gerava apontamento nenhum e a avaliação
@@ -75,19 +92,30 @@ public class RiskScoringService {
   //
   // 1.2.0: IDENTITY_UNAVAILABLE passou a forçar REVIEW (era fail-open para APPROVE) e SANCTION
   // separou match por documento (REJECT) de match por nome (REVIEW).
-  static final String ENGINE_VERSION = "barrier-risk-rules/1.8.0";
+  static final String ENGINE_VERSION = "barrier-risk-rules/1.9.0";
 
   private final List<RiskRule> rules;
   private final RiskScoreRepository repository;
   private final RiskRuleRegistryService registryService;
+  private final Optional<CustomRuleSource> customRuleSource;
 
+  /**
+   * {@code Optional<CustomRuleSource>}, não o tipo cru: a única implementação vive em
+   * {@code riskpolicy} e ainda não existe neste ponto da entrega. Um construtor exigindo o tipo
+   * quebraria a subida do contexto (mesmo defeito que {@code PolicyCompiler} teve com {@code
+   * FieldCatalog}) até essa implementação chegar. Ausente resolve para
+   * {@link CustomRules#NONE} — semanticamente "nenhum parceiro escreveu política" — sem
+   * {@code @Primary} nem bean vazio de conveniência.
+   */
   public RiskScoringService(
       List<RiskRule> rules,
       RiskScoreRepository repository,
-      RiskRuleRegistryService registryService) {
+      RiskRuleRegistryService registryService,
+      Optional<CustomRuleSource> customRuleSource) {
     this.rules = rules;
     this.repository = repository;
     this.registryService = registryService;
+    this.customRuleSource = customRuleSource;
   }
 
   /**
@@ -109,11 +137,14 @@ public class RiskScoringService {
    * publicado.
    */
   public RiskDecision evaluate(RiskContext context) {
+    CustomRules custom =
+        customRuleSource.map(source -> source.forContext(context)).orElse(CustomRules.NONE);
+
     // Toda regra do motor entra na trilha, com o que aconteceu com ela. Guardar só as que
     // dispararam tornava indistinguíveis "rodou e passou", "estava desligada" e "a lista estava
     // vazia" — três leituras da mesma ausência, e só uma é aceitável.
     List<EvaluatedRule> evaluated =
-        rules.stream()
+        Stream.concat(rules.stream(), custom.rules().stream())
             .map(
                 rule -> {
                   if (!activeOrLogSuppressed(rule)) {
@@ -144,7 +175,8 @@ public class RiskScoringService {
         agregado.totalScore(),
         triggered,
         evaluated,
-        ENGINE_VERSION);
+        ENGINE_VERSION,
+        custom.policyVersion());
   }
 
   /**

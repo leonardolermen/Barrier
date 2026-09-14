@@ -3,6 +3,7 @@ package com.barrier.riskengine.risk.registry.controller;
 import com.barrier.riskengine.risk.registry.controller.dto.UpsertRiskRuleRegistryRequest;
 import com.barrier.riskengine.risk.registry.controller.dto.RiskRuleRegistryEntryResponse;
 
+import com.barrier.riskengine.policy.RegistryPolicyState;
 import com.barrier.riskengine.risk.registry.domain.RiskRuleCriticality;
 import com.barrier.riskengine.risk.registry.service.RiskRuleRegistryService;
 import java.util.List;
@@ -37,6 +38,21 @@ public class RiskRuleRegistryController {
   @GetMapping
   public ResponseEntity<List<RiskRuleRegistryEntryResponse>> findAll() {
     return ResponseEntity.ok(service.findAll().stream().map(RiskRuleRegistryEntryResponse::of).toList());
+  }
+
+  /**
+   * Linha do tempo de uma regra: cada alteração, com autoria, da mais recente para a mais antiga.
+   *
+   * <p>Responde "quem desligou esta regra, e quando" — que a trilha da avaliação não conta. Uma
+   * regra desligada por uma semana e religada aparece em {@code evaluated_json} como suprimida, sem
+   * nome nem data.
+   *
+   * <p>⚠️ A lista termina na primeira alteração <b>registrada</b>: o estado anterior a ela é o da
+   * semente da migration e não foi gravado, porque a V033 guarda o estado novo de cada mudança.
+   */
+  @GetMapping("/{ruleCode}/history")
+  public ResponseEntity<List<RegistryPolicyState>> history(@PathVariable String ruleCode) {
+    return ResponseEntity.ok(service.history(ruleCode));
   }
 
   @PutMapping("/{ruleCode}")

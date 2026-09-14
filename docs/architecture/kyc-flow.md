@@ -25,7 +25,7 @@ flowchart TD
       A["POST /v1/assessments<br/>Authorization: Bearer brr_..."]
       P1["PUT /v1/subjects/{doc}/profile<br/>cadastro CMN 4.753"]
       P2["POST .../verifications/PHONE/challenge<br/>+ /confirm (OTP)"]
-      P3["documentoscopia + biometria 🔌<br/>(endpoint ainda não existe)"]
+      P3["POST .../assurance/document<br/>+ /assurance/biometric"]
     end
 
     A --> B["202 Accepted<br/>status: EM_ANALISE"]
@@ -201,14 +201,22 @@ Campos verificáveis: `PHONE`, `EMAIL`, `BIRTH_DATE`, `ADDRESS` (este último ai
 
 ---
 
-## 6. Documentoscopia e biometria 🔌
+## 6. Documentoscopia e biometria ✅
 
-Código escrito, testado e **não ligado**: nenhum endpoint existe e o `AssessmentProcessor` não
-preenche o `AssuranceSummary`, então hoje a regra de risco sempre devolve "não aplicável".
+Ligado: `AssuranceController` expõe `POST .../assurance/document` e `POST .../assurance/biometric`,
+e o `AssessmentProcessor` preenche o `AssuranceSummary` (documento + biometria + contagem de
+tentativas) que alimenta a `IdentityAssuranceRiskRule`. O cruzamento documento × cadastro também
+existe: nascimento extraído do documento é comparado contra o `SubjectProfile`
+(`FieldVerificationService.recordBirthDateFromDocument`), e nascimento/nome divergentes viram
+`AssuranceCheck.divergences()`.
 
 O que existe: contrato (`DocumentVerificationProvider`, `BiometricVerificationProvider`), stubs que
 escolhem desfecho pela referência de captura, persistência do resultado (V035), guard que barra
 provedor simulado em produção, e a `IdentityAssuranceRiskRule`.
+
+O que falta de fato: **provedor real contratado** — em produção,
+`UnavailableDocumentVerificationProvider`/`UnavailableBiometricVerificationProvider` sempre
+devolvem `UNAVAILABLE`.
 
 **Decisão central ([ADR-0016](../adr/0016-plataforma-completa-modelo-b.md)): guarda o resultado,
 nunca a imagem.** Sem foto, selfie ou template biométrico — base biométrica vazada não se revoga.
@@ -228,9 +236,7 @@ O registro é:
 }
 ```
 
-Falta para ligar: adapter de provedor real, endpoints de submissão, extração de campos do documento
-(o cruzamento documento × cadastro não existe) e o preenchimento do `AssuranceSummary` no
-processador.
+Falta para ligar de verdade: só o adapter de provedor real (documentoscopia/biometria contratados).
 
 ---
 

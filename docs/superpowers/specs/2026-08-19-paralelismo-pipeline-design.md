@@ -1,5 +1,9 @@
 # Paralelismo do pipeline: processamento de avaliações e entrega de webhook
 
+> ⚠️ **Encerrado em 2026-09-13.** Este desenho já está em produção — ver `CLAUDE.md` (seção
+> "Paralelismo do pipeline") e o [backlog de produto](../../product/backlog.md) para o estado
+> atual.
+
 - **Data:** 2026-08-19
 - **Origem:** item P2 do [plano-auditoria-2026-08-18.md](../../implementation/archive/plano-auditoria-2026-08-18.md)
   ("Paralelizar os três loops sequenciais"), confirmado por medição própria.

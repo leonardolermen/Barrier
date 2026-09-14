@@ -15,6 +15,9 @@ import java.util.List;
  *     que passaram e as suprimidas pelo registry — é o que permite provar que um controle rodou
  *     (ver {@link EvaluatedRule})
  * @param engineVersion versão do conjunto de regras que produziu a decisão (auditoria)
+ * @param policyVersion versão da política custom do tenant que contribuiu regras a esta decisão;
+ *     {@code null} quando o tenant não tem política ativa — segundo eixo de versão, ao lado de
+ *     {@code engineVersion}
  */
 public record RiskDecision(
     RiskLevel level,
@@ -22,21 +25,25 @@ public record RiskDecision(
     int totalScore,
     List<RiskResult> results,
     List<EvaluatedRule> evaluated,
-    String engineVersion) {
+    String engineVersion,
+    Integer policyVersion) {
 
   public RiskDecision {
     results = List.copyOf(results);
     evaluated = evaluated == null ? List.of() : List.copyOf(evaluated);
   }
 
-  /** Decisão sem a trilha completa de regras — usado por testes e por decisões históricas. */
+  /**
+   * Decisão sem a trilha completa de regras e sem política custom — usado por testes e por
+   * decisões históricas (anteriores à política custom, que por isso não a carregam).
+   */
   public RiskDecision(
       RiskLevel level,
       RiskRecommendation recommendation,
       int totalScore,
       List<RiskResult> results,
       String engineVersion) {
-    this(level, recommendation, totalScore, results, List.of(), engineVersion);
+    this(level, recommendation, totalScore, results, List.of(), engineVersion, null);
   }
 
   /** Explicações legíveis (código, pontos e motivo de cada regra que disparou). */

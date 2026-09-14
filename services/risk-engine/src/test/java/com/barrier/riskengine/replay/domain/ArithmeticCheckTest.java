@@ -35,6 +35,7 @@ class ArithmeticCheckTest {
         null,
         null,
         "barrier-risk-rules/1.8.0",
+        null,
         Instant.now());
   }
 

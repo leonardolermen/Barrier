@@ -53,6 +53,7 @@ class DocumentFieldExtractionTest {
 
   private static final UUID SUBJECT = UUID.randomUUID();
   private static final String TENANT = "t1";
+  private static final Instant QUANDO = Instant.parse("2026-01-01T00:00:00Z");
 
   private final DocumentVerificationProvider documentProvider =
       Mockito.mock(DocumentVerificationProvider.class);
@@ -137,7 +138,14 @@ class DocumentFieldExtractionTest {
 
   private static RiskContext contexto(AssuranceCheck documentCheck) {
     return new RiskContext(
-        "a1", TENANT, null, null, null, null, new AssuranceSummary(documentCheck, null, 0));
+        "a1",
+        TENANT,
+        null,
+        null,
+        null,
+        null,
+        new AssuranceSummary(documentCheck, null, 0),
+        QUANDO);
   }
 
   /** 1. Nascimento extraído igual ao declarado -> vira FieldVerification method=DOCUMENT. */

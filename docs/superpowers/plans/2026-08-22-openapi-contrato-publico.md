@@ -1,5 +1,12 @@
 # OpenAPI — contrato público da API Implementation Plan
 
+> ⚠️ **Encerrado em 2026-09-13.** O contrato público já está em produção — springdoc 3.0.0 nos
+> dois serviços, grupos `parceiro`/`admin` (`OpenApiConfig`), `AdminApiKeyFilter`,
+> `OpenApiCoverageIntegrationTest` — ver `CLAUDE.md` (seção "Contrato público da API") e o
+> [backlog de produto](../../product/backlog.md) para o estado atual. Os 30 checkboxes abaixo
+> ficam **como registro histórico do plano**, não como pendência; não foram marcados um a um
+> nesta atualização.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Publicar o contrato OpenAPI dos dois serviços, com a superfície administrativa **fora** do documento público, e um teste reflexivo que falha quando uma rota de negócio nasce sem documentação.

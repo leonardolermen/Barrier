@@ -7,6 +7,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.barrier.riskengine.assessment.domain.assessment.Assessment;
+import com.barrier.riskengine.assessment.domain.assessment.AssessmentStatus;
 import com.barrier.riskengine.assessment.domain.documents.DocumentType;
 import com.barrier.riskengine.assurance.domain.AssuranceKind;
 import com.barrier.riskengine.assurance.service.AssuranceService;
@@ -69,15 +70,23 @@ class ReplayContextRebuilderTest {
     lenient().when(assurance.attempts(any(), eq(TENANT), eq(AssuranceKind.BIOMETRIC))).thenReturn(0L);
   }
 
+  /**
+   * {@code complete()} de propósito, não só {@code submit()}: {@code assessment.completedAt()}
+   * (usado pela lacuna de cadastro, ver {@link #cadastro_alterado_depois_da_decisao_e_lacuna})
+   * só existe depois de completar, e uma avaliação em análise nunca chega ao replay de verdade.
+   */
   private static Assessment avaliacao(DocumentType tipo) {
     String documento = tipo == DocumentType.CPF ? "52998224725" : "19131243000197";
-    return Assessment.submit(TENANT, UUID.randomUUID().toString(), tipo, documento, "Fulano");
+    Assessment assessment =
+        Assessment.submit(TENANT, UUID.randomUUID().toString(), tipo, documento, "Fulano");
+    assessment.complete(RiskLevel.LOW, AssessmentStatus.APROVADO, "decisão", List.of());
+    return assessment;
   }
 
   private RiskScore score(UUID identity, UUID screening) {
     return new RiskScore(
         UUID.randomUUID(), "aid", RiskLevel.LOW, 0, RiskRecommendation.APPROVE,
-        List.of(), List.of(), identity, screening, "barrier-risk-rules/1.7.0", DECIDIDA_EM);
+        List.of(), List.of(), identity, screening, "barrier-risk-rules/1.7.0", null, DECIDIDA_EM);
   }
 
   private static SubjectProfile perfilAtualizadoEm(UUID subjectId, Instant quando) {
@@ -116,7 +125,9 @@ class ReplayContextRebuilderTest {
     Assessment assessment = avaliacao(DocumentType.CPF);
     UUID subjectId = UUID.fromString(assessment.subjectId());
     when(profiles.findDeclared(subjectId, TENANT))
-        .thenReturn(Optional.of(perfilAtualizadoEm(subjectId, DECIDIDA_EM.minus(Duration.ofDays(3)))));
+        .thenReturn(
+            Optional.of(
+                perfilAtualizadoEm(subjectId, assessment.completedAt().minus(Duration.ofDays(3)))));
 
     RebuiltContext rebuilt = rebuilder.rebuild(assessment, score(identityId, screeningId));
 
@@ -128,12 +139,42 @@ class ReplayContextRebuilderTest {
     Assessment assessment = avaliacao(DocumentType.CPF);
     UUID subjectId = UUID.fromString(assessment.subjectId());
     when(profiles.findDeclared(subjectId, TENANT))
-        .thenReturn(Optional.of(perfilAtualizadoEm(subjectId, DECIDIDA_EM.plus(Duration.ofDays(1)))));
+        .thenReturn(
+            Optional.of(
+                perfilAtualizadoEm(subjectId, assessment.completedAt().plus(Duration.ofDays(1)))));
 
     RebuiltContext rebuilt = rebuilder.rebuild(assessment, score(identityId, screeningId));
 
     assertThat(rebuilt.unreliable()).contains(ContextInput.PROFILE);
     assertThat(rebuilt.gaps()).extracting(ReconstructionGap::kind).contains(GapKind.PROFILE_CHANGED_SINCE);
+  }
+
+  /**
+   * Composição com a correção de {@code RiskScore.from} (FIX 3 da revisão final): {@code
+   * score.scoredAt()} passou a ser o {@code referenceInstant} -- capturado <b>antes</b> dos
+   * round-trips de bureau --, e o enriquecimento de cadastro que a própria avaliação faz
+   * (persistido entre a captura do instante e a leitura do perfil, ver {@code
+   * AssessmentProcessor.complete}) sempre grava {@code updated_at} depois dele. Se esta lacuna
+   * comparasse contra {@code score.scoredAt()} em vez de {@code assessment.completedAt()}, o
+   * enriquecimento desta mesma avaliação apareceria como "cadastro mudou depois da decisão" --
+   * exatamente o defeito que quebrou {@code DecisionReplayIntegrationTest} ao corrigir o FIX 3.
+   */
+  @Test
+  void enriquecimento_da_propria_avaliacao_entre_o_reference_instant_e_completed_at_nao_e_lacuna() {
+    Assessment assessment = avaliacao(DocumentType.CPF);
+    UUID subjectId = UUID.fromString(assessment.subjectId());
+    Instant duranteOProcessamentoDestaAvaliacao = DECIDIDA_EM.plus(Duration.ofMillis(50));
+    when(profiles.findDeclared(subjectId, TENANT))
+        .thenReturn(
+            Optional.of(perfilAtualizadoEm(subjectId, duranteOProcessamentoDestaAvaliacao)));
+
+    RebuiltContext rebuilt =
+        rebuilder.rebuild(assessment, score(identityId, screeningId)); // scoredAt = DECIDIDA_EM
+
+    assertThat(rebuilt.unreliable()).doesNotContain(ContextInput.PROFILE);
+    assertThat(rebuilt.gaps())
+        .extracting(ReconstructionGap::kind)
+        .doesNotContain(GapKind.PROFILE_CHANGED_SINCE);
   }
 
   @Test

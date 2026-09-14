@@ -64,7 +64,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 
 - Risk Engine: <http://localhost:8080/actuator/health>
   - `POST /v1/assessments` (202, aceita `Idempotency-Key`) · `GET /v1/assessments/{id}` · `POST /v1/assessments/{id}/decision` (EDD)
-  - `GET /v1/subjects/{document}` · `PUT /v1/subjects/{document}/profile` (cadastro CMN 4.753) · `POST`/`GET /v1/subjects/{document}/history` (histórico interno)
+  - `GET /v1/subjects/{document}` · `PUT /v1/subjects/{document}/profile` (cadastro CMN 4.753) · `POST /v1/behavior-events` (ingestão comportamental — `POST`/`GET /v1/subjects/{document}/history` indisponível em `main`, depende de branch não integrada)
   - `PUT`/`GET /v1/tenants/{tenantId}/risk-config` (override de regra por parceiro) · `PUT`/`GET /v1/risk-rules` (liga/desliga regra sem deploy)
   - toda chamada de negócio exige **`Authorization: Bearer <api-key>`**; em dev a chave é emitida
     na subida e impressa no log (`API key de DESENVOLVIMENTO emitida...`). Em produção sai por
@@ -96,7 +96,7 @@ WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api 
 
 🏗️ **Fluxo ponta a ponta funcionando**, com CI, container e 5 réplicas provadas em `kind`.
 Fases 0–8 da Risk Engine concluídas + Webhook API + monitoramento contínuo + contrato OpenAPI
-público + replay de decisão (793 testes verdes). **Ainda não pode ir para produção** — falta cota por tenant, criptografia em repouso,
+público + replay de decisão e política versionada (808 testes verdes). **Ainda não pode ir para produção** — falta cota por tenant, criptografia em repouso,
 retenção, fonte de QSA para o KYB e as quatro integrações que nunca foram exercitadas ao vivo.
 Tudo rastreado, com critério de pronto, no [backlog de produto](docs/product/backlog.md).
 
@@ -139,9 +139,8 @@ Para o fluxo completo com payloads de cada etapa, e o que está ligado vs. só e
   por lease no processamento, transação por avaliação e estado de falha explícito.
 
 **Próximo (ver [backlog de produto](docs/product/backlog.md#sequência-recomendada)):**
-replay de decisão e política versionada com vigência e autoria — os dados já são gravados e
-`config_history` não tem nenhum caminho de leitura; depois cota e rate limit por tenant (vencido: a
-paralelização foi feita antes dele), listagem paginada, guia público e sandbox exposto. Criptografia
-em repouso e retenção vêm logo atrás, e são o que bloqueia o questionário de segurança de qualquer
-comprador. Posicionamento vigente em
+cota e rate limit por tenant — vencido: a paralelização foi feita antes dele, e ela bloqueia o
+re-KYC periódico e a ingestão em massa. Depois, listagem paginada, guia público e sandbox exposto.
+Criptografia em repouso e retenção vêm logo atrás, e são o que bloqueia o questionário de segurança
+de qualquer comprador. Posicionamento vigente em
 [ADR-0020](docs/adr/0020-posicionamento-motor-de-decisao-api-first.md).

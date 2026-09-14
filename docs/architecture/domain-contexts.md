@@ -15,7 +15,7 @@ o esqueleto de camadas clássicas descrito na [visão geral](overview.md).
 | **Rule Registry**    | Liga/desliga regra e define vigência sem deploy (kill switch global) | ✅ módulo |
 | **Tenant Risk Config** | Override de parâmetro de regra por parceiro (não regra fixa/regulatória) | ✅ módulo |
 | **Webhook Delivery** | Entrega assíncrona do resultado com HMAC, retry, idempotência   | ✅ deployable `webhook-api`              |
-| **Case Management**  | Revisão manual (EDD) via `POST /v1/assessments/{id}/decision` + módulo `mesa`: filas nomeadas, ações append-only e SLA pausável (V043) | 🟡 domínio pronto; **API fora do filtro de auth** e sem UI |
+| **Case Management**  | Revisão manual (EDD) via `POST /v1/assessments/{id}/decision` + módulo `mesa`: filas nomeadas, ações append-only e SLA pausável (V043) | 🟡 domínio pronto e coberto pelo filtro de auth (`ApiRoutes` denylist); sem UI |
 | **Audit & Compliance** | Trilha imutável, retenção, evidência                           | ⏳ fase 2                                |
 
 ## Fase 2 (evolução — plataforma completa / system of record)
@@ -26,7 +26,7 @@ o esqueleto de camadas clássicas descrito na [visão geral](overview.md).
 | **Ongoing Monitoring**  | Rescreening pelo delta da importação + re-KYC periódico por faixa de risco ([ADR-0019](../adr/0019-politica-de-reavaliacao.md)) | ✅ módulo `rescreening`; monitoramento **transacional** segue aberto (o módulo `behavior` só ingere o fato, nenhuma regra o lê) |
 | **Risk State**          | Projeção viva do risco corrente por (subject, tenant) + evento de mudança de nível | ✅ módulo `riskstate` (V041) |
 | **Pipeline Monitoring** | Alertas com baseline móvel de 7 dias sobre backlog, volume e taxas | ✅ módulo `monitoring`; canal PagerDuty **nunca exercitado ao vivo** |
-| **Behavior Ingestion**  | Acervo append-only de fato comportamental do parceiro | 🟡 módulo `behavior` (V044): ingestão pronta, **API fora do filtro de auth**, zero regras consumindo |
+| **Behavior Ingestion**  | Acervo append-only de fato comportamental do parceiro | 🟡 módulo `behavior` (V044): ingestão pronta e coberta pelo filtro de auth, zero regras consumindo |
 | **Identity Assurance**  | Documentoscopia e biometria com prova de vida — guarda o **resultado**, nunca a imagem ([ADR-0016](../adr/0016-plataforma-completa-modelo-b.md)) | 🟡 ligado ao pipeline (`AssuranceSummary` no `RiskContext`, gate documentoscopia→biometria, reavaliação automática); em `prod` os providers devolvem sempre `UNAVAILABLE` — **nenhum provedor real contratado** |
 | **Encryption at Rest**  | KMS/envelope para dado pessoal; pré-requisito da captura         | ⏳ aberto |
 | **Regulatory Reporting**| Comunicação COAF/SISCOAF, relatórios ao BACEN                    | ⏳ aberto |
