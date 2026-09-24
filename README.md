@@ -58,9 +58,14 @@ Pré-requisitos: JDK 25 e Docker.
 docker compose up -d          # sobe Postgres, Kafka e Kafka UI
 ./mvnw verify                 # build + testes (unidade + arquitetura)
 ./mvnw -pl services/risk-engine spring-boot:run    # sobe a Risk Engine (8080)
-# webhook opcional: aponte o endpoint de destino e suba a Webhook API (8082)
-WEBHOOK_TARGET_URL=https://seu-endpoint/webhook ./mvnw -pl services/webhook-api spring-boot:run
+# webhook opcional: suba a Webhook API (8082) e registre o destino do tenant
+# (PUT /v1/webhook-endpoints/{tenantId}, header X-Admin-Key)
+./mvnw -pl services/webhook-api spring-boot:run
 ```
+
+**Build local:** a Webhook API depende de `com.barrier:webhook-delivery`, publicada no GitHub
+Packages. O Maven precisa de `~/.m2/settings.xml` com um `<server>` de id `github-webhook-delivery`
+cujo password é um PAT com escopo `read:packages`.
 
 - Risk Engine: <http://localhost:8080/actuator/health>
   - `POST /v1/assessments` (202, aceita `Idempotency-Key`) · `GET /v1/assessments/{id}` · `POST /v1/assessments/{id}/decision` (EDD)

@@ -112,7 +112,7 @@
                 }
               }
             },
-            "description": "Registra para onde o Barrier entrega o resultado deste tenant.\n\nPreencha `ngrokUrl` no environment com a URL HTTPS que o `ngrok start` imprimiu (ex.: `https://a1b2-c3.ngrok-free.app`), sem barra no final.\n\nSem este registro nao ha entrega: o webhook-api resolve o destino pelo tenantId do evento e, sem linha na tabela, apenas loga. `barrier.webhook.target-url` e fallback de dev e nem sobe em prod (GlobalTargetUrlReadinessGuard)."
+            "description": "Registra para onde o Barrier entrega o resultado deste tenant.\n\nPreencha `ngrokUrl` no environment com a URL HTTPS que o `ngrok start` imprimiu (ex.: `https://a1b2-c3.ngrok-free.app`), sem barra no final.\n\nSem este registro nao ha entrega: o webhook-api resolve o destino pelo tenantId do evento e, sem linha na tabela, apenas loga. Nao ha destino global."
           },
           "response": [],
           "event": [
@@ -224,7 +224,7 @@
                 "rotate-secret"
               ]
             },
-            "description": "Rotacao com sobreposicao: o segredo anterior continua valido por `barrier.webhook.secret-rotation-overlap` (24h). Rode o receptor com o segredo NOVO e observe que as entregas seguem validas."
+            "description": "Rotacao com sobreposicao: o segredo anterior continua valido por `webhook-delivery.secret-rotation-overlap` (24h). Rode o receptor com o segredo NOVO e observe que as entregas seguem validas."
           },
           "response": [],
           "event": [
