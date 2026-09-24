@@ -61,19 +61,25 @@ public class AssessmentCompletedListener {
     Map<String, Object> data = payload(envelope.payload());
     String tenantId = str(data.get("tenantId"));
     String subjectId = str(data.get("subjectId"));
+    // A construção do DeliveryRequest é o único trecho que pode lançar IllegalArgumentException
+    // (tenantId ausente): o catch fica restrito a ela. Antes envolvia também Correlation.run(...
+    // intake.accept(...)), e qualquer IllegalArgumentException vinda de DENTRO da lib — por
+    // exemplo de uma falha transitória que a lib decida sinalizar assim — virava DLT sem retry,
+    // quando deveria subir e ser retentada como qualquer outra falha do intake.
+    DeliveryRequest request = buildRequest(envelope, tenantId, subjectId);
+    Correlation.run(envelope.correlationId(), () -> intake.accept(request));
+  }
+
+  private DeliveryRequest buildRequest(EventEnvelope envelope, String tenantId, String subjectId) {
     try {
-      Correlation.run(
-          envelope.correlationId(),
-          () ->
-              intake.accept(
-                  new DeliveryRequest(
-                      tenantId,
-                      envelope.type(),
-                      envelope.eventId(),
-                      envelope.assessmentId(),
-                      subjectId,
-                      envelope.payload(),
-                      envelope.correlationId())));
+      return new DeliveryRequest(
+          tenantId,
+          envelope.type(),
+          envelope.eventId(),
+          envelope.assessmentId(),
+          subjectId,
+          envelope.payload(),
+          envelope.correlationId());
     } catch (IllegalArgumentException e) {
       throw new MalformedEventException("Evento sem tenantId", e);
     }

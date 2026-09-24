@@ -191,27 +191,27 @@ public class DeliveryReconciliationJob {
         "Decisão {} (evento {}) não tinha entrega registrada; reprocessando",
         envelope.assessmentId(),
         envelope.eventId());
-    String tenantParaEntrega = tenantId;
-    String subjectParaEntrega = subjectId;
+    // Só a construção do DeliveryRequest (tenantId ausente) é capturada aqui — não o
+    // Correlation.run/intake.accept em volta, para não confundir uma IllegalArgumentException
+    // vinda de dentro da lib com "sem tenant" e desistir de uma reconciliação que devia repetir.
+    DeliveryRequest request;
     try {
-      Correlation.run(
-          envelope.correlationId(),
-          () ->
-              intake.accept(
-                  new DeliveryRequest(
-                      tenantParaEntrega,
-                      envelope.type(),
-                      envelope.eventId(),
-                      envelope.assessmentId(),
-                      subjectParaEntrega,
-                      envelope.payload(),
-                      envelope.correlationId())));
+      request =
+          new DeliveryRequest(
+              tenantId,
+              envelope.type(),
+              envelope.eventId(),
+              envelope.assessmentId(),
+              subjectId,
+              envelope.payload(),
+              envelope.correlationId());
     } catch (IllegalArgumentException e) {
       // Sem tenant não há para onde entregar; a reconciliação não é o lugar de inventar destino.
       log.warn(
           "Decisão {} (evento {}) sem tenantId; não é possível reconciliar", envelope.assessmentId(), envelope.eventId());
       return false;
     }
+    Correlation.run(envelope.correlationId(), () -> intake.accept(request));
     return true;
   }
 }

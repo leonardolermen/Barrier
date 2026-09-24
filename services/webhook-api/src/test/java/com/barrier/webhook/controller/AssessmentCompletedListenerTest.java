@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import com.barrier.commons.event.EventEnvelope;
 import com.barrier.webhookdelivery.intake.DeliveryIntake;
 import com.barrier.webhookdelivery.intake.DeliveryRequest;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,11 +40,27 @@ class AssessmentCompletedListenerTest {
 
   @Test
   void entregaEventoValidoComOTenantDoPayload() {
-    listener().onMessage(mensagem());
+    String payload = "{\"status\":\"APROVADO\",\"tenantId\":\"acme\",\"subjectId\":\"sub-1\"}";
+    EventEnvelope envelope =
+        new EventEnvelope(
+            java.util.UUID.randomUUID(),
+            "barrier.assessment.completed",
+            "aid",
+            Instant.now(),
+            1,
+            payload,
+            "corr-1");
+
+    listener().onMessage(objectMapper.writeValueAsString(envelope));
 
     ArgumentCaptor<DeliveryRequest> captor = ArgumentCaptor.forClass(DeliveryRequest.class);
     verify(intake).accept(captor.capture());
-    assertThat(captor.getValue().tenantId()).isEqualTo("acme");
+    DeliveryRequest request = captor.getValue();
+    assertThat(request.tenantId()).isEqualTo("acme");
+    assertThat(request.eventType()).isEqualTo("barrier.assessment.completed");
+    assertThat(request.aggregateId()).isEqualTo("aid");
+    assertThat(request.partitionKey()).isEqualTo("sub-1");
+    assertThat(request.correlationId()).isEqualTo("corr-1");
   }
 
   /**
