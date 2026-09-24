@@ -23,6 +23,11 @@ spring:
     schemas: webhook
     default-schema: webhook
     locations: classpath:db/migration
+    placeholders:
+      # Segredo global antigo (barrier.webhook.secret lia WEBHOOK_SECRET): a V009 o grava nos
+      # endpoints de antes da V005, para o parceiro seguir verificando. Vazio = segredo aleatório.
+      # Colchetes porque chave de propriedade não aceita "_" e o nome do placeholder precisa bater.
+      "[legacy_webhook_secret]": ${WEBHOOK_SECRET:}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     listener:
@@ -86,6 +91,9 @@ logging:
 
 webhook-delivery:
   workers: ${WEBHOOK_WORKERS:3}
+  # 1s e nao 5s (default da lib): desde que o listener parou de entregar inline, este ciclo virou a
+  # latencia da PRIMEIRA tentativa, nao so a do retry. Com 5s, toda entrega esperaria ate 5 segundos.
+  retry-delay-ms: 1000
   headers:
     prefix: X-Barrier
   correlation-mdc-key: correlationId

@@ -20,16 +20,21 @@ ALTER TABLE webhook_delivery.webhook_endpoints ADD PRIMARY KEY (id);
 ALTER TABLE webhook_delivery.webhook_endpoints ADD COLUMN events TEXT[] NOT NULL DEFAULT '{*}';
 CREATE INDEX idx_webhook_endpoints_tenant_active ON webhook_delivery.webhook_endpoints (tenant_id, active);
 
--- Linhas de antes da V005 nunca tiveram segredo por tenant: assinavam com o segredo GLOBAL de dev
--- (barrier.webhook.secret), que nem migra — não é coluna, era config. Sem isto, a lib filtra
--- secret() == null em resolveSigningMaterial e toda entrega desses tenants nasce morta (DEAD) na
--- primeira tentativa, silenciosamente. O valor aqui é só para não deixar a coluna NOT NULL-em-uso
--- vazia: é operacionalmente o segredo global antigo que valia até aqui, então cada um desses
--- tenants PRECISA rotacionar (POST /v1/webhook-endpoints/{tenantId}/rotate-secret) para receber um
--- segredo próprio e reconfigurar o parceiro — o valor gerado abaixo nunca foi exposto a ninguém e
--- não deve ser tratado como o segredo "real" do tenant.
+-- Linhas de antes da V005 nunca tiveram segredo por tenant: assinavam com o segredo GLOBAL
+-- (barrier.webhook.secret, lido de WEBHOOK_SECRET), que não é coluna, era config — e a lib não tem
+-- fallback global. Sem isto, a lib filtra secret() == null em resolveSigningMaterial e toda entrega
+-- desses tenants nasce morta (DEAD) na primeira tentativa, silenciosamente.
+--
+-- Com o placeholder legacy_webhook_secret preenchido (spring.flyway.placeholders, lido do MESMO
+-- WEBHOOK_SECRET do deploy anterior), essas linhas herdam o segredo que o parceiro já verifica: nada
+-- quebra no deploy, e cada tenant rotaciona depois (POST /v1/webhook-endpoints/{tenantId}/rotate-secret)
+-- com a sobreposição normal de 24h. Sem ele, um segredo aleatório é gerado — nunca exposto a ninguém —
+-- e esses tenants deixam de verificar até receberem um segredo por rotação. Liste-os ANTES do deploy:
+--   SELECT tenant_id FROM webhook.webhook_endpoints WHERE secret IS NULL;
 UPDATE webhook_delivery.webhook_endpoints
-   SET secret = encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')
+   SET secret = COALESCE(
+         NULLIF('${legacy_webhook_secret}', ''),
+         encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex'))
  WHERE secret IS NULL;
 
 -- Entregas: aggregate_id, event_type e endpoint_id. As existentes são todas de assessment.completed
@@ -46,6 +51,8 @@ UPDATE webhook_delivery.deliveries d
 -- Entrega sem tenant ou de tenant sem endpoint (anteriores à V004): não há para onde entregar e
 -- nunca houve; recebem um id sintético para satisfazer o NOT NULL sem inventar destino.
 UPDATE webhook_delivery.deliveries SET endpoint_id = '00000000-0000-0000-0000-000000000000' WHERE endpoint_id IS NULL;
+-- 'desconhecido' não é tenant: essas linhas ficam DEAD logo abaixo e métrica/relatório por tenant
+-- deve excluí-las em vez de contá-las como um parceiro.
 UPDATE webhook_delivery.deliveries SET tenant_id = 'desconhecido' WHERE tenant_id IS NULL;
 -- Essas entregas não têm endpoint de verdade (o id sintético não existe em webhook_endpoints) e
 -- ninguém vai retomá-las: se ficassem PENDING/FAILED, claimDue tentaria assinar com um endpoint
