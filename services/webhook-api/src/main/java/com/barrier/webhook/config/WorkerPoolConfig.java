@@ -24,7 +24,7 @@ public class WorkerPoolConfig {
 
   @Bean
   public WorkerPoolReadinessGuard webhookWorkerPoolReadinessGuard(
-      DataSource dataSource, @Value("${barrier.webhook.workers:3}") int workers) {
-    return new WorkerPoolReadinessGuard(dataSource, "barrier.webhook.workers", workers, RESERVA);
+      DataSource dataSource, @Value("${webhook-delivery.workers:3}") int workers) {
+    return new WorkerPoolReadinessGuard(dataSource, "webhook-delivery.workers", workers, RESERVA);
   }
 }

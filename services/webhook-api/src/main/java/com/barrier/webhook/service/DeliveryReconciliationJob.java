@@ -3,7 +3,9 @@ package com.barrier.webhook.service;
 import com.barrier.commons.jobs.SingletonJobLock;
 import com.barrier.commons.event.EventEnvelope;
 import com.barrier.commons.observability.Correlation;
-import com.barrier.webhook.repository.DeliveryRepository;
+import com.barrier.webhookdelivery.intake.DeliveryIntake;
+import com.barrier.webhookdelivery.intake.DeliveryRequest;
+import com.barrier.webhookdelivery.repository.DeliveryRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -52,7 +54,7 @@ public class DeliveryReconciliationJob {
 
   private final ConsumerFactory<String, String> consumerFactory;
   private final DeliveryRepository repository;
-  private final WebhookDeliveryService deliveryService;
+  private final DeliveryIntake intake;
   private final ObjectMapper objectMapper;
   private final Duration window;
   private final SingletonJobLock jobLock;
@@ -60,13 +62,13 @@ public class DeliveryReconciliationJob {
   public DeliveryReconciliationJob(
       ConsumerFactory<String, String> consumerFactory,
       DeliveryRepository repository,
-      WebhookDeliveryService deliveryService,
+      DeliveryIntake intake,
       ObjectMapper objectMapper,
       SingletonJobLock jobLock,
       @Value("${barrier.webhook.reconciliation.window:PT6H}") Duration window) {
     this.consumerFactory = consumerFactory;
     this.repository = repository;
-    this.deliveryService = deliveryService;
+    this.intake = intake;
     this.objectMapper = objectMapper;
     this.jobLock = jobLock;
     this.window = window;
@@ -168,12 +170,15 @@ public class DeliveryReconciliationJob {
   private boolean recuperar(ConsumerRecord<String, String> record) {
     EventEnvelope envelope;
     String tenantId;
+    String subjectId;
     try {
       envelope = objectMapper.readValue(record.value(), EventEnvelope.class);
       @SuppressWarnings("unchecked")
       Map<String, Object> payload = objectMapper.readValue(envelope.payload(), Map.class);
       Object tenant = payload.get("tenantId");
       tenantId = tenant == null ? null : tenant.toString();
+      Object subject = payload.get("subjectId");
+      subjectId = subject == null ? null : subject.toString();
     } catch (RuntimeException e) {
       // Malformado continua malformado; já está registrado na DLT pelo consumo normal.
       log.warn("Evento ilegível ignorado na reconciliação (offset {})", record.offset());
@@ -186,7 +191,27 @@ public class DeliveryReconciliationJob {
         "Decisão {} (evento {}) não tinha entrega registrada; reprocessando",
         envelope.assessmentId(),
         envelope.eventId());
-    Correlation.run(envelope.correlationId(), () -> deliveryService.onEvent(envelope, tenantId));
+    String tenantParaEntrega = tenantId;
+    String subjectParaEntrega = subjectId;
+    try {
+      Correlation.run(
+          envelope.correlationId(),
+          () ->
+              intake.accept(
+                  new DeliveryRequest(
+                      tenantParaEntrega,
+                      envelope.type(),
+                      envelope.eventId(),
+                      envelope.assessmentId(),
+                      subjectParaEntrega,
+                      envelope.payload(),
+                      envelope.correlationId())));
+    } catch (IllegalArgumentException e) {
+      // Sem tenant não há para onde entregar; a reconciliação não é o lugar de inventar destino.
+      log.warn(
+          "Decisão {} (evento {}) sem tenantId; não é possível reconciliar", envelope.assessmentId(), envelope.eventId());
+      return false;
+    }
     return true;
   }
 }

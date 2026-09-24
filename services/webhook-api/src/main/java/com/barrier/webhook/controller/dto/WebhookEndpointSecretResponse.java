@@ -1,6 +1,6 @@
 package com.barrier.webhook.controller.dto;
 
-import com.barrier.webhook.domain.WebhookEndpoint;
+import com.barrier.webhookdelivery.domain.WebhookEndpoint;
 import java.time.Instant;
 
 /**

@@ -32,11 +32,17 @@ jobs:
           java-version: "25"
           distribution: corretto
           cache: maven
+          server-id: github-webhook-delivery
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
 
       # Roda unidade + integração (Testcontainers) + arquitetura. O runner do GitHub já tem
       # Docker, que é o que os 14 testes de integração precisam.
       - name: mvnw verify
         run: ./mvnw -B verify
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publicar contrato OpenAPI
         # Spec que so existe em runtime nao serve para integrar: o parceiro precisa do arquivo

@@ -84,6 +84,17 @@ logging:
     org.hibernate.orm.connections.pooling: WARN
     org.apache.kafka.common.config.AbstractConfig: WARN
 
+webhook-delivery:
+  workers: ${WEBHOOK_WORKERS:3}
+  headers:
+    prefix: X-Barrier
+  correlation-mdc-key: correlationId
+  flyway:
+    # O schema webhook_delivery já existe (V009 moveu as tabelas para lá); a lib baseia o próprio
+    # histórico Flyway em 1 em vez de tentar recriar do zero o que a V009 já criou.
+    baseline-on-migrate: true
+    baseline-version: "1"
+
 barrier:
   # Preenchido pelo Maven (resource filtering do spring-boot-starter-parent) a partir da
   # versão do POM — o banner lê daqui, então basta bumpar o POM para o banner acompanhar.
@@ -93,28 +104,6 @@ barrier:
     # inerte; em prod a aplicação não sobe sem ela (AdminApiKeyReadinessGuard).
     api-key: ${ADMIN_API_KEY:}
   webhook:
-    # Destino ÚNICO para todos os tenants — conveniência de desenvolvimento. O destino real é o
-    # registro por tenant (webhook_endpoints); em prod esta propriedade é proibida, porque com dois
-    # tenants ela entrega as decisões de um no endpoint do outro (GlobalTargetUrlReadinessGuard).
-    target-url: ${WEBHOOK_TARGET_URL:}
-    # Segredo GLOBAL — fallback de desenvolvimento, no mesmo desenho do target-url. O segredo real é
-    # por tenant (webhook_endpoints.secret): um segredo comum permite a um parceiro forjar o
-    # callback de KYC de outro.
-    secret: ${WEBHOOK_SECRET:dev-secret}
-    # Por quanto tempo o segredo anterior continua aceito depois de uma rotação. Durante a janela a
-    # entrega leva as duas assinaturas, e o parceiro troca a chave quando puder.
-    secret-rotation-overlap: PT24H
-    max-attempts: 5
-    base-backoff: 30s
-    # Teto de entregas simultaneas. Amarra dura: workers <= maximum-pool-size - 2 (folga para o
-    # listener e para os jobs). Com pool 5, o teto e 3. Subir sem subir o pool troca "entrega lenta"
-    # por "timeout ao obter conexao", e a mensagem de erro nao distingue os dois casos.
-    #
-    # A amarra e VERIFICADA na subida (WorkerPoolReadinessGuard), nao apenas documentada aqui.
-    workers: ${WEBHOOK_WORKERS:3}
-    # 1s e nao 5s: desde que o listener parou de entregar inline, este ciclo virou a latencia da
-    # PRIMEIRA tentativa, nao so a do retry. Com 5s, toda entrega esperaria ate 5 segundos.
-    retry-delay-ms: 1000
     consumer:
       # Retry do CONSUMO (não da entrega): falha transitória é retentada sem commitar o offset,
       # até no máximo retry-max-elapsed; depois o evento vai para a DLT e a reconciliação assume.

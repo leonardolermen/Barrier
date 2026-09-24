@@ -2,7 +2,8 @@ package com.barrier.webhook.controller;
 
 import com.barrier.commons.event.EventEnvelope;
 import com.barrier.commons.observability.Correlation;
-import com.barrier.webhook.service.WebhookDeliveryService;
+import com.barrier.webhookdelivery.intake.DeliveryIntake;
+import com.barrier.webhookdelivery.intake.DeliveryRequest;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +12,9 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Consome {@code barrier.assessment.completed} e aciona a entrega do webhook.
+ * Consome {@code barrier.assessment.completed} e aciona a entrega do webhook via {@link
+ * DeliveryIntake} — a máquina de entrega (HMAC, retry, idempotência) saiu para a biblioteca
+ * {@code com.barrier:webhook-delivery}, e este listener virou só tradução de evento para pedido.
  *
  * <p>Antes este método capturava <b>toda</b> {@code RuntimeException} e retornava normalmente, o
  * que commitava o offset: com o banco fora do ar por trinta segundos, cada decisão de KYC que
@@ -24,6 +27,10 @@ import tools.jackson.databind.ObjectMapper;
  * <b>sem commitar</b>. Esgotadas as tentativas, o evento também vai para a DLT — ficar preso na
  * partição pararia a entrega de todos os outros tenants —, e aí é a reconciliação
  * ({@code DeliveryReconciliationJob}) que fecha a lacuna.
+ *
+ * <p>{@link DeliveryRequest} exige {@code tenantId} não nulo/vazio e lança {@link
+ * IllegalArgumentException} quando falta — evento sem tenant no payload não tem conserto e segue
+ * o mesmo caminho de um evento malformado, para a DLT.
  */
 @Component
 public class AssessmentCompletedListener {
@@ -40,20 +47,36 @@ public class AssessmentCompletedListener {
 
   private static final Logger log = LoggerFactory.getLogger(AssessmentCompletedListener.class);
 
-  private final WebhookDeliveryService service;
+  private final DeliveryIntake intake;
   private final ObjectMapper objectMapper;
 
-  public AssessmentCompletedListener(WebhookDeliveryService service, ObjectMapper objectMapper) {
-    this.service = service;
+  public AssessmentCompletedListener(DeliveryIntake intake, ObjectMapper objectMapper) {
+    this.intake = intake;
     this.objectMapper = objectMapper;
   }
 
   @KafkaListener(topics = {TOPIC, RISK_LEVEL_TOPIC}, groupId = "${spring.kafka.consumer.group-id}")
   public void onMessage(String message) {
     EventEnvelope envelope = parse(message);
-    String tenantId = extractTenantId(envelope.payload());
-    // Fecha o fio: o mesmo id que saiu do POST no risk-engine aparece no log da entrega.
-    Correlation.run(envelope.correlationId(), () -> service.onEvent(envelope, tenantId));
+    Map<String, Object> data = payload(envelope.payload());
+    String tenantId = str(data.get("tenantId"));
+    String subjectId = str(data.get("subjectId"));
+    try {
+      Correlation.run(
+          envelope.correlationId(),
+          () ->
+              intake.accept(
+                  new DeliveryRequest(
+                      tenantId,
+                      envelope.type(),
+                      envelope.eventId(),
+                      envelope.assessmentId(),
+                      subjectId,
+                      envelope.payload(),
+                      envelope.correlationId())));
+    } catch (IllegalArgumentException e) {
+      throw new MalformedEventException("Evento sem tenantId", e);
+    }
   }
 
   private EventEnvelope parse(String message) {
@@ -65,14 +88,17 @@ public class AssessmentCompletedListener {
     }
   }
 
-  private String extractTenantId(String payload) {
+  private Map<String, Object> payload(String payload) {
     try {
       @SuppressWarnings("unchecked")
       Map<String, Object> data = objectMapper.readValue(payload, Map.class);
-      Object tenantId = data.get("tenantId");
-      return tenantId == null ? null : tenantId.toString();
+      return data;
     } catch (RuntimeException e) {
       throw new MalformedEventException("Payload do evento ilegível", e);
     }
+  }
+
+  private static String str(Object o) {
+    return o == null ? null : o.toString();
   }
 }
