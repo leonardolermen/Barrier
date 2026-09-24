@@ -132,12 +132,12 @@ dono por estado de falha, com proibições explícitas (o reconciliador não rep
 retry não relê o tópico; `FALHA_PROCESSAMENTO` e `UNAVAILABLE` de bureau não são re-enfileirados
 por ninguém). Mecanismo novo de recuperação atualiza aquela tabela.
 
-Endpoint de webhook por tenant: o destino sai de `webhook_endpoints` (V004), resolvido pelo
-`tenantId` **do evento** (`WebhookEndpointService.resolveTargetUrl`). Sem registro, não entrega —
-e loga; endpoint desativado (`active=false`) também não cai no destino global.
-`barrier.webhook.target-url` continua existindo só como fallback de dev: em `prod` a aplicação não
-sobe com ele definido (`GlobalTargetUrlReadinessGuard`), porque é um destino único para todos os
-tenants. Registro por `PUT/GET/DELETE /v1/webhook-endpoints/{tenantId}`, protegido por `X-Admin-Key`
+Endpoint de webhook por tenant: a máquina de entrega (endpoints, entregas, assinatura, retry) é a
+lib `com.barrier:webhook-delivery`, dona do schema `webhook_delivery` e do próprio histórico Flyway;
+a V009 moveu `webhook_endpoints` (criada na V004) e `deliveries` para lá, e o Flyway do serviço roda
+antes do da lib. O destino é resolvido pelo `tenantId` **do evento**; sem registro, não entrega.
+Não há mais destino nem segredo globais (`barrier.webhook.target-url`/`secret` e os guards
+`GlobalTargetUrlReadinessGuard`/`WebhookSecretReadinessGuard` saíram com a extração). Registro por `PUT/GET/DELETE /v1/webhook-endpoints/{tenantId}`, protegido por `X-Admin-Key`
 (`AdminApiKeyFilter` do pacote `webhook.web` — cópia deliberada do filtro da risk-engine; serviços
 separados, e mover para o `commons` arrastaria dependência de web). URL validada no domínio: http(s)
 absoluto e TLS obrigatório fora de host local.
@@ -145,9 +145,10 @@ absoluto e TLS obrigatório fora de host local.
 Segredo HMAC por tenant (V005): cada registro nasce com segredo próprio (`SecureRandom`, 32 bytes),
 devolvido **uma vez** no `PUT` e no `POST /v1/webhook-endpoints/{tenantId}/rotate-secret` — o
 `GET`/lista só mostram `secretConfigured`. Atualizar a URL preserva o segredo; rotação mantém o
-anterior válido por `barrier.webhook.secret-rotation-overlap` (24h) e, durante a janela, a entrega
-leva duas assinaturas (`X-Barrier-Signature` + `X-Barrier-Signature-Previous`). `barrier.webhook.secret`
-global vira fallback de dev. O segredo fica em texto na coluna (assinar exige o valor) — criptografia
+anterior válido por `webhook-delivery.secret-rotation-overlap` (24h, default da lib) e, durante a
+janela, a entrega leva duas assinaturas (`X-Barrier-Signature` + `X-Barrier-Signature-Previous`).
+Endpoints de antes da V005 recebem na V009 o antigo segredo global (`WEBHOOK_SECRET`, via placeholder
+Flyway `legacy_webhook_secret`) e rotacionam depois. O segredo fica em texto na coluna (assinar exige o valor) — criptografia
 em repouso é Fase 6.
 
 Fase B (mapeada, parcial): KYB de 1º grau já ativo (ver acima); pendentes: monitoramento

@@ -51,6 +51,11 @@
             <artifactId>commons</artifactId>
             <version>0.1.0-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>com.barrier</groupId>
+            <artifactId>webhook-delivery</artifactId>
+            <version>0.1.1</version>
+        </dependency>
 
         <!-- contrato da API -->
         <dependency>

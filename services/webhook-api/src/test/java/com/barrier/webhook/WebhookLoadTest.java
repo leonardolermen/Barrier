@@ -3,6 +3,7 @@ package com.barrier.webhook;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.barrier.commons.event.EventEnvelope;
+import com.barrier.webhookdelivery.service.WebhookEndpointService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -105,10 +106,6 @@ class WebhookLoadTest {
   @DynamicPropertySource
   static void props(DynamicPropertyRegistry registry) {
     createTopic();
-    registry.add(
-        "barrier.webhook.target-url",
-        () -> "http://localhost:" + SINK.getAddress().getPort() + "/webhook");
-    registry.add("barrier.webhook.secret", () -> "load-secret");
     registry.add("spring.kafka.listener.concurrency", () -> CONCURRENCY);
   }
 
@@ -133,9 +130,15 @@ class WebhookLoadTest {
   @Autowired KafkaTemplate<String, String> kafka;
   @Autowired JdbcTemplate jdbc;
   @Autowired ObjectMapper objectMapper;
+  @Autowired WebhookEndpointService endpointService;
 
   @Test
   void vazaoDeEntregaSobCarga() {
+    // Sem destino global de dev na lib, o tenant "default" precisa de um endpoint registrado —
+    // mesmo caminho que o WebhookEndpointController usa (registerSingle).
+    endpointService.registerSingle(
+        "default", "http://localhost:" + SINK.getAddress().getPort() + "/webhook");
+
     Map<String, Long> published = new ConcurrentHashMap<>(EVENTS);
 
     long start = System.nanoTime();
@@ -171,9 +174,10 @@ class WebhookLoadTest {
     double wallSeconds = (end - start) / 1e9;
     Integer delivered =
         jdbc.queryForObject(
-            "select count(*) from webhook.deliveries where status = 'DELIVERED'", Integer.class);
+            "select count(*) from webhook_delivery.deliveries where status = 'DELIVERED'",
+            Integer.class);
     Integer rows =
-        jdbc.queryForObject("select count(*) from webhook.deliveries", Integer.class);
+        jdbc.queryForObject("select count(*) from webhook_delivery.deliveries", Integer.class);
 
     System.out.printf(
         // Sem acento: o console do build nem sempre esta em UTF-8, e relatorio ilegivel nao serve.

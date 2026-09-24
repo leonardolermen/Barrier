@@ -1,15 +1,18 @@
 package com.barrier.webhook.controller;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 import com.barrier.commons.event.EventEnvelope;
-import com.barrier.webhook.service.WebhookDeliveryService;
+import com.barrier.webhookdelivery.intake.DeliveryIntake;
+import com.barrier.webhookdelivery.intake.DeliveryRequest;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.ObjectMapper;
@@ -17,12 +20,12 @@ import tools.jackson.databind.ObjectMapper;
 @ExtendWith(MockitoExtension.class)
 class AssessmentCompletedListenerTest {
 
-  @Mock WebhookDeliveryService service;
+  @Mock DeliveryIntake intake;
 
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   private AssessmentCompletedListener listener() {
-    return new AssessmentCompletedListener(service, objectMapper);
+    return new AssessmentCompletedListener(intake, objectMapper);
   }
 
   private String mensagem() {
@@ -37,9 +40,27 @@ class AssessmentCompletedListenerTest {
 
   @Test
   void entregaEventoValidoComOTenantDoPayload() {
-    listener().onMessage(mensagem());
+    String payload = "{\"status\":\"APROVADO\",\"tenantId\":\"acme\",\"subjectId\":\"sub-1\"}";
+    EventEnvelope envelope =
+        new EventEnvelope(
+            java.util.UUID.randomUUID(),
+            "barrier.assessment.completed",
+            "aid",
+            Instant.now(),
+            1,
+            payload,
+            "corr-1");
 
-    verify(service).onEvent(any(EventEnvelope.class), org.mockito.ArgumentMatchers.eq("acme"));
+    listener().onMessage(objectMapper.writeValueAsString(envelope));
+
+    ArgumentCaptor<DeliveryRequest> captor = ArgumentCaptor.forClass(DeliveryRequest.class);
+    verify(intake).accept(captor.capture());
+    DeliveryRequest request = captor.getValue();
+    assertThat(request.tenantId()).isEqualTo("acme");
+    assertThat(request.eventType()).isEqualTo("barrier.assessment.completed");
+    assertThat(request.aggregateId()).isEqualTo("aid");
+    assertThat(request.partitionKey()).isEqualTo("sub-1");
+    assertThat(request.correlationId()).isEqualTo("corr-1");
   }
 
   /**
@@ -48,9 +69,7 @@ class AssessmentCompletedListenerTest {
    */
   @Test
   void falhaTransitoriaSobeParaNaoCommitarOOffset() {
-    doThrow(new IllegalStateException("banco fora do ar"))
-        .when(service)
-        .onEvent(any(EventEnvelope.class), any());
+    doThrow(new IllegalStateException("banco fora do ar")).when(intake).accept(any());
 
     assertThatThrownBy(() -> listener().onMessage(mensagem()))
         .isInstanceOf(IllegalStateException.class)
@@ -73,14 +92,17 @@ class AssessmentCompletedListenerTest {
         .isInstanceOf(MalformedEventException.class);
   }
 
-  /** Evento sem tenantId no payload não é malformado — segue e a resolução de destino decide. */
+  /**
+   * Evento sem tenantId no payload: {@code DeliveryRequest} exige tenantId e lança {@code
+   * IllegalArgumentException} — o listener a traduz para {@link MalformedEventException}, porque
+   * não há conserto possível (a lib não tem para onde entregar sem tenant).
+   */
   @Test
-  void payloadSemTenantSegue() {
+  void payloadSemTenantViraMalformedEventException() {
     EventEnvelope envelope =
         EventEnvelope.of("barrier.assessment.completed", "aid", 1, "{\"status\":\"APROVADO\"}");
 
-    assertThatCode(() -> listener().onMessage(objectMapper.writeValueAsString(envelope)))
-        .doesNotThrowAnyException();
-    verify(service).onEvent(any(EventEnvelope.class), org.mockito.ArgumentMatchers.isNull());
+    assertThatThrownBy(() -> listener().onMessage(objectMapper.writeValueAsString(envelope)))
+        .isInstanceOf(MalformedEventException.class);
   }
 }

@@ -24,6 +24,13 @@
         <module>services/webhook-api</module>
     </modules>
 
+    <repositories>
+        <repository>
+            <id>github-webhook-delivery</id>
+            <url>https://maven.pkg.github.com/leonardolermen/webhook-delivery</url>
+        </repository>
+    </repositories>
+
     <properties>
         <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

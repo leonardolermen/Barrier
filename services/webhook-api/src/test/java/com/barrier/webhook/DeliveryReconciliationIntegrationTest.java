@@ -3,20 +3,20 @@ package com.barrier.webhook;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.barrier.commons.event.EventEnvelope;
-import com.barrier.webhook.repository.DeliveryRepository;
 import com.barrier.webhook.service.DeliveryReconciliationJob;
+import com.barrier.webhookdelivery.repository.DeliveryRepository;
+import com.barrier.webhookdelivery.service.WebhookEndpointService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.time.Instant;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -62,18 +62,22 @@ class DeliveryReconciliationIntegrationTest {
     }
   }
 
-  @DynamicPropertySource
-  static void props(DynamicPropertyRegistry registry) {
-    registry.add(
-        "barrier.webhook.target-url",
-        () -> "http://localhost:" + SINK.getAddress().getPort() + "/webhook");
-    registry.add("barrier.webhook.secret", () -> "test-secret");
-  }
-
   @Autowired KafkaTemplate<String, String> kafkaTemplate;
   @Autowired DeliveryReconciliationJob job;
   @Autowired DeliveryRepository repository;
+  @Autowired WebhookEndpointService endpointService;
   @Autowired ObjectMapper objectMapper;
+
+  /**
+   * Sem destino global de dev na lib, o tenant precisa ter um endpoint registrado para a
+   * reconciliação achar onde entregar — {@code registerSingle} é o mesmo caminho que o
+   * {@code WebhookEndpointController} usa para o contrato "um endpoint por tenant" do Barrier.
+   */
+  @BeforeEach
+  void registraEndpointDoTenant() {
+    endpointService.registerSingle(
+        "default", "http://localhost:" + SINK.getAddress().getPort() + "/webhook");
+  }
 
   private EventEnvelope publica(String assessmentId) {
     EventEnvelope envelope =
