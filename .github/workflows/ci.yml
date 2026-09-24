@@ -23,6 +23,10 @@ jobs:
   build:
     name: build + testes
     runs-on: ubuntu-latest
+    # packages: read para o GITHUB_TOKEN baixar com.barrier:webhook-delivery do GitHub Packages.
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
